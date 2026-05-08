@@ -12,7 +12,7 @@ describe('Proxy-to-Audit Integration', () => {
   const DB = '/tmp/mcp-proxy-audit-test.db';
   const CFG = '/tmp/mcp-proxy-audit-cfg.json';
   const config: McpServerConfig = {
-    name: 'mcp-doctor-integration',
+    name: 'mcp-guardian-integration',
     transport: 'stdio',
     command: 'node',
     args: [join(process.cwd(), 'dist', 'index.js')],
@@ -21,11 +21,11 @@ describe('Proxy-to-Audit Integration', () => {
   it('should capture real tokens via proxy and produce accurate cost report', async () => {
     // Clean start
     try { unlinkSync(DB); } catch {}
-    try { unlinkSync(join(homedir(), '.mcp-doctor', 'history.db')); } catch {}
+    try { unlinkSync(join(homedir(), '.mcp-guardian', 'history.db')); } catch {}
 
     writeFileSync(CFG, JSON.stringify({
       mcpServers: {
-        'mcp-doctor-integration': {
+        'mcp-guardian-integration': {
           command: 'node',
           args: [join(process.cwd(), 'dist', 'index.js')],
           transport: 'stdio',
@@ -35,7 +35,7 @@ describe('Proxy-to-Audit Integration', () => {
 
     // Start proxy
     const proxy = spawn('node', [join(process.cwd(), 'dist', 'cli.js'), 'proxy', '--config', CFG], {
-      env: { ...process.env, MCP_DOCTOR_DB_PATH: DB },
+      env: { ...process.env, MCP_GUARDIAN_DB_PATH: DB },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -47,10 +47,10 @@ describe('Proxy-to-Audit Integration', () => {
     await new Promise(r => setTimeout(r, 1500));
 
     // Send two tools/call requests
-    proxy.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 'c1', method: 'tools/call', params: { name: 'audit_costs', arguments: { serverName: 'mcp-doctor-integration' } } }) + '\n');
+    proxy.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 'c1', method: 'tools/call', params: { name: 'audit_costs', arguments: { serverName: 'mcp-guardian-integration' } } }) + '\n');
     await new Promise(r => setTimeout(r, 3000));
 
-    proxy.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 'c2', method: 'tools/call', params: { name: 'check_health', arguments: { serverName: 'mcp-doctor-integration' } } }) + '\n');
+    proxy.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 'c2', method: 'tools/call', params: { name: 'check_health', arguments: { serverName: 'mcp-guardian-integration' } } }) + '\n');
     await new Promise(r => setTimeout(r, 3000));
 
     // Kill proxy

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to MCP Doctor will be documented in this file.
+All notable changes to MCP Guardian will be documented in this file.
 
 ## [0.3.0] - 2026-05-08
 
@@ -28,7 +28,7 @@ All notable changes to MCP Doctor will be documented in this file.
   - Structured MCP output (JSON format returns resource + text)
 
 ### Changed
-- Package name: `@mcp-doctor/server` → `@rudraneel/mcp-doctor`
+- Package name: `@mcp-guardian/server` → `@rudraneel/mcp-guardian`
 - Version: `0.1.0` → `0.3.0`
 - SQLite backend: `better-sqlite3` → `sql.js` (pure JS, no native compilation)
 - Config parser: now supports `--all` flag for multi-config aggregation with deduplication

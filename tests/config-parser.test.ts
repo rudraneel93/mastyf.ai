@@ -8,7 +8,7 @@ describe('ConfigParser', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-doctor-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-guardian-test-'));
   });
 
   it('parses Cline-style config with mcpServers', () => {

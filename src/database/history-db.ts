@@ -23,7 +23,7 @@ export class HistoryDatabase {
   constructor(dbPath?: string) {
     // ':memory:' means in-memory DB — never persist to disk
     this.isInMemory = dbPath === ':memory:';
-    this.dbPath = dbPath || process.env['MCP_DOCTOR_DB_PATH'] || path.join(os.homedir(), '.mcp-doctor', 'history.db');
+    this.dbPath = dbPath || process.env['MCP_GUARDIAN_DB_PATH'] || path.join(os.homedir(), '.mcp-guardian', 'history.db');
   }
 
   private async ensureInitialized(): Promise<void> {

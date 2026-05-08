@@ -1,13 +1,13 @@
-# 🩺 MCP Doctor
+# 🩺 MCP Guardian
 
 **Security, cost, and health audit for MCP infrastructure.**
 
-MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerabilities, tracks real token costs via a proxy interceptor, and monitors health metrics. It works as both an MCP server (so Cline/Claude can call its tools) and a standalone CLI.
+MCP Guardian scans your Model Context Protocol (MCP) servers for security vulnerabilities, tracks real token costs via a proxy interceptor, and monitors health metrics. It works as both an MCP server (so Cline/Claude can call its tools) and a standalone CLI.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.0-green)](https://github.com/modelcontextprotocol/typescript-sdk)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
-[![CI](https://github.com/rudraneel93/mcp-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-doctor/actions/workflows/ci.yml)
+[![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
 ---
 
@@ -18,11 +18,11 @@ MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerab
 - [Quick Start](#quick-start)
   - [Proxy Workflow (Real Cost Tracking)](#proxy-workflow-real-cost-tracking)
 - [CLI Reference](#cli-reference)
-  - [mcp-doctor proxy](#mcp-doctor-proxy)
-  - [mcp-doctor scan](#mcp-doctor-scan)
-  - [mcp-doctor audit](#mcp-doctor-audit)
-  - [mcp-doctor health](#mcp-doctor-health)
-  - [mcp-doctor report](#mcp-doctor-report)
+  - [mcp-guardian proxy](#mcp-guardian-proxy)
+  - [mcp-guardian scan](#mcp-guardian-scan)
+  - [mcp-guardian audit](#mcp-guardian-audit)
+  - [mcp-guardian health](#mcp-guardian-health)
+  - [mcp-guardian report](#mcp-guardian-report)
 - [MCP Server](#mcp-server-for-clineclaude-desktop)
 - [CI/CD Integration](#cicd-integration)
 - [Architecture](#architecture)
@@ -47,7 +47,7 @@ MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerab
 - **Scoring** — Weighted 0–100 security score with actionable recommendations
 
 ### 💰 Cost Audit (`audit_costs')
-- **Proxy Interceptor** — `mcp-doctor proxy` sits between your AI client and MCP servers, capturing every `tools/call` request/response
+- **Proxy Interceptor** — `mcp-guardian proxy` sits between your AI client and MCP servers, capturing every `tools/call` request/response
 - **Real Token Counting** — Uses `tiktoken` (o200k_base encoding) on actual JSON-RPC traffic — no hardcoded estimates
 - **Multi-Model Pricing** — 97 models across 17 providers (OpenAI, Anthropic, Google, DeepSeek, xAI, Meta, Mistral, and more)
 - **Tool-Level Breakdown** — Per-tool token usage, call counts, duration, and cost estimates
@@ -77,8 +77,8 @@ MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerab
 ## Installation
 
 ```bash
-git clone https://github.com/rudraneel93/mcp-doctor.git
-cd mcp-doctor
+git clone https://github.com/rudraneel93/mcp-guardian.git
+cd mcp-guardian
 npm install
 npm run build
 ```
@@ -95,16 +95,16 @@ The recommended workflow for getting real token cost data:
 
 ```bash
 # 1. Start the proxy — it wraps your MCP servers and intercepts every tools/call
-mcp-doctor proxy --config ./cline_mcp_settings.json
+mcp-guardian proxy --config ./cline_mcp_settings.json
 
 # 2. In another terminal, run your normal Cline/Claude workflows
 #    Every tools/call is captured with real token counts
 
 # 3. When done, Ctrl+C the proxy, then audit real costs
-mcp-doctor audit --config ./cline_mcp_settings.json
+mcp-guardian audit --config ./cline_mcp_settings.json
 
 # 4. Generate full report with real security + cost + health data
-mcp-doctor report --config ./cline_mcp_settings.json
+mcp-guardian report --config ./cline_mcp_settings.json
 ```
 
 **Example output (real data from proxy against 3 MCP servers):**
@@ -138,13 +138,13 @@ To verify the full pipeline works end-to-end with real data (no mocks):
 
 ```bash
 # Terminal 1: Start the proxy
-mcp-doctor proxy --config ./cline_mcp_settings.json
+mcp-guardian proxy --config ./cline_mcp_settings.json
 
 # Terminal 2: Run your AI workflows (or pipe test calls)
 
 # Terminal 1: Ctrl+C when done, then:
-mcp-doctor audit --config ./cline_mcp_settings.json
-mcp-doctor report --config ./cline_mcp_settings.json
+mcp-guardian audit --config ./cline_mcp_settings.json
+mcp-guardian report --config ./cline_mcp_settings.json
 ```
 
 **Verified results** (proxy wrapping 3 real MCP servers — github, filesystem, puppeteer):
@@ -185,12 +185,12 @@ Overall Score: 60/100
 
 ## CLI Reference
 
-### `mcp-doctor proxy`
+### `mcp-guardian proxy`
 
 Start the MCP proxy interceptor to capture real token usage data.
 
 ```bash
-mcp-doctor proxy --config ./cline_mcp_settings.json
+mcp-guardian proxy --config ./cline_mcp_settings.json
 ```
 
 The proxy spawns all stdio MCP servers from config, then bridges stdin/stdout. Pipe JSON-RPC messages through it, or configure your AI client to connect via the proxy's stdio transport.
@@ -199,14 +199,14 @@ The proxy spawns all stdio MCP servers from config, then bridges stdin/stdout. P
 |--------|-------------|
 | `-c, --config <path>` | Path to MCP config file |
 
-### `mcp-doctor scan`
+### `mcp-guardian scan`
 
 Run security scan on MCP servers. Detects CVEs, auth gaps, secrets, typo-squatting, and transport issues.
 
 ```bash
-mcp-doctor scan
-mcp-doctor scan --config ./config.json --fail-on-secrets
-mcp-doctor scan --all --threshold-score 70
+mcp-guardian scan
+mcp-guardian scan --config ./config.json --fail-on-secrets
+mcp-guardian scan --all --threshold-score 70
 ```
 
 | Option | Description |
@@ -217,14 +217,14 @@ mcp-doctor scan --all --threshold-score 70
 | `--fail-on-critical` | Exit code 1 if any critical CVE found |
 | `--fail-on-secrets` | Exit code 1 if hardcoded secrets detected |
 
-### `mcp-doctor audit`
+### `mcp-guardian audit`
 
 Audit token costs. Reads real call records if proxy was used, otherwise shows zero-data note.
 
 ```bash
-mcp-doctor audit
-mcp-doctor audit --server github-server
-mcp-doctor audit --threshold-cost 0.50
+mcp-guardian audit
+mcp-guardian audit --server github-server
+mcp-guardian audit --threshold-cost 0.50
 ```
 
 | Option | Description |
@@ -234,14 +234,14 @@ mcp-doctor audit --threshold-cost 0.50
 | `-s, --server <name>` | Filter to a specific server |
 | `--threshold-cost <n>` | Exit code 2 if total cost exceeds `n` USD |
 
-### `mcp-doctor health`
+### `mcp-guardian health`
 
 Check health, latency, and reliability of MCP servers. Uses real JSON-RPC handshake probes.
 
 ```bash
-mcp-doctor health
-mcp-doctor health --server filesystem
-mcp-doctor health --threshold-latency 2000 --fail-on-overload
+mcp-guardian health
+mcp-guardian health --server filesystem
+mcp-guardian health --threshold-latency 2000 --fail-on-overload
 ```
 
 | Option | Description |
@@ -252,15 +252,15 @@ mcp-doctor health --threshold-latency 2000 --fail-on-overload
 | `--threshold-latency <ms>` | Exit code 2 if any server exceeds latency threshold |
 | `--fail-on-overload` | Exit code 1 if any server has tool overload (>15 tools) |
 
-### `mcp-doctor report`
+### `mcp-guardian report`
 
 Generate a complete security, cost, and health report.
 
 ```bash
-mcp-doctor report
-mcp-doctor report --format markdown
-mcp-doctor report --format json --config ~/.cursor/mcp.json
-mcp-doctor report --all --threshold-score 60
+mcp-guardian report
+mcp-guardian report --format markdown
+mcp-guardian report --format json --config ~/.cursor/mcp.json
+mcp-guardian report --all --threshold-score 60
 ```
 
 | Option | Description |
@@ -279,9 +279,9 @@ Add to your `cline_mcp_settings.json` or `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "mcp-doctor": {
+    "mcp-guardian": {
       "command": "node",
-      "args": ["path/to/mcp-doctor/dist/index.js"]
+      "args": ["path/to/mcp-guardian/dist/index.js"]
     }
   }
 }
@@ -305,8 +305,8 @@ JSON format reports also include a structured `resource` content type for agent 
 Run in GitHub Actions to catch security issues before deployment:
 
 ```yaml
-- name: MCP Doctor Security Scan
-  run: npx mcp-doctor scan --config ./cline_mcp_settings.json --fail-on-critical --fail-on-secrets
+- name: MCP Guardian Security Scan
+  run: npx mcp-guardian scan --config ./cline_mcp_settings.json --fail-on-critical --fail-on-secrets
   env:
     NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
 ```
@@ -316,7 +316,7 @@ Run in GitHub Actions to catch security issues before deployment:
 ## Architecture
 
 ```
-mcp-doctor/
+mcp-guardian/
 ├── src/
 │   ├── index.ts                    # MCP server entry (stdio transport)
 │   ├── cli.ts                      # CLI wrapper (5 commands: scan, audit, health, report, proxy)
@@ -367,7 +367,7 @@ AI Client (Cline/Claude)
         │ tools/call JSON-RPC
         ▼
 ┌───────────────────┐
-│ MCP Proxy Server  │ ← mcp-doctor proxy
+│ MCP Proxy Server  │ ← mcp-guardian proxy
 │ (proxy-server.ts) │
 └───────┬───────────┘
         │ counts tokens (tiktoken)
@@ -379,7 +379,7 @@ AI Client (Cline/Claude)
         │ async getCallRecordsForServer()
         ▼
 ┌───────────────────┐
-│   Cost Auditor    │ ← mcp-doctor audit / report
+│   Cost Auditor    │ ← mcp-guardian audit / report
 │ (cost-auditor.ts) │
 └───────────────────┘
         │ per-tool breakdown + multi-model pricing
@@ -391,7 +391,7 @@ AI Client (Cline/Claude)
 
 ## Config Discovery
 
-MCP Doctor auto-discovers config files from these standard locations:
+MCP Guardian auto-discovers config files from these standard locations:
 
 | Client | Config Path |
 |--------|------------|
@@ -450,7 +450,7 @@ Unknown models receive a conservative default estimate of $10/$30 per million to
 | Variable | Purpose |
 |----------|---------|
 | `NVD_API_KEY` | NIST NVD API key for CVE lookups (20 req/min vs 5 without) |
-| `MCP_DOCTOR_DB_PATH` | Override SQLite database path (default: `~/.mcp-doctor/history.db`) |
+| `MCP_GUARDIAN_DB_PATH` | Override SQLite database path (default: `~/.mcp-guardian/history.db`) |
 | `LOG_LEVEL` | Logging level: `DEBUG`, `INFO`, `WARN`, `ERROR` (default: `INFO`) |
 | `PRICING_OVERRIDES` | Custom pricing JSON: `{"my-model": {"input": 2.0, "output": 6.0}}` |
 
@@ -460,8 +460,8 @@ Unknown models receive a conservative default estimate of $10/$30 per million to
 
 ```bash
 # Clone and install
-git clone https://github.com/rudraneel93/mcp-doctor.git
-cd mcp-doctor
+git clone https://github.com/rudraneel93/mcp-guardian.git
+cd mcp-guardian
 npm install
 
 # Development
@@ -494,7 +494,7 @@ See CONTRIBUTING.md for guidelines on adding scanners, pricing models, and tests
 - [x] TLS certificate validation
 - [x] 52 unit tests (6 test suites)
 - [x] GitHub Actions CI (Node 18/20/22 matrix)
-- [ ] Publish to npm as `@rudraneel/mcp-doctor`
+- [ ] Publish to npm as `@rudraneel/mcp-guardian`
 
 ---
 

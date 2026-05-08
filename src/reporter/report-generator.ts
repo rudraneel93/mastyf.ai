@@ -77,7 +77,7 @@ export class ReportGenerator {
   formatFullReport(report: FullReport): string {
     return (
       chalk.bold.cyan(`\n═══════════════════════════════════════════\n`) +
-      chalk.bold.cyan(`  MCP Doctor Report\n`) +
+      chalk.bold.cyan(`  MCP Guardian Report\n`) +
       chalk.bold.cyan(`  ${report.timestamp}\n`) +
       chalk.bold.cyan(`  Config: ${report.configPath}\n`) +
       chalk.bold.cyan(`═══════════════════════════════════════════\n`) +
@@ -89,7 +89,7 @@ export class ReportGenerator {
   }
 
   toMarkdown(report: FullReport): string {
-    let md = `# MCP Doctor Report\n\n**Timestamp:** ${report.timestamp}  \n**Overall Score:** ${report.overallScore}/100\n\n`;
+    let md = `# MCP Guardian Report\n\n**Timestamp:** ${report.timestamp}  \n**Overall Score:** ${report.overallScore}/100\n\n`;
 
     md += `## 🔒 Security\n\n`;
     for (const s of report.security) {

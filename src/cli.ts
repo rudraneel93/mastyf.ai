@@ -79,7 +79,7 @@ function checkAlertThresholds(reports: SecurityReport[], opts: ScanOptions | Rep
 // ── CLI commands ──────────────────────────────────────────────────────
 const program = new Command();
 program
-  .name('mcp-doctor')
+  .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
   .version('0.3.0');
 
@@ -174,7 +174,7 @@ program
 
 program
   .command('report')
-  .description('Generate a full MCP Doctor report')
+  .description('Generate a full MCP Guardian report')
   .option('-c, --config <path>', 'Path to an MCP config file')
   .option('-a, --all', 'Aggregate all discoverable config files')
   .option('-f, --format <format>', 'Output format: text (default), markdown, or json', 'text')
@@ -227,7 +227,7 @@ program
 
 program
   .command('proxy')
-  .description('Start MCP Doctor proxy to capture real token usage data')
+  .description('Start MCP Guardian proxy to capture real token usage data')
   .option('-c, --config <path>', 'Path to MCP config file')
   .action(async (opts: ProxyOptions) => {
     const paths = opts.config ? [opts.config] : ConfigParser.findConfigPaths();
@@ -240,7 +240,7 @@ program
     const manager = new ProxyManager(db);
     await manager.startAll(servers);
 
-    console.error(chalk.green('MCP Doctor proxy running. Press Ctrl+C to stop.'));
+    console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
     const cleanup = () => { manager.stopAll(); db.close(); process.exit(0); };
     process.on('SIGINT', cleanup);
     process.on('SIGTERM', cleanup);

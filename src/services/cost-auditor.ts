@@ -46,7 +46,7 @@ export class CostAuditor {
       estimatedCostUSD: 0,
       pricingModel: 'unknown',
       toolBreakdown: [],
-      note: 'No recorded call data. Use `mcp-doctor proxy` to capture real token usage.',
+      note: 'No recorded call data. Use `mcp-guardian proxy` to capture real token usage.',
     };
   }
 

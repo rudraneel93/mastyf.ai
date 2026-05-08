@@ -1,12 +1,12 @@
-# Contributing to MCP Doctor
+# Contributing to MCP Guardian
 
 Thanks for helping make MCP infrastructure safer!
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/rudraneel93/mcp-doctor.git
-cd mcp-doctor
+git clone https://github.com/rudraneel93/mcp-guardian.git
+cd mcp-guardian
 npm install
 npm run build
 npm test        # 52 unit tests
@@ -62,4 +62,4 @@ Or set `PRICING_OVERRIDES` env var: `{"my-model": {"input": 2.5, "output": 7.5}}
 
 ## Questions?
 
-Open an issue at https://github.com/rudraneel93/mcp-doctor/issues
+Open an issue at https://github.com/rudraneel93/mcp-guardian/issues

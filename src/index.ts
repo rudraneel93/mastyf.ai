@@ -16,7 +16,7 @@ const container = createContainer();
 const reporter = new ReportGenerator();
 
 const server = new Server(
-  { name: 'mcp-doctor', version: '0.3.0' },
+  { name: 'mcp-guardian', version: '0.3.0' },
   { capabilities: { tools: {} } }
 );
 
@@ -155,7 +155,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'resource',
               resource: {
-                uri: 'report://mcp-doctor/full-report.json',
+                uri: 'report://mcp-guardian/full-report.json',
                 mimeType: 'application/json',
                 text: JSON.stringify(fullReport, null, 2),
               },
@@ -182,10 +182,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  Logger.info('MCP Doctor running on stdio');
+  Logger.info('MCP Guardian running on stdio');
 }
 
 main().catch((err) => {
-  Logger.error(`MCP Doctor failed to start: ${err}`);
+  Logger.error(`MCP Guardian failed to start: ${err}`);
   process.exit(1);
 });

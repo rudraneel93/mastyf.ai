@@ -1,19 +1,19 @@
 {
-  "name": "@rudraneel/mcp-doctor",
+  "name": "@rudraneel/mcp-guardian",
   "version": "0.3.0",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
   "files": ["dist"],
   "main": "./dist/index.js",
   "bin": {
-    "mcp-doctor": "./dist/cli.js"
+    "mcp-guardian": "./dist/cli.js"
   },
   "engines": {
     "node": ">=18"
   },
-  "repository": "github:rudraneel93/mcp-doctor",
-  "bugs": "https://github.com/rudraneel93/mcp-doctor/issues",
-  "homepage": "https://github.com/rudraneel93/mcp-doctor#readme",
+  "repository": "github:rudraneel93/mcp-guardian",
+  "bugs": "https://github.com/rudraneel93/mcp-guardian/issues",
+  "homepage": "https://github.com/rudraneel93/mcp-guardian#readme",
   "keywords": [
     "mcp",
     "model-context-protocol",
