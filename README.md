@@ -310,11 +310,11 @@ NVD_API_KEY=your-key node dist/cli.js report
 - [x] MCP server + CLI dual entry points
 - [x] NVD + OSV.dev CVE integration
 - [x] SQLite history tracking
-- [ ] Real MCP handshake probing (spawn + `tools/list`)
-- [ ] GraphQL/SSE transport support for live servers
-- [ ] Custom pricing configuration
-- [ ] Alert thresholds and notifications
-- [ ] Multiple config file aggregation
+- [x] Real MCP handshake probing (spawn + `tools/list`)
+- [x] SSE/HTTP transport support for live servers
+- [x] Custom pricing configuration (`PRICING_OVERRIDES` env var)
+- [x] Alert thresholds with exit codes (`--threshold-score`, `--fail-on-critical`, etc.)
+- [x] Multiple config file aggregation (`--all` flag + deduplication)
 - [ ] Publish to npm as `@mcp-doctor/server`
 
 ---

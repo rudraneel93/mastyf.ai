@@ -11,7 +11,7 @@ import { CostAuditor } from './services/cost-auditor.js';
 import { HealthMonitor } from './services/health-monitor.js';
 import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
-import { FullReport } from './types.js';
+import { FullReport, McpServerConfig } from './types.js';
 
 const server = new Server(
   { name: 'mcp-doctor', version: '0.1.0' },
@@ -73,14 +73,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  // Determine config paths
-  const configPaths = args?.configPath ? [args.configPath as string] : ConfigParser.findConfigPaths();
-  if (configPaths.length === 0) {
+  // Load servers: single config path, aggregated all, or auto-discover
+  let servers: McpServerConfig[];
+  let configDescription: string;
+
+  if (args?.configPath) {
+    servers = ConfigParser.parse(args.configPath as string);
+    configDescription = args.configPath as string;
+  } else {
+    const result = ConfigParser.parseAll();
+    servers = result.servers;
+    configDescription = result.sourcePaths.length > 1
+      ? `aggregated (${result.sourcePaths.length} files)`
+      : (result.sourcePaths[0] || 'auto-detected');
+  }
+
+  if (servers.length === 0) {
     return {
-      content: [{ type: 'text', text: 'No MCP config files found. Please specify a configPath.' }],
+      content: [{ type: 'text', text: 'No MCP servers found. Please specify a configPath or ensure MCP configs exist.' }],
     };
   }
-  const servers = ConfigParser.parse(configPaths[0]);
 
   switch (name) {
     case 'scan_security': {
@@ -118,7 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const overallScore = calculateOverallScore(security, health);
       const fullReport: FullReport = {
         timestamp: new Date().toISOString(),
-        configPath: configPaths[0],
+        configPath: configDescription,
         security,
         costs,
         health,

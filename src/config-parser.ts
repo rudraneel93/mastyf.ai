@@ -4,11 +4,8 @@ import os from 'os';
 import { McpServerConfig } from './types.js';
 
 /**
- * Parses MCP configuration files from various clients:
- * - Cline (cline_mcp_settings.json)
- * - Claude Desktop (claude_desktop_config.json)
- * - Cursor (mcp.json)
- * - Generic JSON with "mcpServers" or "servers" keys
+ * Parses MCP configuration files from various clients.
+ * Supports aggregation across multiple config files with deduplication.
  */
 export class ConfigParser {
   /**
@@ -74,19 +71,30 @@ export class ConfigParser {
   }
 
   /**
-   * Parse all discoverable configs and flatten into a single list.
+   * Parse all discoverable configs, merge with deduplication, and return unified list.
+   * First config file takes priority for servers with the same name.
    */
-  static parseAll(): McpServerConfig[] {
+  static parseAll(): { servers: McpServerConfig[]; sourcePaths: string[] } {
     const paths = ConfigParser.findConfigPaths();
-    if (paths.length === 0) return [];
+    if (paths.length === 0) return { servers: [], sourcePaths: [] };
+
+    const seen = new Set<string>();
     const allServers: McpServerConfig[] = [];
+
     for (const p of paths) {
       try {
-        allServers.push(...ConfigParser.parse(p));
+        const parsed = ConfigParser.parse(p);
+        for (const server of parsed) {
+          if (!seen.has(server.name)) {
+            seen.add(server.name);
+            allServers.push(server);
+          }
+        }
       } catch {
         // Skip unparseable files
       }
     }
-    return allServers;
+
+    return { servers: allServers, sourcePaths: paths };
   }
 }
