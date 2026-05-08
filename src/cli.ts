@@ -276,6 +276,17 @@ program
       db.close();
       process.exit(0);
     });
+
+    // Bridge stdin to all proxies for real token interception
+    const proxies = manager.getProxies();
+    if (proxies.length > 0) {
+      process.stdin.setEncoding('utf-8');
+      process.stdin.on('data', (chunk: string) => {
+        for (const proxy of proxies) {
+          proxy.handleClientInput(chunk.trim());
+        }
+      });
+    }
   });
 
 program.parse();

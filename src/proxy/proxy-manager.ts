@@ -8,6 +8,10 @@ export class ProxyManager {
 
   constructor(private db: HistoryDatabase) {}
 
+  getProxies(): McpProxyServer[] {
+    return this.proxies;
+  }
+
   async startAll(configs: McpServerConfig[]): Promise<void> {
     for (const config of configs) {
       if (config.transport === 'stdio' && config.command) {
