@@ -8,6 +8,7 @@ import { HealthMonitor } from './services/health-monitor.js';
 import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport } from './types.js';
+import { calculateOverallScore } from './utils/scoring.js';
 
 const program = new Command();
 program
@@ -242,22 +243,6 @@ function checkAlertThresholds(
       process.exit(2);
     }
   }
-}
-
-function calculateOverallScore(
-  security: { score: number }[],
-  health: { successRate: number }[]
-): number {
-  if (security.length === 0 && health.length === 0) return 0;
-  const secAvg = security.length > 0
-    ? security.reduce((sum, s) => sum + s.score, 0) / security.length
-    : 0;
-  const healthAvg = health.length > 0
-    ? health.reduce((sum, h) => sum + h.successRate * 100, 0) / health.length
-    : 0;
-  if (security.length === 0) return Math.round(healthAvg);
-  if (health.length === 0) return Math.round(secAvg);
-  return Math.round((secAvg + healthAvg) / 2);
 }
 
 program.parse();

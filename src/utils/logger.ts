@@ -7,8 +7,9 @@ export enum LogLevel {
   ERROR = 3,
 }
 
-const LOG_LEVEL = (process.env.LOG_LEVEL?.toUpperCase() as keyof typeof LogLevel)
-  ? LogLevel[process.env.LOG_LEVEL?.toUpperCase() as keyof typeof LogLevel]
+const rawLevel = process.env.LOG_LEVEL?.toUpperCase();
+const LOG_LEVEL: LogLevel = (rawLevel !== undefined && rawLevel in LogLevel)
+  ? LogLevel[rawLevel as keyof typeof LogLevel]
   : LogLevel.INFO;
 
 export class Logger {

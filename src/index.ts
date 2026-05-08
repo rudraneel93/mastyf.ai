@@ -12,15 +12,31 @@ import { HealthMonitor } from './services/health-monitor.js';
 import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport, McpServerConfig } from './types.js';
+import { calculateOverallScore } from './utils/scoring.js';
+import { Logger } from './utils/logger.js';
 
 const server = new Server(
   { name: 'mcp-doctor', version: '0.1.0' },
   { capabilities: { tools: {} } }
 );
 
-const db = new HistoryDatabase();
+let db: HistoryDatabase;
+let costAuditor: CostAuditor;
+
+// ── Graceful shutdown ──────────────────────────────────────────────
+const shutdown = async (signal: string) => {
+  Logger.info(`Received ${signal} — shutting down gracefully...`);
+  if (db) db.close();
+  if (costAuditor) costAuditor.dispose();
+  await server.close();
+  process.exit(0);
+};
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+db = new HistoryDatabase();
 const securityScanner = new SecurityScanner();
-const costAuditor = new CostAuditor();
+costAuditor = new CostAuditor();
 const healthMonitor = new HealthMonitor(db);
 const reporter = new ReportGenerator();
 
@@ -143,11 +159,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       for (const r of health) db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
 
       const format = (args?.format as string) ?? 'text';
+
+      if (format === 'json') {
+        // Structured MCP output: return as a resource for better agent integration
+        return {
+          content: [
+            {
+              type: 'resource',
+              resource: {
+                uri: 'report://mcp-doctor/full-report.json',
+                mimeType: 'application/json',
+                text: JSON.stringify(fullReport, null, 2),
+              },
+            },
+            {
+              type: 'text',
+              text: reporter.formatFullReport(fullReport),
+            },
+          ],
+        };
+      }
+
       let output: string;
       if (format === 'markdown') {
         output = reporter.toMarkdown(fullReport);
-      } else if (format === 'json') {
-        output = JSON.stringify(fullReport, null, 2);
       } else {
         output = reporter.formatFullReport(fullReport);
       }
@@ -159,29 +194,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-function calculateOverallScore(
-  security: { score: number }[],
-  health: { successRate: number }[]
-): number {
-  if (security.length === 0 && health.length === 0) return 0;
-  const secAvg = security.length > 0
-    ? security.reduce((sum, s) => sum + s.score, 0) / security.length
-    : 0;
-  const healthAvg = health.length > 0
-    ? health.reduce((sum, h) => sum + h.successRate * 100, 0) / health.length
-    : 0;
-  if (security.length === 0) return Math.round(healthAvg);
-  if (health.length === 0) return Math.round(secAvg);
-  return Math.round((secAvg + healthAvg) / 2);
-}
-
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('MCP Doctor running on stdio');
+  Logger.info('MCP Doctor running on stdio');
 }
 
 main().catch((err) => {
-  console.error('MCP Doctor failed to start:', err);
+  Logger.error(`MCP Doctor failed to start: ${err}`);
   process.exit(1);
 });

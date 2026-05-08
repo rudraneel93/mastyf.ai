@@ -7,6 +7,8 @@ export class HistoryDatabase {
   private db!: SqlJsDatabase;
   private dbPath: string;
   private initialized: boolean = false;
+  private dirty: boolean = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath || path.join(os.homedir(), '.mcp-doctor', 'history.db');
@@ -21,7 +23,6 @@ export class HistoryDatabase {
     }
 
     const SQL = await initSqlJs();
-    // Load existing DB or create new one
     if (fs.existsSync(this.dbPath)) {
       const buffer = fs.readFileSync(this.dbPath);
       this.db = new SQL.Database(buffer);
@@ -59,7 +60,6 @@ export class HistoryDatabase {
       )
     `);
 
-    // Create indexes
     this.db.run('CREATE INDEX IF NOT EXISTS idx_security_server ON security_scans(server_name)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_cost_server ON cost_records(server_name)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_health_server ON health_checks(server_name)');
@@ -67,10 +67,31 @@ export class HistoryDatabase {
     this.initialized = true;
   }
 
-  private save(): void {
-    if (!this.db) return;
-    const data = this.db.export();
-    fs.writeFileSync(this.dbPath, data);
+  /**
+   * Schedule a flush after 1 second of inactivity to batch writes.
+   */
+  private scheduleFlush(): void {
+    this.dirty = true;
+    if (!this.saveTimer) {
+      this.saveTimer = setTimeout(() => {
+        this.flush();
+      }, 1000);
+    }
+  }
+
+  /**
+   * Force immediate flush of all pending writes to disk.
+   */
+  flush(): void {
+    if (this.dirty && this.db) {
+      const data = this.db.export();
+      fs.writeFileSync(this.dbPath, data);
+      this.dirty = false;
+    }
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
   }
 
   async getRecentSuccessRate(serverName: string): Promise<number> {
@@ -92,7 +113,7 @@ export class HistoryDatabase {
       'INSERT INTO security_scans (server_name, score, cve_count, details) VALUES (?, ?, ?, ?)',
       [serverName, score, cveCount, JSON.stringify(details)]
     );
-    this.save();
+    this.scheduleFlush();
   }
 
   async addCostRecord(serverName: string, tokens: number, cost: number): Promise<void> {
@@ -101,7 +122,7 @@ export class HistoryDatabase {
       'INSERT INTO cost_records (server_name, tokens_used, cost_usd) VALUES (?, ?, ?)',
       [serverName, tokens, cost]
     );
-    this.save();
+    this.scheduleFlush();
   }
 
   async addHealthCheck(serverName: string, latency: number, success: boolean, toolCount: number): Promise<void> {
@@ -110,10 +131,11 @@ export class HistoryDatabase {
       'INSERT INTO health_checks (server_name, latency_ms, success, tool_count) VALUES (?, ?, ?, ?)',
       [serverName, latency, success ? 1 : 0, toolCount]
     );
-    this.save();
+    this.scheduleFlush();
   }
 
   close(): void {
+    this.flush();
     if (this.db) {
       this.db.close();
       this.initialized = false;

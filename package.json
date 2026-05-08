@@ -1,17 +1,38 @@
 {
-  "name": "@mcp-doctor/server",
-  "version": "0.1.0",
+  "name": "@rudraneel/mcp-doctor",
+  "version": "0.2.0",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
+  "files": ["dist"],
   "main": "./dist/index.js",
   "bin": {
     "mcp-doctor": "./dist/cli.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": "github:rudraneel93/mcp-doctor",
+  "bugs": "https://github.com/rudraneel93/mcp-doctor/issues",
+  "homepage": "https://github.com/rudraneel93/mcp-doctor#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "audit",
+    "cost",
+    "health",
+    "observability",
+    "agent-ai",
+    "cli"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "test": "vitest"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
