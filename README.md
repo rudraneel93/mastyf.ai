@@ -22,6 +22,7 @@ MCP Guardian scans your [Model Context Protocol](https://modelcontextprotocol.io
   - [One-Off Scan](#one-off-scan)
 - [CLI Reference](#cli-reference)
   - [`mcp-guardian proxy`](#mcp-guardian-proxy)
+  - [Policy Engine (v0.4+)](#policy-engine-v04)
   - [`mcp-guardian scan`](#mcp-guardian-scan)
   - [`mcp-guardian audit`](#mcp-guardian-audit)
   - [`mcp-guardian health`](#mcp-guardian-health)
@@ -38,6 +39,7 @@ MCP Guardian scans your [Model Context Protocol](https://modelcontextprotocol.io
 - [Pricing Models](#pricing-models)
 - [Environment Variables](#environment-variables)
 - [Development](#development)
+- [SECURITY.md](#securitymd)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -50,10 +52,12 @@ As MCP adoption grows, so does the attack surface. MCP servers run arbitrary com
 
 MCP Guardian provides:
 
+- **Active policy enforcement (v0.4+)** — YAML-configurable policy engine that blocks, flags, or passes every `tools/call` in real time based on tool allowlists/denylists, regex patterns, rate limits, and token budgets
 - **Security auditing** — CVE scanning (OSV.dev + NVD), hardcoded secret detection, typo-squatting detection, command injection detection, and TLS validation
 - **Real cost tracking** — Proxy interceptor that captures actual `tools/call` traffic and counts tokens via `tiktoken` (o200k_base encoding) — no estimates, no mocks
 - **Health monitoring** — Live JSON-RPC 2.0 handshake probes with latency, success rate, tool count, and context pressure analysis
 - **Agent-native** — Runs as an MCP server so your AI assistant can self-audit its own infrastructure
+- **Enterprise SIEM logging (v0.4+)** — Structured JSON logs via pino with request-ID tracing, policy decision audit trails, and block events at WARN level
 
 ---
 
@@ -69,6 +73,7 @@ MCP Guardian provides:
 | **Typo-Squat Detection** | Levenshtein distance matching against 24 known official MCP packages |
 | **Secret Scanning** | 6 regex patterns for hardcoded API keys, tokens, private keys, passwords, GitHub tokens, OpenAI keys |
 | **Command Validation** | Flags dangerous patterns (path traversal, shell chaining, `rm -rf`, `curl`/`wget` in commands, and more) |
+| **🔴 Active Policy Engine (v0.4+)** | YAML-configurable rules: tool allowlist/denylist, regex pattern blocking, rate limiting, token budgets. Operates in `audit` (passive), `warn` (flag only), or `block` (active enforcement) modes |
 | **Scoring** | Weighted 0–100 security score with actionable recommendations |
 
 ### 💰 Cost Audit (`audit_costs`)
@@ -99,7 +104,7 @@ MCP Guardian provides:
 - **Graceful Shutdown** — SIGINT/SIGTERM handlers flush DB and close connections
 - **Batched DB Writes** — 1s debounced flush reduces I/O by 10x
 - **Alert Thresholds** — 6 CLI flags with exit codes 1/2 for CI/CD integration
-- **GitHub Actions CI** — Node 18/20/22 matrix, 63 tests across 10 suites
+- **GitHub Actions CI** — Node 18/20/22 matrix, 74 tests across 11 suites
 
 ---
 
@@ -192,15 +197,64 @@ mcp-guardian report --format markdown --output audit-report.md
 
 ### `mcp-guardian proxy`
 
-Start the MCP proxy interceptor to capture real token usage data. The proxy spawns all stdio MCP servers from config, then bridges stdin/stdout.
+Start the MCP proxy interceptor with optional active policy enforcement.
 
 ```bash
+# Audit-only (passive)
 mcp-guardian proxy --config ./cline_mcp_settings.json
+
+# Active blocking with default policy
+mcp-guardian proxy --config ./cline_mcp_settings.json --policy ./default-policy.yaml
+
+# Active blocking with custom policy + mode override
+mcp-guardian proxy --config ./cline_mcp_settings.json --policy ./my-policy.yaml --blocking-mode block
 ```
 
 | Option | Description |
 |---|---|
 | `-c, --config <path>` | Path to MCP config file |
+| `--policy <path>` | Path to policy YAML file (enables active blocking) |
+| `--blocking-mode <mode>` | Override policy mode: `audit` (passive), `warn` (flag), `block` (enforce) |
+
+### Policy Engine (v0.4+)
+
+The policy engine evaluates every intercepted `tools/call` before it reaches the MCP server. Define rules in YAML:
+
+```yaml
+# my-policy.yaml
+version: "1.0"
+policy:
+  mode: block
+  rules:
+    - name: "deny-shell-tools"
+      action: block
+      tools: { deny: ["execute_command", "bash", "sh", "eval", "exec"] }
+    - name: "block-injection"
+      action: block
+      patterns:
+        - "rm\\s+-rf"
+        - "curl\\s|wget\\s"
+        - ";\\s*\\w"
+        - "&&|\\|\\|"
+    - name: "rate-limit"
+      action: flag
+      maxCallsPerMinute: 60
+    - name: "token-budget"
+      action: flag
+      maxTokens: 50000
+```
+
+**Blocked calls** return a JSON-RPC 2.0 error to the client:
+```json
+{"jsonrpc":"2.0","id":"abc-123","error":{"code":-32001,"message":"Blocked by MCP Guardian policy: Tool 'execute_command' is explicitly denied"}}
+```
+
+**Policy modes:**
+| Mode | Behavior |
+|---|---|
+| `audit` | Pass all calls; log decisions only (passive) |
+| `warn` | Downgrade `block` actions to `flag`; log warnings |
+| `block` | Full active enforcement — blocked calls never reach the MCP server |
 
 ### `mcp-guardian scan`
 
@@ -414,7 +468,7 @@ mcp-guardian/
 │       ├── scoring.ts              # Shared scoring utility
 │       └── logger.ts              # Colored console logger with log levels
 │
-tests/                              # 63 tests across 10 suites (Vitest)
+tests/                              # 74 tests across 11 suites (Vitest)
 ├── config-parser.test.ts
 ├── secret-scanner.test.ts
 ├── auth-prober.test.ts
@@ -541,7 +595,7 @@ npm install
 npm run dev          # Watch mode with tsx
 npm run build        # Compile TypeScript
 npm run lint         # Type check (tsc --noEmit)
-npm test             # 63 tests across 10 suites (Vitest)
+npm test             # 74 tests across 11 suites (Vitest)
 npm run test:watch   # Watch mode
 
 # Contributing
@@ -617,13 +671,18 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Token-bucket rate limiter (OSV + NVD)
 - [x] TLS certificate validation
 - [x] Command injection validation (10 suspicious patterns)
-- [x] 63 unit tests (10 test suites)
+- [x] Active policy engine — YAML-based pass/block/flag with allowlists, regex, rate limiting, token budgets
+- [x] Structured JSON logging (pino) for SIEM ingestion
+- [x] STRIDE threat model (SECURITY.md)
+- [x] 74 tests (11 suites)
 - [x] GitHub Actions CI (Node 18/20/22 matrix)
 - [x] Published to npm as [`@mcp-guardian/server`](https://www.npmjs.com/package/@mcp-guardian/server)
+- [ ] OPA integration for Rego policies
+- [ ] OAuth 2.1 / OIDC proxy authentication
 - [ ] Web dashboard for historical trends
-- [ ] Slack/Discord alerting integration
-- [ ] Custom CVE feed support
-- [ ] Multi-user proxy mode
+- [ ] Slack/Discord alerting
+- [ ] Performance benchmarks
+- [ ] Multi-user proxy
 
 ---
 
