@@ -4,10 +4,17 @@ import { TokenCounter } from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
 import { HistoryDatabase } from '../database/history-db.js';
 import { Logger } from '../utils/logger.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import { CallContext } from '../policy/policy-types.js';
+import { StructuredLogger } from '../utils/structured-logger.js';
 
 /**
  * MCP Proxy Interceptor — sits between the AI client and an MCP server,
  * capturing every JSON-RPC call's token usage for real cost auditing.
+ *
+ * v0.4: Integrated PolicyEngine for active blocking of malicious tool calls.
+ * If policyEngine is provided, every tools/call is evaluated before forwarding.
+ * Blocked calls return a JSON-RPC error to the client instead of reaching the server.
  */
 export class McpProxyServer {
   private child: ChildProcess;
@@ -17,16 +24,20 @@ export class McpProxyServer {
   private requestStartTime: number = 0;
   private requestToolName: string | null = null;
   private requestTokens: number = 0;
+  private requestArguments: Record<string, unknown> | undefined;
   private serverName: string;
+  private policyEngine: PolicyEngine | null;
 
   constructor(
     command: string,
     args: string[],
     env: Record<string, string>,
     db: HistoryDatabase,
-    serverName?: string
+    serverName?: string,
+    policyEngine?: PolicyEngine,
   ) {
     this.serverName = serverName || command.split('/').pop() || command;
+    this.policyEngine = policyEngine || null;
     this.child = spawn(command, args, {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -35,6 +46,12 @@ export class McpProxyServer {
     this.db = db;
     this.setupStdout();
     this.setupStderr();
+
+    StructuredLogger.info({
+      event: 'proxy_started',
+      serverName: this.serverName,
+      blockingMode: this.policyEngine ? this.policyEngine.getMode() : 'audit',
+    });
   }
 
   get stdin(): NodeJS.WritableStream | null {
@@ -58,7 +75,6 @@ export class McpProxyServer {
             durationMs: Date.now() - this.requestStartTime,
             timestamp: new Date().toISOString(),
           };
-          // Await the DB write so tests can read immediately
           this.db.addCallRecord(record).then(() => this.db.flush()).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
@@ -86,7 +102,8 @@ export class McpProxyServer {
 
   /**
    * Called when the AI client writes a request to be proxied.
-   * Tracks tools/call requests for token counting.
+   * Evaluates tools/call against policy engine before forwarding.
+   * Blocked calls receive a JSON-RPC error response.
    */
   handleClientInput(raw: string): void {
     try {
@@ -96,10 +113,66 @@ export class McpProxyServer {
         this.currentRequestId = msg.id;
         this.requestToolName = msg.params?.name || 'unknown';
         this.requestTokens = this.tokenCounter.count(raw);
+        this.requestArguments = msg.params?.arguments;
+
+        // ── v0.4: Active policy enforcement ──────────────────
+        if (this.policyEngine) {
+          const toolName = this.requestToolName || 'unknown';
+          const context: CallContext = {
+            serverName: this.serverName,
+            toolName,
+            arguments: this.requestArguments,
+            requestId: msg.id as string | number,
+            requestTokens: this.requestTokens,
+            timestamp: new Date().toISOString(),
+          };
+
+          const decision = this.policyEngine.evaluate(context);
+
+          // Log every decision for SIEM audit trail
+          StructuredLogger.logPolicyDecision({
+            event: 'policy_decision',
+            requestId: msg.id as string | number,
+            serverName: this.serverName,
+            toolName,
+            decision,
+            context,
+          });
+
+          if (decision.action === 'block') {
+            StructuredLogger.logBlocked({
+              event: 'tool_blocked',
+              requestId: msg.id as string | number,
+              serverName: this.serverName,
+              toolName,
+              reason: decision.reason,
+              rule: decision.rule,
+            });
+
+            // Return JSON-RPC 2.0 error to client — do NOT forward to server
+            const errorResponse = JSON.stringify({
+              jsonrpc: '2.0',
+              id: msg.id,
+              error: {
+                code: -32001,
+                message: `Blocked by MCP Guardian policy: ${decision.reason}`,
+                data: { rule: decision.rule, policy: this.policyEngine.getMode() },
+              },
+            });
+            process.stdout.write(errorResponse + '\n');
+
+            // Reset state
+            this.currentRequestId = null;
+            this.requestToolName = null;
+            this.requestArguments = undefined;
+            return; // ← CRITICAL: do not forward to child
+          }
+        }
       }
     } catch {
       // Non-JSON input — forward as-is
     }
+    // Forward to the underlying MCP server
     this.child.stdin?.write(raw + '\n');
   }
 

@@ -2,11 +2,15 @@ import { HistoryDatabase } from '../database/history-db.js';
 import { McpProxyServer } from './proxy-server.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
 
 export class ProxyManager {
   private proxies: McpProxyServer[] = [];
 
-  constructor(private db: HistoryDatabase) {}
+  constructor(
+    private db: HistoryDatabase,
+    private policyEngine?: PolicyEngine,
+  ) {}
 
   getProxies(): McpProxyServer[] {
     return this.proxies;
@@ -21,10 +25,11 @@ export class ProxyManager {
             config.args || [],
             config.env || {},
             this.db,
-            config.name
+            config.name,
+            this.policyEngine,
           );
           this.proxies.push(proxy);
-          Logger.info(`Proxy started for ${config.name} (${config.command})`);
+          Logger.info(`Proxy started for ${config.name} (${config.command})${this.policyEngine ? ` [policy: ${this.policyEngine.getMode()}]` : ''}`);
         } catch (err: any) {
           Logger.error(`Failed to start proxy for ${config.name}: ${err?.message}`);
         }

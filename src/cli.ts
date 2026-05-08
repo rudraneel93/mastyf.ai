@@ -7,6 +7,8 @@ import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport, SecurityReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
+import { PolicyEngine } from './policy/policy-engine.js';
+import { PolicyConfig } from './policy/policy-types.js';
 import { createContainer } from './container.js';
 
 // ── Typed option interfaces ──────────────────────────────────────────
@@ -43,6 +45,8 @@ interface ReportOptions {
 
 interface ProxyOptions {
   config?: string;
+  policy?: string;
+  blockingMode?: string;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -81,7 +85,7 @@ const program = new Command();
 program
   .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version('0.3.0');
+  .version('0.4.0');
 
 program
   .command('scan')
@@ -227,8 +231,10 @@ program
 
 program
   .command('proxy')
-  .description('Start MCP Guardian proxy to capture real token usage data')
+  .description('Start MCP Guardian proxy to capture real token usage data with active policy enforcement')
   .option('-c, --config <path>', 'Path to MCP config file')
+  .option('--policy <path>', 'Path to policy YAML file (enables active blocking)')
+  .option('--blocking-mode <mode>', 'Override policy mode: audit (passive), warn (flag), block (enforce)', 'block')
   .action(async (opts: ProxyOptions) => {
     const paths = opts.config ? [opts.config] : ConfigParser.findConfigPaths();
     if (paths.length === 0) { console.error(chalk.red('No MCP config files found. Use --config to specify a path.')); process.exit(1); }
@@ -236,8 +242,33 @@ program
     const servers = ConfigParser.parse(paths[0]);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
 
+    // Load policy config if --policy flag provided
+    let policyEngine: PolicyEngine | undefined;
+    if (opts.policy) {
+      try {
+        const { readFileSync } = await import('fs');
+        const { load } = await import('js-yaml');
+        const policyYaml = readFileSync(opts.policy, 'utf-8');
+        const policyConfig = load(policyYaml) as PolicyConfig;
+
+        // Override mode from CLI flag if specified
+        if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode)) {
+          policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
+        }
+
+        policyEngine = new PolicyEngine(policyConfig);
+        console.error(chalk.green(`Policy loaded: ${opts.policy} (mode: ${policyEngine.getMode()})`));
+        console.error(chalk.dim(`  ${policyConfig.policy.rules.length} rule(s) active`));
+      } catch (err: any) {
+        console.error(chalk.red(`Failed to load policy: ${err?.message}`));
+        process.exit(1);
+      }
+    } else {
+      console.error(chalk.dim('No policy file specified — running in audit-only mode (no blocking)'));
+    }
+
     const db = new HistoryDatabase();
-    const manager = new ProxyManager(db);
+    const manager = new ProxyManager(db, policyEngine);
     await manager.startAll(servers);
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
