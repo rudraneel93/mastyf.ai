@@ -6,39 +6,28 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { ConfigParser } from './config-parser.js';
-import { SecurityScanner } from './services/security-scanner.js';
-import { CostAuditor } from './services/cost-auditor.js';
-import { HealthMonitor } from './services/health-monitor.js';
-import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { Logger } from './utils/logger.js';
+import { createContainer } from './container.js';
+
+const container = createContainer();
+const reporter = new ReportGenerator();
 
 const server = new Server(
-  { name: 'mcp-doctor', version: '0.1.0' },
+  { name: 'mcp-doctor', version: '0.3.0' },
   { capabilities: { tools: {} } }
 );
 
-let db: HistoryDatabase;
-let costAuditor: CostAuditor;
-
 // ── Graceful shutdown ──────────────────────────────────────────────
-const shutdown = async (signal: string) => {
-  Logger.info(`Received ${signal} — shutting down gracefully...`);
-  if (db) db.close();
-  if (costAuditor) costAuditor.dispose();
-  await server.close();
+const shutdown = () => {
+  Logger.info('Shutting down gracefully...');
+  container.db.close();
   process.exit(0);
 };
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-db = new HistoryDatabase();
-const securityScanner = new SecurityScanner();
-costAuditor = new CostAuditor();
-const healthMonitor = new HealthMonitor(db);
-const reporter = new ReportGenerator();
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -112,36 +101,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   switch (name) {
     case 'scan_security': {
-      const results = await Promise.all(servers.map((s) => securityScanner.scanServer(s)));
+      const results = await Promise.all(servers.map((s) => container.securityScanner.scanServer(s)));
       for (const r of results) {
-        db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
+        container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
       }
       return { content: [{ type: 'text', text: reporter.formatSecurityReports(results) }] };
     }
 
     case 'audit_costs': {
       const filtered = args?.serverName ? servers.filter((s) => s.name === args.serverName) : servers;
-      const results = await Promise.all(filtered.map((s) => costAuditor.auditServer(s)));
+      const results = await Promise.all(filtered.map((s) => container.costAuditor.auditServer(s)));
       for (const r of results) {
-        db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
+        container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
       }
       return { content: [{ type: 'text', text: reporter.formatCostReports(results) }] };
     }
 
     case 'check_health': {
       const filtered = args?.serverName ? servers.filter((s) => s.name === args.serverName) : servers;
-      const results = await Promise.all(filtered.map((s) => healthMonitor.checkServer(s)));
+      const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s)));
       for (const r of results) {
-        db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
+        container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
       }
       return { content: [{ type: 'text', text: reporter.formatHealthReports(results) }] };
     }
 
     case 'full_report': {
       const [security, costs, health] = await Promise.all([
-        Promise.all(servers.map((s) => securityScanner.scanServer(s))),
-        Promise.all(servers.map((s) => costAuditor.auditServer(s))),
-        Promise.all(servers.map((s) => healthMonitor.checkServer(s))),
+        Promise.all(servers.map((s) => container.securityScanner.scanServer(s))),
+        Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
+        Promise.all(servers.map((s) => container.healthMonitor.checkServer(s))),
       ]);
       const overallScore = calculateOverallScore(security, health);
       const fullReport: FullReport = {
@@ -154,14 +143,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
 
       // Store results in DB
-      for (const r of security) db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
-      for (const r of costs) db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
-      for (const r of health) db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
+      for (const r of security) container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
+      for (const r of costs) container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
+      for (const r of health) container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
 
       const format = (args?.format as string) ?? 'text';
 
       if (format === 'json') {
-        // Structured MCP output: return as a resource for better agent integration
         return {
           content: [
             {
@@ -172,10 +160,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 text: JSON.stringify(fullReport, null, 2),
               },
             },
-            {
-              type: 'text',
-              text: reporter.formatFullReport(fullReport),
-            },
+            { type: 'text', text: reporter.formatFullReport(fullReport) },
           ],
         };
       }

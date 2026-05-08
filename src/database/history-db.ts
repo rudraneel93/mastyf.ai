@@ -4,6 +4,14 @@ import os from 'os';
 import fs from 'fs';
 import { ProxyCallRecord } from '../types.js';
 
+export interface CallRecordRow {
+  tool_name: string;
+  request_tokens: number;
+  response_tokens: number;
+  total_tokens: number;
+  duration_ms: number;
+}
+
 export class HistoryDatabase {
   private db!: SqlJsDatabase;
   private dbPath: string;
@@ -142,9 +150,6 @@ export class HistoryDatabase {
     this.scheduleFlush();
   }
 
-  /**
-   * Store a proxy-intercepted tool call for real cost auditing.
-   */
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
     await this.ensureInitialized();
     this.db.run(
@@ -154,9 +159,6 @@ export class HistoryDatabase {
     this.scheduleFlush();
   }
 
-  /**
-   * Get all recorded tool calls for a server for real cost auditing.
-   */
   async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
     await this.ensureInitialized();
     const result = this.db.exec(
