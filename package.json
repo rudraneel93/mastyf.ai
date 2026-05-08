@@ -13,7 +13,7 @@
   },
   "repository": "github:rudraneel93/mcp-guardian",
   "bugs": "https://github.com/rudraneel93/mcp-guardian/issues",
-  "homepage": "https://github.com/rudraneel93/mcp-guardian#readme",
+  "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
   "keywords": [
     "mcp",
     "model-context-protocol",
