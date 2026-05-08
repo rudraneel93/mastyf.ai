@@ -37,6 +37,7 @@ interface ReportOptions {
   config?: string;
   all?: boolean;
   format?: 'json' | 'markdown' | 'text';
+  output?: string;
   thresholdScore?: number;
 }
 
@@ -177,6 +178,7 @@ program
   .option('-c, --config <path>', 'Path to an MCP config file')
   .option('-a, --all', 'Aggregate all discoverable config files')
   .option('-f, --format <format>', 'Output format: text (default), markdown, or json', 'text')
+  .option('--output <path>', 'Save report to a file instead of stdout')
   .option('--threshold-score <number>', 'Exit code 2 if overall score drops below threshold', parseInt)
   .action(async (opts: ReportOptions) => {
     const { servers, sourcePaths } = loadConfigs(opts);
@@ -207,9 +209,18 @@ program
     const fullReport: FullReport = { timestamp: new Date().toISOString(), configPath, security, costs, health, overallScore };
     const reporter = new ReportGenerator();
 
-    if (opts.format === 'json') console.log(JSON.stringify(fullReport, null, 2));
-    else if (opts.format === 'markdown') console.log(reporter.toMarkdown(fullReport));
-    else console.log(reporter.formatFullReport(fullReport));
+    let output: string;
+    if (opts.format === 'json') output = JSON.stringify(fullReport, null, 2);
+    else if (opts.format === 'markdown') output = reporter.toMarkdown(fullReport);
+    else output = reporter.formatFullReport(fullReport);
+
+    if (opts.output) {
+      const fs = await import('fs');
+      fs.writeFileSync(opts.output, output);
+      console.error(chalk.green(`Report saved to ${opts.output}`));
+    } else {
+      console.log(output);
+    }
 
     checkAlertThresholds(security, opts);
   });
