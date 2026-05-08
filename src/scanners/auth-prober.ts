@@ -18,7 +18,7 @@ export class AuthProber {
     if (server.env) {
       for (const key of authKeys) {
         const value = server.env[key] ?? server.env[key.toLowerCase()] ?? server.env[key.toUpperCase()];
-        if (value && typeof value === 'string' && value.length > 0) {
+        if (typeof value === 'string' && value.trim().length > 0) {
           hasAuth = true;
           method = 'environment_variable';
           break;
