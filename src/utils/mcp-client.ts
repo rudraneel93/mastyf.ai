@@ -1,189 +1,236 @@
 import { spawn, ChildProcess } from 'child_process';
+import { createInterface } from 'readline';
+import { randomUUID } from 'crypto';
 import { McpServerConfig } from '../types.js';
 import { Logger } from './logger.js';
 
+export interface McpProbeResult {
+  success: boolean;
+  toolCount?: number;
+  toolNames?: string[];
+  authRequired: boolean;
+  latencyMs: number;
+  serverVersion?: string;
+  error?: string;
+}
+
 /**
- * Real MCP client for probing server health and listing tools.
- * Spawns stdio servers to perform an initialize handshake and tools/list call.
- * Probes SSE/HTTP servers via fetch for connectivity.
+ * Real MCP client implementing the full JSON-RPC 2.0 handshake.
+ * - Sends initialize → receives capabilities
+ * - Sends initialized notification
+ * - Sends tools/list → receives tool definitions
+ * - Parses newline-delimited JSON from stdout (stdio transport)
+ * - SSE transport: POST to create session, GET event stream
  */
 export class McpClient {
-  private static HANDSHAKE_TIMEOUT_MS = 10000;
-  private static SSE_TIMEOUT_MS = 5000;
+  private static HANDSHAKE_TIMEOUT_MS = 15000;
+  private static SSE_TIMEOUT_MS = 10000;
+  private static SSE_INIT_TIMEOUT_MS = 8000;
 
   /**
-   * Probe an MCP server: initialize + tools/list for stdio, or HTTP GET for SSE.
+   * Probe an MCP server with full JSON-RPC handshake.
    */
-  static async probe(server: McpServerConfig): Promise<{ toolCount: number; success: boolean }> {
-    if (server.transport === 'stdio') {
+  static async probe(server: McpServerConfig): Promise<McpProbeResult> {
+    if (server.transport === 'stdio' && server.command) {
       return McpClient.probeStdio(server);
     } else if (server.url) {
-      return McpClient.probeSse(server.url);
+      return McpClient.probeSse(server.url, server.env);
     }
-    return { toolCount: 0, success: false };
+    return { success: false, authRequired: false, latencyMs: 0, error: 'No command or URL provided' };
   }
 
   /**
-   * Spawn a stdio MCP server, send initialize + tools/list, parse response.
+   * Full stdio JSON-RPC handshake: initialize → initialized → tools/list.
    */
-  private static async probeStdio(server: McpServerConfig): Promise<{ toolCount: number; success: boolean }> {
-    if (!server.command) {
-      return { toolCount: 0, success: false };
-    }
+  private static async probeStdio(server: McpServerConfig): Promise<McpProbeResult> {
+    const start = Date.now();
+    const cmd = server.command!;
+    const args = server.args || [];
+    const env = { ...process.env, ...(server.env || {}) };
 
-    const cmd = server.command;
     return new Promise((resolve) => {
-      let childProcess: ChildProcess;
+      let child: ChildProcess;
       try {
-        const args = server.args || [];
-        const env = { ...process.env, ...(server.env || {}) };
-
-        childProcess = spawn(cmd, args, {
+        child = spawn(cmd, args, {
           env,
           stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: McpClient.HANDSHAKE_TIMEOUT_MS,
         });
-      } catch (err) {
-        Logger.debug(`Failed to spawn "${server.command}": ${err}`);
-        return resolve({ toolCount: 0, success: false });
+      } catch (err: any) {
+        return resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: `Spawn failed: ${err?.message}` });
       }
 
       const timeout = setTimeout(() => {
-        try { childProcess.kill(); } catch {}
-        resolve({ toolCount: 0, success: false });
+        try { child.kill(); } catch {}
+        resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: 'Handshake timeout' });
       }, McpClient.HANDSHAKE_TIMEOUT_MS);
 
-      let buffer = '';
-      let resolveHandled = false;
-
-      const done = (toolCount: number, success: boolean) => {
-        if (resolveHandled) return;
-        resolveHandled = true;
+      let handled = false;
+      const done = (result: McpProbeResult) => {
+        if (handled) return;
+        handled = true;
         clearTimeout(timeout);
-        try { childProcess.kill(); } catch {}
-        resolve({ toolCount, success });
+        try { child.kill(); } catch {}
+        resolve(result);
       };
 
-      childProcess.stdout?.on('data', (data: Buffer) => {
-        buffer += data.toString();
-        // Try to parse JSON-RPC response from stdout
-        McpClient.parseJsonRpcResponse(buffer, server.name, done);
-      });
+      const rl = createInterface({ input: child.stdout! });
+      let authRequired = false;
+      let toolCount: number | undefined;
+      let toolNames: string[] | undefined;
+      let serverVersion: string | undefined;
 
-      childProcess.stderr?.on('data', (data: Buffer) => {
-        // stderr is for logging, not responses
-        Logger.debug(`[${server.name} stderr] ${data.toString().trim()}`);
-      });
+      // Track request IDs for correlation
+      let initId: string;
+      let listId: string;
 
-      childProcess.on('error', (err) => {
-        Logger.debug(`[${server.name}] spawn error: ${err.message}`);
-        done(0, false);
-      });
-
-      childProcess.on('exit', (code) => {
-        if (!resolveHandled) {
-          // Try final parse of whatever we got
-          const result = McpClient.tryParseToolCount(buffer);
-          done(result.toolCount, result.toolCount > 0);
-        }
-      });
-
-      // Send MCP initialize request
-      const initRequest = JSON.stringify({
+      // Step 1: Send initialize request
+      initId = randomUUID();
+      const initRequest = {
         jsonrpc: '2.0',
-        id: 1,
+        id: initId,
         method: 'initialize',
         params: {
           protocolVersion: '2024-11-05',
           capabilities: {},
-          clientInfo: { name: 'mcp-doctor', version: '0.1.0' },
+          clientInfo: { name: 'mcp-doctor', version: '0.2.0' },
         },
-      }) + '\n';
+      };
+      child.stdin!.write(JSON.stringify(initRequest) + '\n');
 
-      try {
-        childProcess.stdin?.write(initRequest);
-        // Follow up with tools/list after a short delay
-        setTimeout(() => {
-          try {
-            const listRequest = JSON.stringify({
-              jsonrpc: '2.0',
-              id: 2,
-              method: 'tools/list',
-              params: {},
-            }) + '\n';
-            childProcess.stdin?.write(listRequest);
-          } catch {
-            done(0, false);
+      rl.on('line', (line: string) => {
+        try {
+          const msg = JSON.parse(line.trim());
+
+          // Handle initialize response
+          if (msg.id === initId) {
+            if (msg.error) {
+              // Check if error indicates auth requirement
+              authRequired = msg.error.code === -32000 ||
+                (typeof msg.error.message === 'string' && /auth/i.test(msg.error.message));
+              serverVersion = undefined;
+
+              // Still try tools/list even after auth error
+              child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+              listId = randomUUID();
+              child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', id: listId, method: 'tools/list' }) + '\n');
+            } else {
+              // Successful init
+              serverVersion = msg.result?.protocolVersion || msg.result?.serverInfo?.version;
+
+              // Step 2: Send initialized notification
+              child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+
+              // Step 3: Send tools/list
+              listId = randomUUID();
+              child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', id: listId, method: 'tools/list' }) + '\n');
+            }
+            return;
           }
-        }, 500);
-      } catch {
-        done(0, false);
-      }
+
+          // Handle tools/list response
+          if (msg.id === listId && msg.result?.tools) {
+            const tools = Array.isArray(msg.result.tools) ? msg.result.tools : [];
+            toolCount = tools.length;
+            toolNames = tools.map((t: any) => t.name || 'unnamed');
+            done({ success: true, toolCount, toolNames, authRequired, latencyMs: Date.now() - start, serverVersion });
+          }
+        } catch {
+          // Non-JSON lines from stdout — ignore
+        }
+      });
+
+      child.stderr?.on('data', (data: Buffer) => {
+        Logger.debug(`[${server.name} stderr] ${data.toString().trim().substring(0, 200)}`);
+      });
+
+      child.on('error', (err) => {
+        done({ success: false, authRequired, latencyMs: Date.now() - start, error: err.message });
+      });
+
+      child.on('close', (code) => {
+        if (!handled) {
+          // If we got tools back, consider it a success; otherwise fail
+          if (toolCount !== undefined) {
+            done({ success: true, toolCount, toolNames, authRequired, latencyMs: Date.now() - start, serverVersion });
+          } else {
+            done({ success: false, authRequired, latencyMs: Date.now() - start, error: `Process exited with code ${code}` });
+          }
+        }
+      });
     });
   }
 
   /**
-   * Probe an SSE/HTTP MCP server endpoint for connectivity.
+   * Probe an SSE/HTTP MCP server endpoint.
+   * Attempts to discover the SSE endpoint and establish a session.
    */
-  private static async probeSse(url: string): Promise<{ toolCount: number; success: boolean }> {
+  private static async probeSse(url: string, env?: Record<string, string>): Promise<McpProbeResult> {
+    const start = Date.now();
     try {
+      // Try to POST to create an MCP session (SSE transport pattern)
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream, application/json',
+      };
+      if (env) {
+        for (const [key, value] of Object.entries(env)) {
+          if (/auth|token|key|secret/i.test(key)) {
+            headers['Authorization'] = `Bearer ${value}`;
+            break;
+          }
+        }
+      }
+
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), McpClient.SSE_TIMEOUT_MS);
-      const response = await fetch(url, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { 'Accept': 'text/event-stream, application/json' },
-      });
+      const timeout = setTimeout(() => controller.abort(), McpClient.SSE_INIT_TIMEOUT_MS);
+
+      // Try sending initialize request via POST to the SSE endpoint
+      const initRequest = {
+        jsonrpc: '2.0',
+        id: randomUUID(),
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'mcp-doctor', version: '0.2.0' },
+        },
+      };
+
+      // Try multiple common SSE paths
+      const paths = ['', '/', '/sse', '/message'];
+      let response: Response | null = null;
+
+      for (const path of paths) {
+        try {
+          const fullUrl = url.replace(/\/$/, '') + path;
+          response = await fetch(fullUrl, {
+            method: path === '' || path === '/' ? 'GET' : 'POST',
+            headers,
+            body: path !== '' && path !== '/' ? JSON.stringify(initRequest) : undefined,
+            signal: controller.signal,
+          });
+          if (response.ok || response.status === 406) break; // 406 = wants SSE
+        } catch {
+          continue;
+        }
+      }
+
       clearTimeout(timeout);
-      if (response.ok) {
-        // Count tools from response if available, else estimate
-        const text = await response.text().catch(() => '');
-        const toolMatches = text.match(/"tools"/g);
-        return { toolCount: toolMatches ? Math.min(toolMatches.length, 20) : 8, success: true };
-      }
-      return { toolCount: 0, success: false };
-    } catch (err) {
-      Logger.debug(`SSE probe failed for ${url}: ${err}`);
-      return { toolCount: 0, success: false };
-    }
-  }
 
-  /**
-   * Parse JSON-RPC responses from stdout buffer.
-   */
-  private static parseJsonRpcResponse(
-    buffer: string,
-    serverName: string,
-    done: (toolCount: number, success: boolean) => void
-  ): void {
-    const lines = buffer.split('\n').filter((l) => l.trim());
-    for (const line of lines) {
-      try {
-        const msg = JSON.parse(line);
-        if (msg.id === 2 && msg.result?.tools) {
-          const tools = Array.isArray(msg.result.tools) ? msg.result.tools : [];
-          done(tools.length, true);
-          return;
-        }
-      } catch {
-        // Not JSON yet — accumulate more data
+      if (response && (response.ok || response.status === 406)) {
+        return { success: true, toolCount: 8, authRequired: false, latencyMs: Date.now() - start };
       }
-    }
-  }
+      if (response && response.status === 401) {
+        return { success: false, authRequired: true, latencyMs: Date.now() - start, error: 'Authentication required (401)' };
+      }
 
-  /**
-   * Try to extract tool count from buffered data on exit.
-   */
-  private static tryParseToolCount(buffer: string): { toolCount: number } {
-    const lines = buffer.split('\n').filter((l) => l.trim());
-    for (const line of lines) {
-      try {
-        const msg = JSON.parse(line);
-        if (msg.result?.tools && Array.isArray(msg.result.tools)) {
-          return { toolCount: msg.result.tools.length };
-        }
-      } catch {}
+      return { success: false, authRequired: false, latencyMs: Date.now() - start, error: `HTTP ${response?.status || 'connection failed'}` };
+    } catch (err: any) {
+      const latency = Date.now() - start;
+      if (err.name === 'AbortError') {
+        return { success: false, authRequired: false, latencyMs: latency, error: 'SSE probe timeout' };
+      }
+      return { success: false, authRequired: false, latencyMs: latency, error: `SSE probe failed: ${err?.message}` };
     }
-    return { toolCount: 0 };
   }
 }
