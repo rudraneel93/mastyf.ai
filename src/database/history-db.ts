@@ -18,21 +18,26 @@ export class HistoryDatabase {
   private initialized: boolean = false;
   private dirty: boolean = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private isInMemory: boolean = false;
 
   constructor(dbPath?: string) {
+    // ':memory:' means in-memory DB — never persist to disk
+    this.isInMemory = dbPath === ':memory:';
     this.dbPath = dbPath || process.env['MCP_DOCTOR_DB_PATH'] || path.join(os.homedir(), '.mcp-doctor', 'history.db');
   }
 
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
 
-    const dir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    if (!this.isInMemory) {
+      const dir = path.dirname(this.dbPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
     }
 
     const SQL = await initSqlJs();
-    if (fs.existsSync(this.dbPath)) {
+    if (!this.isInMemory && fs.existsSync(this.dbPath)) {
       const buffer = fs.readFileSync(this.dbPath);
       this.db = new SQL.Database(buffer);
     } else {
@@ -100,8 +105,10 @@ export class HistoryDatabase {
 
   flush(): void {
     if (this.dirty && this.db) {
-      const data = this.db.export();
-      fs.writeFileSync(this.dbPath, data);
+      if (!this.isInMemory) {
+        const data = this.db.export();
+        fs.writeFileSync(this.dbPath, data);
+      }
       this.dirty = false;
     }
     if (this.saveTimer) {
