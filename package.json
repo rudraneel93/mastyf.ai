@@ -1,5 +1,5 @@
 {
-  "name": "@rudraneel/mcp-guardian",
+  "name": "@mcp-guardian/server",
   "version": "0.3.0",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",

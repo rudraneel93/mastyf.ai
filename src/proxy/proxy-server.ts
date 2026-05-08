@@ -58,7 +58,8 @@ export class McpProxyServer {
             durationMs: Date.now() - this.requestStartTime,
             timestamp: new Date().toISOString(),
           };
-          this.db.addCallRecord(record).catch((err) =>
+          // Await the DB write so tests can read immediately
+          this.db.addCallRecord(record).then(() => this.db.flush()).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
           this.currentRequestId = null;
