@@ -2,6 +2,7 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { ProxyCallRecord } from '../types.js';
 
 export class HistoryDatabase {
   private db!: SqlJsDatabase;
@@ -59,17 +60,27 @@ export class HistoryDatabase {
         tool_count INTEGER NOT NULL
       )
     `);
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS call_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT DEFAULT (datetime('now')),
+        server_name TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        request_tokens INTEGER NOT NULL DEFAULT 0,
+        response_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        duration_ms INTEGER NOT NULL DEFAULT 0
+      )
+    `);
 
     this.db.run('CREATE INDEX IF NOT EXISTS idx_security_server ON security_scans(server_name)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_cost_server ON cost_records(server_name)');
     this.db.run('CREATE INDEX IF NOT EXISTS idx_health_server ON health_checks(server_name)');
+    this.db.run('CREATE INDEX IF NOT EXISTS idx_call_server ON call_records(server_name)');
 
     this.initialized = true;
   }
 
-  /**
-   * Schedule a flush after 1 second of inactivity to batch writes.
-   */
   private scheduleFlush(): void {
     this.dirty = true;
     if (!this.saveTimer) {
@@ -79,9 +90,6 @@ export class HistoryDatabase {
     }
   }
 
-  /**
-   * Force immediate flush of all pending writes to disk.
-   */
   flush(): void {
     if (this.dirty && this.db) {
       const data = this.db.export();
@@ -132,6 +140,39 @@ export class HistoryDatabase {
       [serverName, latency, success ? 1 : 0, toolCount]
     );
     this.scheduleFlush();
+  }
+
+  /**
+   * Store a proxy-intercepted tool call for real cost auditing.
+   */
+  async addCallRecord(record: ProxyCallRecord): Promise<void> {
+    await this.ensureInitialized();
+    this.db.run(
+      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms) VALUES (?, ?, ?, ?, ?, ?)',
+      [record.serverName, record.toolName, record.requestTokens, record.responseTokens, record.totalTokens, record.durationMs]
+    );
+    this.scheduleFlush();
+  }
+
+  /**
+   * Get all recorded tool calls for a server for real cost auditing.
+   */
+  getCallRecordsForServer(serverName: string): ProxyCallRecord[] {
+    if (!this.initialized) return [];
+    const result = this.db.exec(
+      'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp FROM call_records WHERE server_name = ?',
+      [serverName]
+    );
+    if (result.length === 0) return [];
+    return result[0].values.map((row: any[]) => ({
+      serverName: row[0] as string,
+      toolName: row[1] as string,
+      requestTokens: row[2] as number,
+      responseTokens: row[3] as number,
+      totalTokens: row[4] as number,
+      durationMs: row[5] as number,
+      timestamp: row[6] as string,
+    }));
   }
 
   close(): void {

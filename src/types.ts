@@ -53,6 +53,7 @@ export interface CostReport {
   estimatedCostUSD: number;
   pricingModel: string;
   toolBreakdown: ToolCost[];
+  note?: string;
 }
 
 export interface ToolCost {
@@ -79,4 +80,17 @@ export interface FullReport {
   costs: CostReport[];
   health: HealthReport[];
   overallScore: number;
+}
+
+/**
+ * Recorded by the MCP proxy interceptor for real cost tracking.
+ */
+export interface ProxyCallRecord {
+  serverName: string;
+  toolName: string;
+  requestTokens: number;
+  responseTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  timestamp: string;
 }

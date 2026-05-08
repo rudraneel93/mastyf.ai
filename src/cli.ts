@@ -9,6 +9,7 @@ import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
+import { ProxyManager } from './proxy/proxy-manager.js';
 
 const program = new Command();
 program
@@ -244,5 +245,37 @@ function checkAlertThresholds(
     }
   }
 }
+
+program
+  .command('proxy')
+  .description('Start MCP Doctor proxy to capture real token usage data')
+  .option('-c, --config <path>', 'Path to MCP config file')
+  .action(async (options) => {
+    const paths = options.config ? [options.config] : ConfigParser.findConfigPaths();
+    if (paths.length === 0) {
+      console.error(chalk.red('No MCP config files found. Use --config to specify a path.'));
+      process.exit(1);
+    }
+    const servers = ConfigParser.parse(paths[0]);
+    if (servers.length === 0) {
+      console.error(chalk.yellow('No servers found in config.'));
+      process.exit(0);
+    }
+
+    const db = new HistoryDatabase();
+    const manager = new ProxyManager(db);
+    await manager.startAll(servers);
+    console.error(chalk.green('MCP Doctor proxy running. Press Ctrl+C to stop.'));
+    process.on('SIGINT', () => {
+      manager.stopAll();
+      db.close();
+      process.exit(0);
+    });
+    process.on('SIGTERM', () => {
+      manager.stopAll();
+      db.close();
+      process.exit(0);
+    });
+  });
 
 program.parse();
