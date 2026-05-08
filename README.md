@@ -46,7 +46,7 @@ MCP Doctor scans your Model Context Protocol (MCP) servers for security vulnerab
 - **Secret Scanning** — 6 regex patterns for hardcoded API keys, tokens, private keys, passwords, GitHub tokens, OpenAI keys
 - **Scoring** — Weighted 0–100 security score with actionable recommendations
 
-### 💰 Cost Audit (`audit_costs` — Zero Mock Data)
+### 💰 Cost Audit (`audit_costs')
 - **Proxy Interceptor** — `mcp-doctor proxy` sits between your AI client and MCP servers, capturing every `tools/call` request/response
 - **Real Token Counting** — Uses `tiktoken` (o200k_base encoding) on actual JSON-RPC traffic — no hardcoded estimates
 - **Multi-Model Pricing** — 97 models across 17 providers (OpenAI, Anthropic, Google, DeepSeek, xAI, Meta, Mistral, and more)
