@@ -1,12 +1,7 @@
 import chalk from 'chalk';
 import { FullReport, SecurityReport, CostReport, HealthReport } from '../types.js';
 
-/**
- * Formats audit results as colored text or Markdown reports.
- */
 export class ReportGenerator {
-  // ── Security Reports ───────────────────────────────────────────
-
   formatSecurityReports(reports: SecurityReport[]): string {
     let out = chalk.bold.underline('\n🔒 Security Scan Results\n');
     for (const r of reports) {
@@ -49,8 +44,6 @@ export class ReportGenerator {
     return out;
   }
 
-  // ── Cost Reports ────────────────────────────────────────────────
-
   formatCostReports(reports: CostReport[]): string {
     let out = chalk.bold.underline('\n💰 Cost Audit\n');
     for (const r of reports) {
@@ -59,13 +52,12 @@ export class ReportGenerator {
       for (const t of r.toolBreakdown) {
         out += `  ${chalk.dim(t.toolName)}: ${t.tokens} tokens, ${t.calls} calls, $${t.cost.toFixed(4)}\n`;
       }
+      if (r.note) out += `  ${chalk.dim('ℹ️ ' + r.note)}\n`;
     }
     const grandTotal = reports.reduce((sum, r) => sum + r.estimatedCostUSD, 0);
     out += `\n${chalk.bold(`Total estimated cost: $${grandTotal.toFixed(4)}`)}\n`;
     return out;
   }
-
-  // ── Health Reports ──────────────────────────────────────────────
 
   formatHealthReports(reports: HealthReport[]): string {
     let out = chalk.bold.underline('\n❤️ Health Check\n');
@@ -82,8 +74,6 @@ export class ReportGenerator {
     return out;
   }
 
-  // ── Full Report ─────────────────────────────────────────────────
-
   formatFullReport(report: FullReport): string {
     return (
       chalk.bold.cyan(`\n═══════════════════════════════════════════\n`) +
@@ -98,34 +88,63 @@ export class ReportGenerator {
     );
   }
 
-  // ── Markdown Export ─────────────────────────────────────────────
-
   toMarkdown(report: FullReport): string {
-    let md = `# MCP Doctor Report\n\n`;
-    md += `**Timestamp**: ${report.timestamp}  \n`;
-    md += `**Config**: \`${report.configPath}\`  \n`;
-    md += `**Overall Score**: ${report.overallScore}/100  \n\n`;
+    let md = `# MCP Doctor Report\n\n**Timestamp:** ${report.timestamp}  \n**Overall Score:** ${report.overallScore}/100\n\n`;
 
     md += `## 🔒 Security\n\n`;
-    md += `| Server | Score | CVEs | Auth | TypoSquat | Secrets |\n`;
-    md += `|--------|-------|------|------|-----------|--------|\n`;
-    for (const r of report.security) {
-      md += `| ${r.serverName} | ${r.score} | ${r.cves.length} | ${r.authStatus.hasAuthentication ? '✅' : '❌'} | ${r.typoSquatRisk.length > 0 ? '⚠️' : '✅'} | ${r.secretsFound.length > 0 ? '⚠️' : '✅'} |\n`;
+    for (const s of report.security) {
+      md += `### ${s.serverName} — Score: ${s.score}\n\n`;
+      if (s.cves.length > 0) {
+        md += `| CVE | Severity | Summary |\n|-----|----------|--------|\n`;
+        for (const cve of s.cves) {
+          md += `| ${cve.id} | ${cve.severity} | ${cve.summary.substring(0, 100)} |\n`;
+        }
+        md += '\n';
+      }
+      if (!s.authStatus.hasAuthentication) md += `⚠️ No authentication detected\n\n`;
+      if (!s.authStatus.isTransportEncrypted) md += `⚠️ Transport not encrypted\n\n`;
+      if (s.typoSquatRisk.length > 0) {
+        md += `⚠️ **Typo-squat risks:**\n`;
+        for (const t of s.typoSquatRisk) {
+          md += `- \`${t.suspiciousName}\` similar to \`${t.similarityTo}\` (distance ${t.distance})\n`;
+        }
+        md += '\n';
+      }
+      if (s.secretsFound.length > 0) {
+        md += `⚠️ **Secrets found:**\n`;
+        for (const sec of s.secretsFound) {
+          md += `- \`${sec.type}\` in \`${sec.location}\`\n`;
+        }
+        md += '\n';
+      }
+      if (s.recommendations.length > 0) {
+        md += `**Recommendations:**\n`;
+        for (const rec of s.recommendations) md += `- ${rec}\n`;
+        md += '\n';
+      }
     }
 
-    md += `\n## 💰 Costs\n\n`;
-    md += `| Server | Tokens | Cost (USD) | Model |\n`;
-    md += `|--------|--------|------------|-------|\n`;
-    for (const r of report.costs) {
-      md += `| ${r.serverName} | ${r.tokensUsed} | $${r.estimatedCostUSD.toFixed(4)} | ${r.pricingModel} |\n`;
+    md += `## 💰 Costs\n\n`;
+    for (const c of report.costs) {
+      md += `### ${c.serverName} — ${c.tokensUsed} tokens → $${c.estimatedCostUSD.toFixed(4)}\n\n`;
+      md += `| Tool | Calls | Tokens | Cost |\n|------|-------|--------|------|\n`;
+      for (const t of c.toolBreakdown) {
+        md += `| ${t.toolName} | ${t.calls} | ${t.tokens} | $${t.cost.toFixed(4)} |\n`;
+      }
+      md += '\n';
     }
 
-    md += `\n## ❤️ Health\n\n`;
-    md += `| Server | Latency | Success | Tools | Overloaded |\n`;
-    md += `|--------|---------|---------|-------|------------|\n`;
-    for (const r of report.health) {
-      md += `| ${r.serverName} | ${r.latencyMs}ms | ${(r.successRate * 100).toFixed(0)}% | ${r.toolCount} | ${r.overloadWarning ? '⚠️' : '✅'} |\n`;
+    md += `## ❤️ Health\n\n`;
+    for (const h of report.health) {
+      md += `### ${h.serverName}\n\n`;
+      md += `- Latency: ${h.latencyMs}ms\n`;
+      md += `- Success rate: ${(h.successRate * 100).toFixed(0)}%\n`;
+      md += `- Tools: ${h.toolCount}\n`;
+      md += `- Context pressure: ${(h.contextPressure * 100).toFixed(0)}%\n`;
+      if (h.overloadWarning) md += `⚠️ Tool overload warning (>15 tools)\n`;
+      md += '\n';
     }
+
     return md;
   }
 }

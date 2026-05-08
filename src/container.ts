@@ -23,7 +23,7 @@ export function createContainer(dbPath?: string): Container {
   const secretScanner = new SecretScanner();
   const securityScanner = new SecurityScanner(cveChecker, authProber, typoDetector, secretScanner);
   const pricingClient = new PricingClient();
-  const costAuditor = new CostAuditor(pricingClient);
+  const costAuditor = new CostAuditor(pricingClient, db);
   const healthMonitor = new HealthMonitor(db);
 
   return { db, securityScanner, costAuditor, healthMonitor };

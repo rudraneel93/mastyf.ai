@@ -2,21 +2,18 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ConfigParser } from './config-parser.js';
-import { SecurityScanner } from './services/security-scanner.js';
-import { CostAuditor } from './services/cost-auditor.js';
-import { HealthMonitor } from './services/health-monitor.js';
 import { HistoryDatabase } from './database/history-db.js';
 import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
-import { PricingClient } from './clients/pricing-client.js';
+import { createContainer } from './container.js';
 
 const program = new Command();
 program
   .name('mcp-doctor')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version('0.1.0');
+  .version('0.3.0');
 
 program
   .command('scan')
@@ -39,17 +36,13 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
-    const scanner = new SecurityScanner();
-    const reports = await Promise.all(servers.map((s) => scanner.scanServer(s)));
+    const container = createContainer();
+    const reports = await Promise.all(servers.map((s) => container.securityScanner.scanServer(s)));
 
-    // Store in DB
-    const db = new HistoryDatabase();
-    await Promise.all(reports.map((r) => db.addSecurityScan(r.serverName, r.score, r.cves.length, r)));
-    db.close();
+    await Promise.all(reports.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r)));
+    container.db.close();
 
     console.log(new ReportGenerator().formatSecurityReports(reports));
-
-    // Alert thresholds
     checkAlertThresholds(reports, options);
   });
 
@@ -68,18 +61,15 @@ program
       process.exit(0);
     }
 
-    const db = new HistoryDatabase();
-    const pricing = new PricingClient();
-    const auditor = new CostAuditor(pricing, db);
-    const results = await Promise.all(filtered.map((s) => auditor.auditServer(s)));
-    auditor.dispose();
+    const container = createContainer();
+    const results = await Promise.all(filtered.map((s) => container.costAuditor.auditServer(s)));
+    container.costAuditor.dispose();
 
-    await Promise.all(results.map((r) => db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)));
-    db.close();
+    await Promise.all(results.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)));
+    container.db.close();
 
     console.log(new ReportGenerator().formatCostReports(results));
 
-    // Cost threshold
     if (options.thresholdCost) {
       const total = results.reduce((sum, r) => sum + r.estimatedCostUSD, 0);
       if (total > options.thresholdCost) {
@@ -105,16 +95,14 @@ program
       process.exit(0);
     }
 
-    const db = new HistoryDatabase();
-    const monitor = new HealthMonitor(db);
-    const results = await Promise.all(filtered.map((s) => monitor.checkServer(s)));
+    const container = createContainer();
+    const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s)));
 
-    await Promise.all(results.map((r) => db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)));
-    db.close();
+    await Promise.all(results.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)));
+    container.db.close();
 
     console.log(new ReportGenerator().formatHealthReports(results));
 
-    // Alert thresholds
     if (options.failOnOverload && results.some((r) => r.overloadWarning)) {
       console.error(chalk.red('\n⚠ One or more servers have tool overload'));
       process.exit(1);
@@ -148,26 +136,20 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
-    const db = new HistoryDatabase();
-    const scanner = new SecurityScanner();
-    const pricing = new PricingClient();
-    const auditor = new CostAuditor(pricing, db);
-    const monitor = new HealthMonitor(db);
-
+    const container = createContainer();
     const [security, costs, health] = await Promise.all([
-      Promise.all(servers.map((s) => scanner.scanServer(s))),
-      Promise.all(servers.map((s) => auditor.auditServer(s))),
-      Promise.all(servers.map((s) => monitor.checkServer(s))),
+      Promise.all(servers.map((s) => container.securityScanner.scanServer(s))),
+      Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
+      Promise.all(servers.map((s) => container.healthMonitor.checkServer(s))),
     ]);
-    auditor.dispose();
+    container.costAuditor.dispose();
 
-    // Store all results (await all async DB operations)
     await Promise.all([
-      ...security.map((r) => db.addSecurityScan(r.serverName, r.score, r.cves.length, r)),
-      ...costs.map((r) => db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)),
-      ...health.map((r) => db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)),
+      ...security.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r)),
+      ...costs.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)),
+      ...health.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)),
     ]);
-    db.close();
+    container.db.close();
 
     const overallScore = calculateOverallScore(security, health);
     const configPath = options.all
@@ -193,61 +175,11 @@ program
       console.log(reporter.formatFullReport(fullReport));
     }
 
-    // Score threshold
     if (options.thresholdScore && overallScore < options.thresholdScore) {
       console.error(chalk.red(`\n⚠ Overall score ${overallScore}/100 is below threshold ${options.thresholdScore}`));
       process.exit(2);
     }
   });
-
-/**
- * Load configs: either from a single --config path or --all for aggregation.
- */
-function loadConfigs(options: Record<string, unknown>): { servers: import('./types.js').McpServerConfig[]; sourcePaths: string[] } {
-  if (options.all) {
-    const result = ConfigParser.parseAll();
-    return result;
-  }
-
-  const configPath = options.config as string | undefined;
-  const paths = configPath ? [configPath] : ConfigParser.findConfigPaths();
-  if (paths.length === 0) {
-    return { servers: [], sourcePaths: [] };
-  }
-  return { servers: ConfigParser.parse(paths[0]), sourcePaths: [paths[0]] };
-}
-
-/**
- * Check alert thresholds and exit with appropriate codes.
- */
-function checkAlertThresholds(
-  reports: import('./types.js').SecurityReport[],
-  options: Record<string, unknown>
-): void {
-  // Fail on critical CVEs
-  if (options.failOnCritical && reports.some((r) => r.cves.some((c) => c.severity === 'CRITICAL'))) {
-    console.error(chalk.red('\n⚠ Critical CVE(s) detected'));
-    process.exit(1);
-  }
-
-  // Fail on secrets
-  if (options.failOnSecrets && reports.some((r) => r.secretsFound.length > 0)) {
-    console.error(chalk.red('\n⚠ Hardcoded secrets detected'));
-    process.exit(1);
-  }
-
-  // Score threshold
-  if (options.thresholdScore) {
-    const threshold = options.thresholdScore as number;
-    const belowThreshold = reports.filter((r) => r.score < threshold);
-    if (belowThreshold.length > 0) {
-      console.error(chalk.red(
-        `\n⚠ ${belowThreshold.length} server(s) below score threshold ${threshold}: ${belowThreshold.map((r) => `${r.serverName} (${r.score})`).join(', ')}`
-      ));
-      process.exit(2);
-    }
-  }
-}
 
 program
   .command('proxy')
@@ -269,18 +201,9 @@ program
     const manager = new ProxyManager(db);
     await manager.startAll(servers);
     console.error(chalk.green('MCP Doctor proxy running. Press Ctrl+C to stop.'));
-    process.on('SIGINT', () => {
-      manager.stopAll();
-      db.close();
-      process.exit(0);
-    });
-    process.on('SIGTERM', () => {
-      manager.stopAll();
-      db.close();
-      process.exit(0);
-    });
+    process.on('SIGINT', () => { manager.stopAll(); db.close(); process.exit(0); });
+    process.on('SIGTERM', () => { manager.stopAll(); db.close(); process.exit(0); });
 
-    // Bridge stdin to all proxies for real token interception
     const proxies = manager.getProxies();
     if (proxies.length > 0) {
       process.stdin.setEncoding('utf-8');
@@ -291,5 +214,38 @@ program
       });
     }
   });
+
+function loadConfigs(options: Record<string, unknown>): { servers: import('./types.js').McpServerConfig[]; sourcePaths: string[] } {
+  if (options.all) {
+    const result = ConfigParser.parseAll();
+    return result;
+  }
+  const configPath = options.config as string | undefined;
+  const paths = configPath ? [configPath] : ConfigParser.findConfigPaths();
+  if (paths.length === 0) return { servers: [], sourcePaths: [] };
+  return { servers: ConfigParser.parse(paths[0]), sourcePaths: [paths[0]] };
+}
+
+function checkAlertThresholds(
+  reports: import('./types.js').SecurityReport[],
+  options: Record<string, unknown>
+): void {
+  if (options.failOnCritical && reports.some((r) => r.cves.some((c) => c.severity === 'CRITICAL'))) {
+    console.error(chalk.red('\n⚠ Critical CVE(s) detected'));
+    process.exit(1);
+  }
+  if (options.failOnSecrets && reports.some((r) => r.secretsFound.length > 0)) {
+    console.error(chalk.red('\n⚠ Hardcoded secrets detected'));
+    process.exit(1);
+  }
+  if (options.thresholdScore) {
+    const threshold = options.thresholdScore as number;
+    const belowThreshold = reports.filter((r) => r.score < threshold);
+    if (belowThreshold.length > 0) {
+      console.error(chalk.red(`\n⚠ ${belowThreshold.length} server(s) below score threshold ${threshold}: ${belowThreshold.map((r) => `${r.serverName} (${r.score})`).join(', ')}`));
+      process.exit(2);
+    }
+  }
+}
 
 program.parse();

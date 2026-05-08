@@ -7,24 +7,35 @@ import { Logger } from '../utils/logger.js';
 export class CostAuditor {
   private tokenCounter: TokenCounter;
   private pricing: PricingClient;
-  private db: HistoryDatabase;
+  private db: HistoryDatabase | undefined;
 
   constructor(pricingClient?: PricingClient, db?: HistoryDatabase) {
     this.tokenCounter = new TokenCounter();
     this.pricing = pricingClient || new PricingClient();
-    this.db = db as HistoryDatabase;
+    this.db = db;
   }
 
   async auditServer(server: McpServerConfig): Promise<CostReport> {
-    if (this.db) {
-      try {
-        const records = await this.db.getCallRecordsForServer(server.name);
-        if (records.length > 0) {
-          return this.buildReportFromRecords(server.name, records);
-        }
-      } catch (err: any) {
-        Logger.debug(`Cost audit: DB read failed for ${server.name}: ${err?.message}`);
+    if (!this.db) {
+      return {
+        serverName: server.name,
+        tokensUsed: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostUSD: 0,
+        pricingModel: 'unknown',
+        toolBreakdown: [],
+        note: 'Database not available. Ensure the proxy has been configured.',
+      };
+    }
+
+    try {
+      const records = await this.db.getCallRecordsForServer(server.name);
+      if (records.length > 0) {
+        return this.buildReportFromRecords(server.name, records);
       }
+    } catch (err: any) {
+      Logger.debug(`Cost audit: DB read failed for ${server.name}: ${err?.message}`);
     }
 
     return {
