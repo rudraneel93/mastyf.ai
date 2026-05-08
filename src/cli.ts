@@ -150,7 +150,8 @@ program
 
     const db = new HistoryDatabase();
     const scanner = new SecurityScanner();
-    const auditor = new CostAuditor();
+    const pricing = new PricingClient();
+    const auditor = new CostAuditor(pricing, db);
     const monitor = new HealthMonitor(db);
 
     const [security, costs, health] = await Promise.all([
