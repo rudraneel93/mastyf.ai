@@ -12,7 +12,7 @@ export class HistoryDatabase {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(dbPath?: string) {
-    this.dbPath = dbPath || path.join(os.homedir(), '.mcp-doctor', 'history.db');
+    this.dbPath = dbPath || process.env['MCP_DOCTOR_DB_PATH'] || path.join(os.homedir(), '.mcp-doctor', 'history.db');
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -157,8 +157,8 @@ export class HistoryDatabase {
   /**
    * Get all recorded tool calls for a server for real cost auditing.
    */
-  getCallRecordsForServer(serverName: string): ProxyCallRecord[] {
-    if (!this.initialized) return [];
+  async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
+    await this.ensureInitialized();
     const result = this.db.exec(
       'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp FROM call_records WHERE server_name = ?',
       [serverName]

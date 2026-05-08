@@ -10,6 +10,7 @@ import { ReportGenerator } from './reporter/report-generator.js';
 import { FullReport } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
+import { PricingClient } from './clients/pricing-client.js';
 
 const program = new Command();
 program
@@ -67,11 +68,12 @@ program
       process.exit(0);
     }
 
-    const auditor = new CostAuditor();
+    const db = new HistoryDatabase();
+    const pricing = new PricingClient();
+    const auditor = new CostAuditor(pricing, db);
     const results = await Promise.all(filtered.map((s) => auditor.auditServer(s)));
     auditor.dispose();
 
-    const db = new HistoryDatabase();
     await Promise.all(results.map((r) => db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)));
     db.close();
 

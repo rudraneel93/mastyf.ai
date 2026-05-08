@@ -29,7 +29,7 @@ export class CostAuditor {
     // Try to get real data from proxy-intercepted call records
     if (this.db) {
       try {
-        const records = this.db.getCallRecordsForServer(server.name);
+        const records = await this.db.getCallRecordsForServer(server.name);
         if (records.length > 0) {
           return this.buildReportFromRecords(server.name, records);
         }
