@@ -59,6 +59,11 @@ MCP Guardian provides:
 - **Health monitoring** — Live JSON-RPC 2.0 handshake probes with latency, success rate, tool count, and context pressure analysis
 - **Agent-native** — Runs as an MCP server so your AI assistant can self-audit its own infrastructure
 - **Enterprise SIEM logging (v0.4+)** — Structured JSON logs via pino with request-ID tracing, policy decision audit trails, and block events at WARN level
+- **Session-based replay protection (v0.6.0)** — Short-lived 5-min session tokens prevent JWT replay attacks. Nonce tracking detects token reuse
+- **Hot-reload policies (v0.6.0)** — File watcher atomically swaps policy engine on YAML changes — no restart needed
+- **Circuit breaker (v0.5.2)** — 3-state circuit breaker protects upstream MCP servers from cascading failures
+- **OAuth 2.1 / OIDC (v0.5.0)** — JWT validation with OIDC Discovery, bearer token extraction, agent identity mapping
+- **RBAC (v0.5.1)** — Scope-based and client-ID-based access control in policy engine
 
 ---
 
@@ -715,8 +720,14 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Performance benchmarks (p50: 5ms baseline, +25.78ms proxy overhead, +0.15ms policy)
 - [x] Helm chart + production deployment guide (K8s, fail-open/closed, sidecar pattern, scaling)
 - [x] Published to npm as [`@mcp-guardian/server`](https://www.npmjs.com/package/@mcp-guardian/server)
+- [x] OAuth 2.1 / OIDC proxy authentication (v0.5.0)
+- [x] RBAC — scope & client-ID-based access control (v0.5.1)
+- [x] Circuit breaker — 3-state protection for upstream servers (v0.5.2)
+- [x] Per‑client rate limiting (v0.5.2)
+- [x] Consistent SIEM fields — requestId, authnSuccess, authzAllowed (v0.5.2)
+- [x] Session binding — replay protection via 5‑min session tokens (v0.6.0)
+- [x] Hot‑reload policies — chokidar file watcher (v0.6.0)
 - [ ] OPA integration for Rego policies
-- [ ] OAuth 2.1 / OIDC proxy authentication
 - [ ] Web dashboard for historical trends
 - [ ] Slack/Discord alerting
 - [ ] Prometheus metrics endpoint
