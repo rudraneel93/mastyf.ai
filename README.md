@@ -30,6 +30,7 @@ MCP Guardian scans your [Model Context Protocol](https://modelcontextprotocol.io
 - [MCP Server (AI Assistant Integration)](#mcp-server-ai-assistant-integration)
   - [Available Tools](#available-tools)
   - [Available Resources & Prompts](#available-resources--prompts)
+- [Web Dashboard (v1.0)](#web-dashboard-v10)
 - [CI/CD Integration](#cicd-integration)
 - [Production Deployment (K8s + Helm)](#production-deployment-k8s--helm)
 - [Docker](#docker)
@@ -64,6 +65,11 @@ MCP Guardian provides:
 - **Circuit breaker (v0.5.2)** — 3-state circuit breaker protects upstream MCP servers from cascading failures
 - **OAuth 2.1 / OIDC (v0.5.0)** — JWT validation with OIDC Discovery, bearer token extraction, agent identity mapping
 - **RBAC (v0.5.1)** — Scope-based and client-ID-based access control in policy engine
+- **Web dashboard (v1.0)** — Real-time monitoring dashboard with live Prometheus metrics, per-server circuit breaker status, policy editor, and auto-refresh
+- **Redis shared state (v1.0)** — Redis-backed session cache and rate limit counters for multi-replica HA
+- **DPoP (v1.0)** — RFC 9449 sender-constrained token support for replay-proof authentication
+- **OpenTelemetry (v1.0)** — Distributed tracing across proxy and MCP servers via OTLP
+- **HTTP/SSE proxy (v0.8.0)** — Full proxy support for remote HTTP/SSE-based MCP servers
 
 ---
 
@@ -110,7 +116,7 @@ MCP Guardian provides:
 - **Graceful Shutdown** — SIGINT/SIGTERM handlers flush DB and close connections
 - **Batched DB Writes** — 1s debounced flush reduces I/O by 10x
 - **Alert Thresholds** — 6 CLI flags with exit codes 1/2 for CI/CD integration
-- **GitHub Actions CI** — Node 18/20/22 matrix, 74 tests across 11 suites
+- **GitHub Actions CI** — Node 18/20/22 matrix, 79 tests across 12 suites
 
 ---
 
@@ -382,6 +388,43 @@ JSON format reports also include a structured `resource` content type (MIME: `ap
 
 ---
 
+## Web Dashboard (v1.0)
+
+MCP Guardian includes a built-in web dashboard for real-time monitoring of your MCP infrastructure.
+
+**Start the dashboard alongside the proxy:**
+
+```bash
+DASHBOARD_ENABLED=true METRICS_ENABLED=true \
+mcp-guardian proxy --policy ./default-policy.yaml --blocking-mode warn
+```
+
+Then open **http://localhost:4000** in your browser.
+
+| Tab | Description |
+|-----|-------------|
+| **Overview** | Live metrics grid (requests, blocked, sessions, policy mode) + per-server status table with circuit breaker states |
+| **Policy Editor** | View and reload the active policy in real-time |
+| **Raw Metrics** | Full Prometheus `/metrics` output for debugging |
+
+**Dashboard features:**
+- **Real-time Prometheus metrics** — Parses live Prometheus text format and displays per-server request counts, blocked counts, and circuit breaker states
+- **Live policy viewer** — Shows active policy mode and rules via `/api/policy` endpoint
+- **Hot-reload** — Policy changes are auto-detected by the file watcher; the dashboard reflects them within 300ms
+- **Auto-refresh** — Metrics and policy refresh every 5 seconds
+- **Dark theme** — GitHub-style dark UI designed for ops monitoring
+
+### Environment Variables for Dashboard
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `DASHBOARD_ENABLED` | Enable the dashboard server | `false` |
+| `DASHBOARD_PORT` | Dashboard HTTP port | `4000` |
+| `METRICS_ENABLED` | Enable Prometheus metrics endpoint | `false` |
+| `METRICS_PORT` | Metrics server port | `9090` |
+
+The dashboard server proxies `/metrics` from the Prometheus server (port 9090) to the dashboard port (4000) so there are no CORS issues. All data displayed is live — zero mock data.
+
 ## CI/CD Integration
 
 Run MCP Guardian in CI to catch issues before deployment:
@@ -636,7 +679,7 @@ npm install
 npm run dev          # Watch mode with tsx
 npm run build        # Compile TypeScript
 npm run lint         # Type check (tsc --noEmit)
-npm test             # 74 tests across 11 suites (Vitest)
+npm test             # 79 tests across 12 suites (Vitest)
 npm run test:watch   # Watch mode
 
 # Contributing
@@ -715,7 +758,7 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Active policy engine — YAML-based pass/block/flag with allowlists, regex, rate limiting, token budgets
 - [x] Structured JSON logging (pino) for SIEM ingestion
 - [x] STRIDE threat model (SECURITY.md)
-- [x] 74 tests (11 suites)
+- [x] 79 tests (12 suites)
 - [x] GitHub Actions CI (Node 18/20/22 matrix)
 - [x] Performance benchmarks (p50: 5ms baseline, +25.78ms proxy overhead, +0.15ms policy)
 - [x] Helm chart + production deployment guide (K8s, fail-open/closed, sidecar pattern, scaling)
@@ -730,8 +773,12 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Redis session cache — cross‑replica HA session store (v0.7.0)
 - [x] Prometheus metrics endpoint — counters, gauges, histograms (v0.7.0)
 - [x] E2E integration tests — real MCP server through proxy (v0.7.0)
+- [x] Web dashboard — live metrics, policy editor, per-server status (v1.0)
+- [x] Redis shared rate limit counters (v1.0)
+- [x] DPoP support — RFC 9449 sender-constrained tokens (v1.0)
+- [x] OpenTelemetry tracing — distributed request tracking (v1.0)
+- [x] HTTP/SSE proxy server — remote MCP transport support (v0.8.0)
 - [ ] OPA integration for Rego policies
-- [ ] Web dashboard for historical trends
 - [ ] Slack/Discord alerting
 - [ ] Prometheus metrics endpoint
 - [ ] Multi-user proxy
