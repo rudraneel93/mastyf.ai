@@ -1,14 +1,21 @@
 import { PolicyConfig, PolicyDecision, CallContext, PolicyAction, PolicyMode } from './policy-types.js';
 import { Logger } from '../utils/logger.js';
+import { getNormalizer } from '../utils/payload-normalizer.js';
+import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
  * Supports three modes: audit (passive), warn (flag only), block (active enforcement).
+ *
+ * v1.2: Integrated payload normalization and semantic shell analysis layers
+ * to move beyond regex-only detection toward semantic execution security.
  */
 export class PolicyEngine {
   private rules: PolicyConfig['policy']['rules'];
   private mode: PolicyMode;
   private callCounters: Map<string, { count: number; resetAt: number }> = new Map();
+  private normalizer = getNormalizer();
+  private shellTokenizer = new ShellTokenizer();
 
   constructor(config: PolicyConfig) {
     this.rules = config.policy.rules;
@@ -17,10 +24,35 @@ export class PolicyEngine {
 
   /**
    * Evaluate a tools/call request and return a decision.
+   *
+   * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
    */
   evaluate(context: CallContext): PolicyDecision {
+    // ── v1.2: Payload normalization (before regex evaluation) ──
+    const normalizedArgs = context.arguments
+      ? this.normalizer.normalizeJsonValue(context.arguments) as Record<string, unknown>
+      : {};
+    const normalizedContext: CallContext = {
+      ...context,
+      arguments: normalizedArgs,
+    };
+
+    // ── v1.2: Semantic shell analysis on argument strings ──
+    const argsStr = JSON.stringify(normalizedArgs);
+    const shellRisk: CommandRisk = argsStr.length > 0
+      ? this.shellTokenizer.analyzeRisk(this.shellTokenizer.tokenize(argsStr).commands)
+      : { hasCommandSubstitution: false, hasPipes: false, hasRedirects: false, hasLogicalChains: false, dangerousCommands: [], shellMetacharacters: [] };
+
+    // Check for high-risk semantic patterns regardless of rule match
+    if (shellRisk.hasCommandSubstitution) {
+      Logger.info(`[policy] Semantic: command substitution detected in '${context.toolName}' arguments`);
+    }
+    if (shellRisk.dangerousCommands.length > 0) {
+      Logger.info(`[policy] Semantic: dangerous commands [${shellRisk.dangerousCommands.join(', ')}] in '${context.toolName}' arguments`);
+    }
+
     for (const rule of this.rules) {
-      const decision = this.evaluateRule(rule, context);
+      const decision = this.evaluateRule(rule, normalizedContext, { argsStr, shellRisk });
       if (decision) return decision;
     }
 
@@ -28,7 +60,11 @@ export class PolicyEngine {
     return { action: 'pass', rule: 'default', reason: 'No policy rules matched' };
   }
 
-  private evaluateRule(rule: PolicyConfig['policy']['rules'][number], ctx: CallContext): PolicyDecision | null {
+  private evaluateRule(
+    rule: PolicyConfig['policy']['rules'][number],
+    ctx: CallContext,
+    analysis: { argsStr: string; shellRisk: CommandRisk },
+  ): PolicyDecision | null {
     // Tool allowlist/denylist
     if (rule.tools) {
       if (rule.tools.allow && rule.tools.allow.length > 0) {
@@ -43,17 +79,38 @@ export class PolicyEngine {
       }
     }
 
-    // Malicious pattern detection
+    // v1.2: Malicious pattern detection — runs against NORMALIZED payload
     if (rule.patterns) {
-      const argsStr = ctx.arguments ? JSON.stringify(ctx.arguments) : '';
       for (const pattern of rule.patterns) {
         try {
-          if (new RegExp(pattern).test(argsStr)) {
-            return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern '${pattern}' matched in tool call` };
+          if (new RegExp(pattern).test(analysis.argsStr)) {
+            return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern '${pattern}' matched in tool call (normalized)` };
           }
         } catch {
           Logger.warn(`Policy: invalid regex pattern in rule '${rule.name}': ${pattern}`);
         }
+      }
+    }
+
+    // v1.2: Semantic shell detection rule — automatic high-risk pattern block
+    if (rule.name === 'block-shell-injection' || rule.name.includes('shell')) {
+      // Command substitution is always high-risk
+      if (analysis.shellRisk.hasCommandSubstitution) {
+        return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: shell command substitution detected in arguments' };
+      }
+
+      // Dangerous commands in any context
+      if (analysis.shellRisk.dangerousCommands.length > 0) {
+        return {
+          action: this.resolveAction('block'),
+          rule: rule.name,
+          reason: `Semantic: dangerous shell commands detected: [${analysis.shellRisk.dangerousCommands.join(', ')}]`,
+        };
+      }
+
+      // Pipe chains with dangerous patterns
+      if (analysis.shellRisk.hasPipes && analysis.shellRisk.hasCommandSubstitution) {
+        return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: pipe chain with command substitution' };
       }
     }
 
@@ -111,5 +168,10 @@ export class PolicyEngine {
 
   getMode(): PolicyMode {
     return this.mode;
+  }
+
+  /** Expose the shell tokenizer for testing */
+  getShellTokenizer(): ShellTokenizer {
+    return this.shellTokenizer;
   }
 }

@@ -82,19 +82,25 @@ This document formalizes the threat model for MCP Guardian, a security proxy for
 - ✅ Session binding — 5-minute session tokens prevent JWT replay
 - ✅ DPoP (RFC 9449) sender-constrained token support
 - ✅ Typo-squat detector (Levenshtein distance against 24 known packages)
-- ⚠️ Dashboard API has no authentication (future: add API key)
+- ✅ v1.2: DashboardAuth — JWT session tokens, API key auth, CSRF protection, login rate limiting
+✅ Dashboard API now supports both API key and JWT session authentication
 
 ### 2. Tampering (Data/Command Injection)
 
 **Threats:**
 - Shell injection via tool arguments (`; rm -rf /`, `&&`, `|`)
 - Path traversal (`../../etc/passwd`)
+- URL/hex/unicode-encoded payload bypasses of regex patterns
+- HTML entity-encoded attacks evading pattern matching
+- Shell obfuscation (ANSI-C quoting, quote splitting, backslash escapes)
 - SQL injection via PostgreSQL connection
 - Policy YAML tampering (TOCTOU on file read)
 - Audit log tampering
 
 **Mitigations:**
 - ✅ Active policy engine blocks 10 suspicious patterns
+- ✅ v1.2: PayloadNormalizer — multi-stage decode (URL, hex, unicode, HTML entities, shell obfuscation) before regex evaluation
+- ✅ v1.2: ShellTokenizer — semantic AST analysis detects command substitution, pipe chains, dangerous commands
 - ✅ PostgreSQL parameterized queries (no string concatenation)
 - ✅ PolicyAuditor records every policy change with hash verification
 - ✅ PolicyWatcher debounces file reads (300ms) to avoid partial writes
@@ -173,18 +179,20 @@ This document formalizes the threat model for MCP Guardian, a security proxy for
 
 | Risk | Accepted? | Rationale |
 |------|-----------|-----------|
-| Dashboard API lacks authentication | ✅ Accepted (v1.0) | Internal-only deployment; future API key |
+| Dashboard API lacks authentication | ✅ Resolved (v1.2) | JWT/API key auth with CSRF protection now available |
 | SQLite for local deployments | ✅ Accepted (v1.0) | PostgreSQL available for production |
 | No audit log cryptographic chain | ⚠️ Partial | JSONL format; hash chain planned for v1.1 |
 | No WAF-level payload inspection | ✅ Accepted (v1.0) | Policy engine + regex sufficient for current use |
 | No formal verification of policy engine | ✅ Accepted (v1.0) | 11 unit tests; growing fuzz test suite |
 
-## Future Improvements (v1.1+)
+## Future Improvements (v1.3+)
 
-- [ ] Fuzz testing suite for policy engine and JSON-RPC parser
 - [ ] Cryptographic hash chain for audit log integrity
-- [ ] Dashboard API authentication (API key / OAuth)
 - [ ] Behavioral anomaly detection for tool usage patterns
 - [ ] Malicious MCP server simulation test suite
 - [ ] WASM sandbox for policy evaluation isolation
 - [ ] Signed policy files with verification chain
+- [ ] OPA/Rego policy integration
+- [ ] Distributed consistency guarantees documentation
+- [ ] Formal grammar-based shell parser (replacing regex patterns fully)
+- [ ] Adversarial CI pipeline with automated attack simulation

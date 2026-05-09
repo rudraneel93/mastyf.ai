@@ -17,6 +17,8 @@ MCP Guardian's security posture is modeled against the STRIDE framework for each
 | Threat | Mitigation |
 |---|---|
 | Shell injection via tool arguments | Active policy engine blocks patterns (rm -rf, shell chaining, backtick substitution) |
+| Encoded payload bypasses (URL, hex, unicode, HTML entities) | PayloadNormalizer (v1.2) — multi-stage decode before regex evaluation |
+| Shell obfuscation (ANSI-C quoting, quote splitting, backslash escapes) | ShellTokenizer (v1.2) — semantic AST analysis of command structure |
 | Path traversal | Active policy engine blocks ../ patterns |
 | Supply chain compromise of MCP server package | CVE checker queries OSV.dev and NVD for known vulnerabilities |
 
@@ -33,6 +35,7 @@ MCP Guardian's security posture is modeled against the STRIDE framework for each
 | Threat | Mitigation |
 |---|---|
 | Hardcoded API keys, tokens, passwords in MCP config | Secret scanner (6 regex patterns) |
+| Unauthenticated dashboard access | DashboardAuth (v1.2) — JWT sessions, API keys, CSRF protection, rate-limited login |
 | Unencrypted transport | Auth prober flags unencrypted transports |
 | Sensitive data in generated reports | Reports use config names, not raw secrets |
 

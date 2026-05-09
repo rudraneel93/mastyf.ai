@@ -8,7 +8,11 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-MCP Guardian scans your [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers for security vulnerabilities, tracks real token costs via a proxy interceptor, and monitors health metrics. It works as both an **MCP server** (so AI assistants like Cline/Claude can invoke its tools) and a **standalone CLI**.
+MCP Guardian is a **security and governance proxy** for [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) infrastructure. It sits between AI clients and MCP servers, enforcing active security policies, tracking real token costs, and monitoring health — all while providing enterprise-grade observability and audit trails.
+
+**Key positioning:** Runtime governance and security proxy for MCP infrastructure.
+
+It works as both an **MCP server** (so AI assistants like Cline/Claude can invoke its tools) and a **standalone CLI**.
 
 ---
 
@@ -116,8 +120,8 @@ MCP Guardian provides:
 - **Graceful Shutdown** — SIGINT/SIGTERM handlers flush DB and close connections
 - **Batched DB Writes** — 1s debounced flush reduces I/O by 10x
 - **Alert Thresholds** — 6 CLI flags with exit codes 1/2 for CI/CD integration
-- **GitHub Actions CI** — Node 18/20/22 matrix, 79 tests across 12 suites
-- **npm published** — `@mcp-guardian/server@1.0.0` — install via `npm install -g @mcp-guardian/server`
+- **GitHub Actions CI** — Node 18/20/22 matrix, 97 tests across 13 suites
+- **npm published** — `@mcp-guardian/server@1.1.0` — install via `npm install -g @mcp-guardian/server`
 
 ---
 
@@ -126,7 +130,7 @@ MCP Guardian provides:
 ### From npm (recommended)
 
 ```bash
-npm install -g @mcp-guardian/server@1.0.0
+npm install -g @mcp-guardian/server
 ```
 
 After global install, the `mcp-guardian` command is available in your PATH.
@@ -509,6 +513,58 @@ The `Dockerfile` uses `node:20-alpine` and runs `mcp-guardian proxy` as the defa
 
 ## Architecture
 
+### Trust Boundaries
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   TRUSTED ZONE                           │
+│  ┌──────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │ AI Client │───▶│ MCP Guardian │───▶│  MCP Server  │  │
+│  │ (Cline/   │    │   (Proxy)    │    │  (stdio/SSE) │  │
+│  │  Claude)  │◀───│              │◀───│              │  │
+│  └──────────┘    └──────┬───────┘    └──────────────┘  │
+│                         │                               │
+│              ┌──────────▼──────────┐                    │
+│              │ Policy Engine       │                    │
+│              │ Auth Gateway        │                    │
+│              │ Audit Logger (pino) │                    │
+│              │ Metrics (Prometheus)│                    │
+│              └─────────────────────┘                    │
+└─────────────────────────────────────────────────────────┘
+                         ║
+                    TRUST BOUNDARY
+                         ║
+┌─────────────────────────────────────────────────────────┐
+│                  UNTRUSTED ZONE                          │
+│  • External MCP servers (SSE/HTTP)                       │
+│  • OIDC identity providers                               │
+│  • CVE data sources (OSV.dev, NVD)                       │
+│  • Package registries (npm, PyPI)                        │
+│  • AI model outputs (prompt injection vectors)            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Comparison with Alternatives
+
+| Feature | MCP Guardian | MCP Shield | Guardrails-MCP | Envoy AI Gateway |
+|---------|-------------|-----------|---------------|-----------------|
+| **Active blocking** | ✅ YAML policy engine | ✅ Inline firewall | ✅ Policy enforcement | ❌ Gateway only |
+| **OAuth 2.1/OIDC** | ✅ JWT + RBAC + DPoP | ❌ | ❌ | ✅ OAuth |
+| **Session replay protection** | ✅ 5-min tokens + nonces | ❌ | ❌ | ❌ |
+| **Circuit breaker** | ✅ 3-state per server | ❌ | ❌ | ✅ Built-in |
+| **Cost tracking** | ✅ Real token counting | ❌ | ❌ | ❌ |
+| **Health monitoring** | ✅ JSON-RPC probes | ❌ | ❌ | ❌ |
+| **Prometheus metrics** | ✅ Counters, gauges, histograms | ❌ | ❌ | ✅ |
+| **Hot-reload policies** | ✅ chokidar file watcher | ❌ | ❌ | ❌ |
+| **Redis HA** | ✅ Session + rate limit | ❌ | ❌ | ❌ |
+| **OpenTelemetry** | ✅ OTLP tracing | ❌ | ❌ | ✅ |
+| **Web dashboard** | ✅ Live metrics + policy | ❌ | ❌ | ❌ |
+| **HTTP/SSE proxy** | ✅ Full proxy | ❌ | ❌ | ✅ |
+| **Helm chart** | ✅ K8s deployment | ❌ | ❌ | ✅ |
+| **E2E tests** | ✅ 97 tests (13 suites) | ❌ | ❌ | ❌ |
+
+### Source Tree
+
 ```
 mcp-guardian/
 ├── src/
@@ -680,7 +736,7 @@ npm install
 npm run dev          # Watch mode with tsx
 npm run build        # Compile TypeScript
 npm run lint         # Type check (tsc --noEmit)
-npm test             # 79 tests across 12 suites (Vitest)
+npm test             # 97 tests across 13 suites (Vitest)
 npm run test:watch   # Watch mode
 
 # Contributing
@@ -759,11 +815,11 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Active policy engine — YAML-based pass/block/flag with allowlists, regex, rate limiting, token budgets
 - [x] Structured JSON logging (pino) for SIEM ingestion
 - [x] STRIDE threat model (SECURITY.md)
-- [x] 79 tests (12 suites)
+- [x] 97 tests (13 suites)
 - [x] GitHub Actions CI (Node 18/20/22 matrix)
 - [x] Performance benchmarks (p50: 5ms baseline, +25.78ms proxy overhead, +0.15ms policy)
 - [x] Helm chart + production deployment guide (K8s, fail-open/closed, sidecar pattern, scaling)
-- [x] Published to npm as [`@mcp-guardian/server@1.0.0`](https://www.npmjs.com/package/@mcp-guardian/server)
+- [x] Published to npm as [`@mcp-guardian/server@1.1.0`](https://www.npmjs.com/package/@mcp-guardian/server)
 - [x] OAuth 2.1 / OIDC proxy authentication (v0.5.0)
 - [x] RBAC — scope & client-ID-based access control (v0.5.1)
 - [x] Circuit breaker — 3-state protection for upstream servers (v0.5.2)

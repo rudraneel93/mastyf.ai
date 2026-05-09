@@ -14,6 +14,7 @@ import { OAuthValidator } from './auth/oauth.js';
 import { AuthConfig } from './auth/auth-types.js';
 import { startMetricsServer } from './utils/metrics.js';
 import { startDashboardServer } from './utils/dashboard-server.js';
+import { DashboardAuth } from './auth/dashboard-auth.js';
 import { initTracing } from './utils/tracing.js';
 import { createContainer } from './container.js';
 
@@ -94,7 +95,7 @@ const program = new Command();
 program
   .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version('1.0.1');
+  .version('1.1.0');
 
 program
   .command('scan')
