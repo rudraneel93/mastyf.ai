@@ -21,6 +21,13 @@ export interface PolicyRule {
   maxTokens?: number;
   /** Max calls per minute per server */
   maxCallsPerMinute?: number;
+  /** v0.5.1: RBAC — scope and client_id constraints */
+  rbac?: {
+    /** Required scopes the agent must have */
+    scopes?: string[];
+    /** Allowed client IDs (regex patterns supported) */
+    clientIds?: string[];
+  };
 }
 
 export interface PolicyConfig {
@@ -44,4 +51,6 @@ export interface CallContext {
   requestId: string | number;
   requestTokens: number;
   timestamp: string;
+  /** v0.5.1: Agent identity from OAuth (for RBAC) */
+  agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
 }

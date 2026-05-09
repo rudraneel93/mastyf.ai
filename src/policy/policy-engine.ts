@@ -62,6 +62,28 @@ export class PolicyEngine {
       return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Token count ${ctx.requestTokens} exceeds max ${rule.maxTokens}` };
     }
 
+    // v0.5.1: RBAC — scope and client_id constraints
+    if (rule.rbac) {
+      const identity = ctx.agentIdentity;
+      if (!identity) {
+        return { action: this.resolveAction(rule.action), rule: rule.name, reason: `RBAC rule '${rule.name}' requires agent identity but none provided` };
+      }
+      if (rule.rbac.scopes && rule.rbac.scopes.length > 0) {
+        const agentScopes = identity.scopes || [];
+        const hasScope = rule.rbac.scopes.some(s => agentScopes.includes(s));
+        if (!hasScope) {
+          return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Agent '${identity.sub}' missing required scope. Need one of: [${rule.rbac.scopes.join(', ')}], have: [${agentScopes.join(', ') || 'none'}]` };
+        }
+      }
+      if (rule.rbac.clientIds && rule.rbac.clientIds.length > 0) {
+        const clientId = identity.clientId || '';
+        const matches = rule.rbac.clientIds.some(pattern => new RegExp(pattern).test(clientId));
+        if (!matches) {
+          return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Client ID '${clientId}' not allowed. Allowed patterns: [${rule.rbac.clientIds.join(', ')}]` };
+        }
+      }
+    }
+
     // Rate limiting
     if (rule.maxCallsPerMinute) {
       const key = `${ctx.serverName}:${ctx.toolName}`;

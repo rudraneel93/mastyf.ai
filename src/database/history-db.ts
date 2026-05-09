@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { ProxyCallRecord } from '../types.js';
+import { IDatabase } from './database-interface.js';
 
 export interface CallRecordRow {
   tool_name: string;
