@@ -727,6 +727,9 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Consistent SIEM fields — requestId, authnSuccess, authzAllowed (v0.5.2)
 - [x] Session binding — replay protection via 5‑min session tokens (v0.6.0)
 - [x] Hot‑reload policies — chokidar file watcher (v0.6.0)
+- [x] Redis session cache — cross‑replica HA session store (v0.7.0)
+- [x] Prometheus metrics endpoint — counters, gauges, histograms (v0.7.0)
+- [x] E2E integration tests — real MCP server through proxy (v0.7.0)
 - [ ] OPA integration for Rego policies
 - [ ] Web dashboard for historical trends
 - [ ] Slack/Discord alerting
