@@ -26,14 +26,9 @@ td { color: #c9d1d9; }
 .badge.pass { background: #1b3821; color: #3fb950; }
 .badge.block { background: #3d1f1f; color: #f85149; }
 .badge.flag { background: #3d3520; color: #d29922; }
-.badge.cb-closed { background: #1b3821; color: #3fb950; }
-.badge.cb-open { background: #3d1f1f; color: #f85149; }
-.badge.cb-half { background: #3d3520; color: #d29922; }
 textarea { width: 100%; min-height: 300px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 12px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; resize: vertical; }
 button { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; margin-right: 8px; }
 button:hover { background: #2ea043; }
-button.secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-button.secondary:hover { background: #30363d; }
 .status { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .status-dot.connected { background: #3fb950; animation: pulse 2s infinite; }
@@ -52,26 +47,27 @@ button.secondary:hover { background: #30363d; }
 
 <div class="status">
   <span class="status-dot connected" id="statusDot"></span>
-  <span id="statusText">Connected</span>
+  <span id="statusText">Connecting...</span>
 </div>
 
 <div class="tabs">
   <div class="tab active" onclick="showTab('overview')">Overview</div>
   <div class="tab" onclick="showTab('policy')">Policy Editor</div>
-  <div class="tab" onclick="showTab('servers')">Servers</div>
+  <div class="tab" onclick="showTab('metrics')">Raw Metrics</div>
 </div>
 
 <div id="overview" class="tab-content active">
   <div class="grid" id="metricsGrid"></div>
   <div class="panel">
-    <h3>Recent Activity</h3>
-    <div id="recentLogs" style="max-height: 400px; overflow-y: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; color: #8b949e;"></div>
+    <h3>Per-Server Status</h3>
+    <div id="perServer"></div>
   </div>
 </div>
 
 <div id="policy" class="tab-content">
   <div class="panel">
     <h3>Active Policy</h3>
+    <div id="policyInfo" style="margin-bottom: 12px; font-size: 14px; color: #c9d1d9;"></div>
     <textarea id="policyEditor" readonly></textarea>
     <div style="margin-top: 12px;">
       <button onclick="reloadPolicy()">Reload Policy</button>
@@ -80,17 +76,16 @@ button.secondary:hover { background: #30363d; }
   </div>
 </div>
 
-<div id="servers" class="tab-content">
+<div id="metrics" class="tab-content">
   <div class="panel">
-    <h3>MCP Servers</h3>
-    <table id="serversTable">
-      <thead><tr><th>Server</th><th>Status</th><th>Latency</th><th>Tools</th><th>Circuit Breaker</th><th>Calls Today</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <h3>Prometheus /metrics (Raw)</h3>
+    <pre id="rawMetrics" style="font-size: 11px; color: #8b949e; max-height: 500px; overflow: auto; background: #0d1117; padding: 12px; border-radius: 6px;"></pre>
   </div>
 </div>
 
 <script>
+let currentData = { policy: null, metrics: null, servers: [] };
+
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
@@ -98,33 +93,122 @@ function showTab(name) {
   document.getElementById(name).classList.add('active');
 }
 
-async function fetchMetrics() {
-  try {
-    const res = await fetch('/metrics');
-    if (!res.ok) throw new Error('Metrics endpoint not available');
-    return await res.text();
-  } catch {
-    return null;
+function parsePrometheusMetrics(text) {
+  const result = { servers: {}, global: {} };
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('#') || !line.trim()) continue;
+    const match = line.match(/^(\w+)\{([^}]*)\}\s+(.+)$/);
+    if (match) {
+      const name = match[1];
+      const labelsStr = match[2];
+      const value = parseFloat(match[3]);
+      const labels = {};
+      labelsStr.split(',').forEach(l => {
+        const [k, v] = l.split('=');
+        labels[k.trim()] = (v || '').replace(/"/g, '');
+      });
+      const srv = labels.server_name || 'global';
+      if (!result.servers[srv]) result.servers[srv] = {};
+      result.servers[srv][name] = (result.servers[srv][name] || 0) + (isNaN(value) ? 0 : value);
+    } else if (line.match(/^(\w+)\s+(.+)$/)) {
+      const m = line.match(/^(\w+)\s+(.+)$/);
+      if (m && !m[1].startsWith('mcp_guardian_')) continue;
+      if (m) result.global[m[1]] = parseFloat(m[2]);
+    }
   }
+  return result;
 }
 
-async function fetchLogs() {
-  try {
-    const res = await fetch('/api/logs');
-    if (!res.ok) throw new Error('Logs endpoint not available');
-    return await res.json();
-  } catch {
-    return [];
-  }
-}
+async function updateDashboard() {
+  const dot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
 
-async function fetchPolicy() {
+  // Fetch live data
+  let policyData = null;
   try {
     const res = await fetch('/api/policy');
-    if (!res.ok) throw new Error('Policy endpoint not available');
-    return await res.json();
-  } catch {
-    return null;
+    if (res.ok) policyData = await res.json();
+  } catch(e) {}
+
+  let metricsText = null;
+  try {
+    const res = await fetch('/metrics');
+    if (res.ok) metricsText = await res.text();
+  } catch(e) {}
+
+  // Parse metrics
+  let parsedMetrics = { servers: {}, global: {} };
+  if (metricsText && !metricsText.startsWith('{')) {
+    parsedMetrics = parsePrometheusMetrics(metricsText);
+    document.getElementById('rawMetrics').textContent = metricsText;
+  }
+
+  // Update status
+  if (metricsText && !metricsText.startsWith('{')) {
+    dot.className = 'status-dot connected';
+    const serverCount = Object.keys(parsedMetrics.servers).filter(s => s !== 'global' && parsedMetrics.servers[s].mcp_guardian_requests_total > 0).length;
+    statusText.textContent = `Proxy Active | ${serverCount} MCP Server(s) | Policy: ${policyData ? policyData.mode : 'none'}`;
+  } else {
+    dot.className = 'status-dot disconnected';
+    statusText.textContent = 'Waiting for metrics...';
+  }
+
+  // Build metrics grid
+  let passCount = 0, blockCount = 0, flagCount = 0;
+  for (const [srv, m] of Object.entries(parsedMetrics.servers)) {
+    if (srv === 'global') continue;
+    // We don't have per-decision counters separately in parsed format
+    // Use the total requests
+    passCount += (m.mcp_guardian_requests_total || 0);
+  }
+  // Block count from blocked requests counter
+  for (const [srv, m] of Object.entries(parsedMetrics.servers)) {
+    if (srv === 'global') continue;
+    blockCount += (m.mcp_guardian_blocked_requests_total || 0);
+  }
+
+  document.getElementById('metricsGrid').innerHTML = `
+    <div class="card"><h3>Requests (Total)</h3><div class="metric green">${passCount.toLocaleString()}</div></div>
+    <div class="card"><h3>Blocked Requests</h3><div class="metric red">${blockCount.toLocaleString()}</div></div>
+    <div class="card"><h3>Active Sessions</h3><div class="metric green">${parsedMetrics.global.mcp_guardian_active_sessions || 0}</div></div>
+    <div class="card"><h3>Policy Mode</h3><div class="metric" style="color:#d29922;">${policyData ? policyData.mode.toUpperCase() : 'NONE'}</div></div>
+  `;
+
+  // Build per-server table
+  let serverRows = '';
+  const srvs = Object.keys(parsedMetrics.servers).filter(s => s !== 'global');
+  if (srvs.length === 0) {
+    serverRows = '<tr><td colspan="4" style="color:#8b949e;">No MCP server data yet. Send some tools/call traffic through the proxy.</td></tr>';
+  } else {
+    for (const srv of srvs) {
+      const m = parsedMetrics.servers[srv];
+      const cbState = m.mcp_guardian_circuit_breaker_state;
+      const cbLabel = cbState === 0 ? 'CLOSED' : cbState === 1 ? 'OPEN' : 'HALF_OPEN';
+      const cbClass = cbState === 0 ? 'pass' : cbState === 1 ? 'block' : 'flag';
+      serverRows += `<tr>
+        <td>${srv}</td>
+        <td>${m.mcp_guardian_requests_total > 0 ? '<span class="badge pass">Active</span>' : '<span class="badge">Idle</span>'}</td>
+        <td>${m.mcp_guardian_requests_total || 0} calls</td>
+        <td><span class="badge badge-${cbClass}">${cbLabel}</span></td>
+        <td>${m.mcp_guardian_blocked_requests_total || 0} blocked</td>
+      </tr>`;
+    }
+  }
+
+  document.getElementById('perServer').innerHTML = `<table>
+    <thead><tr><th>Server</th><th>Status</th><th>Total Calls</th><th>Circuit Breaker</th><th>Blocked</th></tr></thead>
+    <tbody>${serverRows}</tbody>
+  </table>`;
+
+  // Update policy tab
+  if (policyData) {
+    document.getElementById('policyInfo').innerHTML = `<strong>Mode:</strong> <span style="color:#d29922;">${policyData.mode.toUpperCase()}</span> | <strong>Status:</strong> <span style="color:#3fb950;">Active</span>`;
+    document.getElementById('policyEditor').value = JSON.stringify(policyData, null, 2);
+    document.getElementById('policyStatus').textContent = '';
+  } else {
+    document.getElementById('policyInfo').textContent = 'No policy loaded. Start proxy with --policy flag.';
+    document.getElementById('policyEditor').value = '# No policy loaded\n# Run: mcp-guardian proxy --policy ./default-policy.yaml';
   }
 }
 
@@ -133,69 +217,17 @@ async function reloadPolicy() {
     const res = await fetch('/api/policy/reload', { method: 'POST' });
     if (res.ok) {
       document.getElementById('policyStatus').textContent = '✅ Policy reloaded successfully';
-      updateDashboard();
+      setTimeout(updateDashboard, 500);
     } else {
-      document.getElementById('policyStatus').textContent = '❌ Failed to reload policy';
+      document.getElementById('policyStatus').textContent = '❌ Failed to reload';
     }
   } catch {
     document.getElementById('policyStatus').textContent = '❌ API endpoint not available';
   }
 }
 
-async function updateDashboard() {
-  // Update status
-  const dot = document.getElementById('statusDot');
-  const statusText = document.getElementById('statusText');
-
-  // Mock metrics for demo (in production, parse Prometheus /metrics)
-  const metrics = {
-    requests_total_pass: 1247,
-    requests_total_block: 23,
-    requests_total_flag: 8,
-    active_sessions: 12,
-    circuit_breaker_state: 0,
-  };
-
-  dot.className = 'status-dot connected';
-  statusText.textContent = 'Proxy Active | 3 MCP Servers';
-
-  document.getElementById('metricsGrid').innerHTML = `
-    <div class="card"><h3>Requests (Pass)</h3><div class="metric green">${metrics.requests_total_pass.toLocaleString()}</div></div>
-    <div class="card"><h3>Requests (Blocked)</h3><div class="metric red">${metrics.requests_total_block}</div></div>
-    <div class="card"><h3>Requests (Flagged)</h3><div class="metric yellow">${metrics.requests_total_flag}</div></div>
-    <div class="card"><h3>Active Sessions</h3><div class="metric green">${metrics.active_sessions}</div></div>
-    <div class="card"><h3>Circuit Breaker</h3><div class="metric green">CLOSED</div></div>
-    <div class="card"><h3>Policy Mode</h3><div class="metric" style="color:#d29922;">BLOCK</div></div>
-  `;
-
-  document.getElementById('recentLogs').innerHTML = `
-    <div style="color:#3fb950;">[13:22:01] PASS — search (filesystem) — 34 tokens — agent: ai-assistant</div>
-    <div style="color:#3fb950;">[13:22:01] PASS — read_file (github) — 66 tokens — agent: ai-assistant</div>
-    <div style="color:#f85149;">[13:21:58] BLOCK — execute_command (filesystem) — policy: deny-dangerous-tools</div>
-    <div style="color:#3fb950;">[13:21:55] PASS — list_directory (puppeteer) — 45 tokens — agent: ai-assistant</div>
-    <div style="color:#d29922;">[13:21:52] FLAG — search (github) — rate limit exceeded: 121/120 cpm</div>
-    <div style="color:#3fb950;">[13:21:49] PASS — read_file (filesystem) — 55 tokens — agent: admin-bot</div>
-    <div style="color:#3fb950;">[13:21:46] PASS — echo (echo-server) — 21 tokens — agent: test-agent</div>
-    <div style="color:#f85149;">[13:21:40] BLOCK — eval (puppeteer) — policy: deny-eval</div>
-  `;
-
-  // Update servers table
-  document.querySelector('#serversTable tbody').innerHTML = `
-    <tr><td>github-server</td><td><span class="badge pass">Pass</span></td><td>902ms</td><td>26</td><td><span class="badge cb-closed">CLOSED</span></td><td>847</td></tr>
-    <tr><td>filesystem-server</td><td><span class="badge pass">Pass</span></td><td>1253ms</td><td>14</td><td><span class="badge cb-closed">CLOSED</span></td><td>312</td></tr>
-    <tr><td>puppeteer-server</td><td><span class="badge pass">Pass</span></td><td>1275ms</td><td>7</td><td><span class="badge cb-closed">CLOSED</span></td><td>88</td></tr>
-  `;
-
-  // Load policy
-  const policy = await fetchPolicy();
-  if (policy) {
-    document.getElementById('policyEditor').value = JSON.stringify(policy, null, 2);
-  } else {
-    document.getElementById('policyEditor').value = '# Policy endpoint not available\n# Enable with: --policy ./default-policy.yaml';
-  }
-}
-
 updateDashboard();
-setInterval(updateDashboard, 30000);
+setInterval(updateDashboard, 5000);
 </script>
 </body>
+</html>
