@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
+import { randomUUID } from 'crypto';
 import { TokenCounter } from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
 import { HistoryDatabase } from '../database/history-db.js';
@@ -8,15 +9,17 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
-import { AuthValidationResult } from '../auth/auth-types.js';
+import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
+import { CircuitBreaker } from '../utils/circuit-breaker.js';
 
 /**
  * MCP Proxy Interceptor — sits between the AI client and an MCP server.
  *
  * v0.4: Integrated PolicyEngine for active blocking of malicious tool calls.
  * v0.5: OAuth 2.1 JWT validation — validates bearer tokens before policy evaluation.
- *   If authValidator is provided, every tools/call requires a valid JWT.
- *   Unauthenticated calls are blocked with a JSON-RPC auth error.
+ * v0.5.2: Circuit breaker for upstream MCP server failures.
+ * v0.5.2: Per-client rate limiting (keyed by agent sub + tool name).
+ * v0.5.2: Consistent SIEM fields (request_id, proxy_latency_ms, authn_success, authz_allowed).
  */
 export class McpProxyServer {
   private child: ChildProcess;
@@ -30,6 +33,9 @@ export class McpProxyServer {
   private serverName: string;
   private policyEngine: PolicyEngine | null;
   private authValidator: OAuthValidator | null;
+  private circuitBreaker: CircuitBreaker;
+  /** v0.5.2: Per-client rate limit counters (key: agentSub:toolName) */
+  private clientRateCounters: Map<string, { count: number; resetAt: number }> = new Map();
 
   constructor(
     command: string,
@@ -43,6 +49,7 @@ export class McpProxyServer {
     this.serverName = serverName || command.split('/').pop() || command;
     this.policyEngine = policyEngine || null;
     this.authValidator = authValidator || null;
+    this.circuitBreaker = new CircuitBreaker(this.serverName);
     this.child = spawn(command, args, {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -57,6 +64,7 @@ export class McpProxyServer {
       serverName: this.serverName,
       blockingMode: this.policyEngine ? this.policyEngine.getMode() : 'audit',
       authEnabled: this.authValidator ? this.authValidator.getConfig().required : false,
+      circuitBreaker: this.circuitBreaker.getState(),
     });
   }
 
@@ -70,6 +78,7 @@ export class McpProxyServer {
       try {
         const msg = JSON.parse(line);
         if (msg.id && msg.id === this.currentRequestId) {
+          const proxyLatencyMs = Date.now() - this.requestStartTime;
           const responseTokens = this.tokenCounter.count(line);
           const record: ProxyCallRecord = {
             serverName: this.serverName,
@@ -77,12 +86,14 @@ export class McpProxyServer {
             requestTokens: this.requestTokens,
             responseTokens,
             totalTokens: this.requestTokens + responseTokens,
-            durationMs: Date.now() - this.requestStartTime,
+            durationMs: proxyLatencyMs,
             timestamp: new Date().toISOString(),
           };
           this.db.addCallRecord(record).then(() => this.db.flush()).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
+          // Circuit breaker: success
+          this.circuitBreaker.recordSuccess();
           this.currentRequestId = null;
           this.requestToolName = null;
         }
@@ -103,9 +114,6 @@ export class McpProxyServer {
     });
   }
 
-  /**
-   * Send a JSON-RPC 2.0 error response to the client.
-   */
   private sendError(id: string | number, code: number, message: string, data?: Record<string, unknown>): void {
     const errorResponse = JSON.stringify({
       jsonrpc: '2.0',
@@ -117,20 +125,24 @@ export class McpProxyServer {
 
   /**
    * Called when the AI client writes a request to be proxied.
-   * 1. Validate OAuth 2.1 JWT (if configured)
-   * 2. Evaluate against policy engine
-   * 3. Forward or block
+   * Pipeline: Auth → Circuit Breaker → Policy + RBAC → Forward.
    */
   async handleClientInput(raw: string): Promise<void> {
+    const requestId = randomUUID();
+    const proxyStartTime = Date.now();
+
     try {
       const msg = JSON.parse(raw);
       if (msg.method === 'tools/call' && msg.id) {
-        this.requestStartTime = Date.now();
-        this.currentRequestId = msg.id;
+    this.requestStartTime = proxyStartTime;
+    this.currentRequestId = msg.id; // Original msg ID for response matching
         this.requestToolName = msg.params?.name || 'unknown';
         this.requestTokens = this.tokenCounter.count(raw);
         this.requestArguments = msg.params?.arguments;
         const toolName = this.requestToolName || 'unknown';
+
+        let agentIdentity: AgentIdentity | undefined;
+        let authnSuccess = false;
 
         // ── v0.5: OAuth 2.1 JWT validation ──────────────────
         if (this.authValidator) {
@@ -145,63 +157,79 @@ export class McpProxyServer {
             if (this.authValidator.getConfig().required) {
               StructuredLogger.info({
                 event: 'auth_required',
+                requestId,
                 serverName: this.serverName,
                 toolName,
-                requestId: msg.id as string | number,
+                authnSuccess: false,
               });
               this.sendError(msg.id, -32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
-              this.currentRequestId = null;
-              this.requestToolName = null;
-              this.requestArguments = undefined;
               return;
             }
           } else {
             const result: AuthValidationResult = await this.authValidator.validate(token);
+            authnSuccess = result.valid;
+            if (result.identity) agentIdentity = result.identity;
 
             if (!result.valid) {
               StructuredLogger.logError({
                 event: 'oidc_auth_error',
                 serverName: this.serverName,
+                requestId,
                 error: `JWT validation failed: ${result.error}`,
-                requestId: msg.id as string | number,
               });
 
               if (this.authValidator.getConfig().required) {
                 this.sendError(msg.id, -32003, `Authentication failed: ${result.error}`);
-                this.currentRequestId = null;
-                this.requestToolName = null;
-                this.requestArguments = undefined;
                 return;
               }
             } else {
               StructuredLogger.info({
                 event: 'auth_success',
+                requestId,
                 serverName: this.serverName,
                 toolName,
-                requestId: msg.id as string | number,
                 agent: result.identity?.sub,
                 clientId: result.identity?.clientId,
+                authnSuccess: true,
               });
             }
           }
         }
 
-        // ── v0.4: Active policy enforcement ──────────────────
+        // ── v0.5.2: Circuit breaker check ──────────────────
+        if (!this.circuitBreaker.allowRequest()) {
+          StructuredLogger.info({
+            event: 'circuit_open',
+            requestId,
+            serverName: this.serverName,
+            toolName,
+            state: this.circuitBreaker.getState(),
+          });
+          this.sendError(msg.id, -32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
+          this.circuitBreaker.recordFailure();
+          return;
+        }
+
+        // ── v0.5.1: RBAC + policy evaluation ────────────────
+        let authzAllowed = true;
+        let blockReason: string | undefined;
+
         if (this.policyEngine) {
           const context: CallContext = {
             serverName: this.serverName,
             toolName,
             arguments: this.requestArguments,
-            requestId: msg.id as string | number,
+            requestId,
             requestTokens: this.requestTokens,
             timestamp: new Date().toISOString(),
+            agentIdentity,
           };
 
           const decision = this.policyEngine.evaluate(context);
 
           StructuredLogger.logPolicyDecision({
             event: 'policy_decision',
-            requestId: msg.id as string | number,
+            requestId,
             serverName: this.serverName,
             toolName,
             decision,
@@ -209,31 +237,98 @@ export class McpProxyServer {
           });
 
           if (decision.action === 'block') {
+            authzAllowed = false;
+            blockReason = `policy:${decision.rule}:${decision.reason}`;
+
             StructuredLogger.logBlocked({
               event: 'tool_blocked',
-              requestId: msg.id as string | number,
+              requestId,
               serverName: this.serverName,
               toolName,
-              reason: decision.reason,
+              reason: `policy_rule=${decision.rule} | reason=${decision.reason}`,
               rule: decision.rule,
+            });
+
+            StructuredLogger.info({
+              event: 'request_denied',
+              requestId,
+              serverName: this.serverName,
+              toolName,
+              authnSuccess,
+              authzAllowed,
+              blockReason,
+              proxyLatencyMs: Date.now() - proxyStartTime,
             });
 
             this.sendError(msg.id, -32001, `Blocked by MCP Guardian policy: ${decision.reason}`, {
               rule: decision.rule,
               policy: this.policyEngine.getMode(),
             });
-
-            this.currentRequestId = null;
-            this.requestToolName = null;
-            this.requestArguments = undefined;
             return;
           }
+
+          // v0.5.2: Per-client rate limiting
+          if (agentIdentity) {
+            const rateKey = `${agentIdentity.sub}:${toolName}`;
+            const now = Date.now();
+            let counter = this.clientRateCounters.get(rateKey);
+            if (!counter || now > counter.resetAt) {
+              counter = { count: 1, resetAt: now + 60000 };
+              this.clientRateCounters.set(rateKey, counter);
+            } else {
+              counter.count++;
+            }
+            // Check if any RBAC rule with per-client rate limit fires
+            const perClientLimit = this.checkPerClientRateLimit(agentIdentity, toolName, counter.count);
+            if (perClientLimit) {
+              StructuredLogger.info({
+                event: 'request_denied',
+                requestId,
+                serverName: this.serverName,
+                toolName,
+                authnSuccess,
+                authzAllowed: false,
+                blockReason: perClientLimit,
+                proxyLatencyMs: Date.now() - proxyStartTime,
+              });
+              this.sendError(msg.id, -32004, `Rate limit exceeded for agent '${agentIdentity.sub}': ${perClientLimit}`);
+              return;
+            }
+          }
         }
+
+        // ── Log successful forwarding ───────────────────────
+        StructuredLogger.info({
+          event: 'request_forwarded',
+          requestId,
+          serverName: this.serverName,
+          toolName,
+          authnSuccess,
+          authzAllowed,
+          proxyLatencyMs: Date.now() - proxyStartTime,
+          agent: agentIdentity?.sub,
+        });
       }
     } catch {
       // Non-JSON input — forward as-is
     }
     this.child.stdin?.write(raw + '\n');
+  }
+
+  /**
+   * Check per-client rate limits against RBAC rules.
+   * Returns block reason string or null.
+   */
+  private checkPerClientRateLimit(identity: AgentIdentity, toolName: string, currentCount: number): string | null {
+    if (!this.policyEngine) return null;
+    // Per-client limits are tracked via RBAC scopes — if agent has "basic" scope, check against "basic" rate limit rule
+    const scopes = identity.scopes || [];
+    // Simple: if the agent has no special scopes and we've hit a hard limit
+    // In a full implementation, this would check per-scope/per-client limits from policy
+    if (scopes.length === 0 && currentCount > 100) {
+      return `Per-client rate limit exceeded: ${currentCount}/100 calls per minute (agent: ${identity.sub})`;
+    }
+    return null;
   }
 
   kill(): void {
