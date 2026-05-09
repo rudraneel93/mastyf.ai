@@ -3,14 +3,17 @@
 **Security, cost, and health audit for MCP infrastructure.**
 
 [![npm version](https://img.shields.io/npm/v/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
+[![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.0-green)](https://github.com/modelcontextprotocol/typescript-sdk)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
+> **Always use the latest version:** `npm install @mcp-guardian/server@latest` — current is **v1.3.1**. See the [Changelog](./CHANGELOG.md) for full version history and [GitHub Releases](https://github.com/rudraneel93/mcp-guardian/releases) for per-version source tags.
+
 MCP Guardian is a **security and governance proxy** for [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) infrastructure. It sits between AI clients and MCP servers, enforcing active security policies, tracking real token costs, and monitoring health — all while providing enterprise-grade observability and audit trails.
 
-**Key positioning:** Runtime governance and security proxy for MCP infrastructure.
+**Key positioning:** Runtime governance and security proxy for MCP infrastructure — with threat modeling, semantic shell analysis, mTLS, and zero-trust networking.
 
 It works as both an **MCP server** (so AI assistants like Cline/Claude can invoke its tools) and a **standalone CLI**.
 
