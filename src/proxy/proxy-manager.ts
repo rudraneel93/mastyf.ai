@@ -3,6 +3,7 @@ import { McpProxyServer } from './proxy-server.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
+import { OAuthValidator } from '../auth/oauth.js';
 
 export class ProxyManager {
   private proxies: McpProxyServer[] = [];
@@ -10,6 +11,7 @@ export class ProxyManager {
   constructor(
     private db: HistoryDatabase,
     private policyEngine?: PolicyEngine,
+    private authValidator?: OAuthValidator,
   ) {}
 
   getProxies(): McpProxyServer[] {
@@ -27,9 +29,13 @@ export class ProxyManager {
             this.db,
             config.name,
             this.policyEngine,
+            this.authValidator,
           );
           this.proxies.push(proxy);
-          Logger.info(`Proxy started for ${config.name} (${config.command})${this.policyEngine ? ` [policy: ${this.policyEngine.getMode()}]` : ''}`);
+          const extras: string[] = [];
+          if (this.policyEngine) extras.push(`policy: ${this.policyEngine.getMode()}`);
+          if (this.authValidator) extras.push('auth: OAuth 2.1');
+          Logger.info(`Proxy started for ${config.name} (${config.command})${extras.length ? ` [${extras.join(', ')}]` : ''}`);
         } catch (err: any) {
           Logger.error(`Failed to start proxy for ${config.name}: ${err?.message}`);
         }

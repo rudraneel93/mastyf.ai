@@ -36,7 +36,7 @@ export interface BlockLogEntry {
 }
 
 export interface ErrorLogEntry {
-  event: 'proxy_error';
+  event: 'proxy_error' | 'oidc_discovery_error' | 'oidc_auth_error';
   requestId?: string | number;
   serverName: string;
   error: string;

@@ -21,7 +21,7 @@ const container = createContainer();
 const reporter = new ReportGenerator();
 
 const server = new Server(
-  { name: 'mcp-guardian', version: '0.4.0' },
+  { name: 'mcp-guardian', version: '0.5.0' },
   { capabilities: { tools: {} } }
 );
 

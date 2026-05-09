@@ -7,14 +7,16 @@ import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+import { OAuthValidator } from '../auth/oauth.js';
+import { AuthValidationResult } from '../auth/auth-types.js';
 
 /**
- * MCP Proxy Interceptor — sits between the AI client and an MCP server,
- * capturing every JSON-RPC call's token usage for real cost auditing.
+ * MCP Proxy Interceptor — sits between the AI client and an MCP server.
  *
  * v0.4: Integrated PolicyEngine for active blocking of malicious tool calls.
- * If policyEngine is provided, every tools/call is evaluated before forwarding.
- * Blocked calls return a JSON-RPC error to the client instead of reaching the server.
+ * v0.5: OAuth 2.1 JWT validation — validates bearer tokens before policy evaluation.
+ *   If authValidator is provided, every tools/call requires a valid JWT.
+ *   Unauthenticated calls are blocked with a JSON-RPC auth error.
  */
 export class McpProxyServer {
   private child: ChildProcess;
@@ -27,6 +29,7 @@ export class McpProxyServer {
   private requestArguments: Record<string, unknown> | undefined;
   private serverName: string;
   private policyEngine: PolicyEngine | null;
+  private authValidator: OAuthValidator | null;
 
   constructor(
     command: string,
@@ -35,9 +38,11 @@ export class McpProxyServer {
     db: HistoryDatabase,
     serverName?: string,
     policyEngine?: PolicyEngine,
+    authValidator?: OAuthValidator,
   ) {
     this.serverName = serverName || command.split('/').pop() || command;
     this.policyEngine = policyEngine || null;
+    this.authValidator = authValidator || null;
     this.child = spawn(command, args, {
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -51,6 +56,7 @@ export class McpProxyServer {
       event: 'proxy_started',
       serverName: this.serverName,
       blockingMode: this.policyEngine ? this.policyEngine.getMode() : 'audit',
+      authEnabled: this.authValidator ? this.authValidator.getConfig().required : false,
     });
   }
 
@@ -64,7 +70,6 @@ export class McpProxyServer {
       try {
         const msg = JSON.parse(line);
         if (msg.id && msg.id === this.currentRequestId) {
-          // Response to our tracked tools/call request
           const responseTokens = this.tokenCounter.count(line);
           const record: ProxyCallRecord = {
             serverName: this.serverName,
@@ -81,10 +86,8 @@ export class McpProxyServer {
           this.currentRequestId = null;
           this.requestToolName = null;
         }
-        // Forward response to client
         process.stdout.write(line + '\n');
       } catch {
-        // Non-JSON line — forward as-is
         process.stdout.write(line + '\n');
       }
     });
@@ -101,11 +104,24 @@ export class McpProxyServer {
   }
 
   /**
-   * Called when the AI client writes a request to be proxied.
-   * Evaluates tools/call against policy engine before forwarding.
-   * Blocked calls receive a JSON-RPC error response.
+   * Send a JSON-RPC 2.0 error response to the client.
    */
-  handleClientInput(raw: string): void {
+  private sendError(id: string | number, code: number, message: string, data?: Record<string, unknown>): void {
+    const errorResponse = JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      error: { code, message, data },
+    });
+    process.stdout.write(errorResponse + '\n');
+  }
+
+  /**
+   * Called when the AI client writes a request to be proxied.
+   * 1. Validate OAuth 2.1 JWT (if configured)
+   * 2. Evaluate against policy engine
+   * 3. Forward or block
+   */
+  async handleClientInput(raw: string): Promise<void> {
     try {
       const msg = JSON.parse(raw);
       if (msg.method === 'tools/call' && msg.id) {
@@ -114,10 +130,64 @@ export class McpProxyServer {
         this.requestToolName = msg.params?.name || 'unknown';
         this.requestTokens = this.tokenCounter.count(raw);
         this.requestArguments = msg.params?.arguments;
+        const toolName = this.requestToolName || 'unknown';
+
+        // ── v0.5: OAuth 2.1 JWT validation ──────────────────
+        if (this.authValidator) {
+          const authHeader = msg.params?._meta?.auth?.Authorization
+            || msg.Authorization
+            || msg.params?.Authorization
+            || undefined;
+
+          const token = OAuthValidator.extractToken(authHeader);
+
+          if (!token) {
+            if (this.authValidator.getConfig().required) {
+              StructuredLogger.info({
+                event: 'auth_required',
+                serverName: this.serverName,
+                toolName,
+                requestId: msg.id as string | number,
+              });
+              this.sendError(msg.id, -32002, 'Authentication required. Provide a valid Bearer token in the Authorization header.');
+              this.currentRequestId = null;
+              this.requestToolName = null;
+              this.requestArguments = undefined;
+              return;
+            }
+          } else {
+            const result: AuthValidationResult = await this.authValidator.validate(token);
+
+            if (!result.valid) {
+              StructuredLogger.logError({
+                event: 'oidc_auth_error',
+                serverName: this.serverName,
+                error: `JWT validation failed: ${result.error}`,
+                requestId: msg.id as string | number,
+              });
+
+              if (this.authValidator.getConfig().required) {
+                this.sendError(msg.id, -32003, `Authentication failed: ${result.error}`);
+                this.currentRequestId = null;
+                this.requestToolName = null;
+                this.requestArguments = undefined;
+                return;
+              }
+            } else {
+              StructuredLogger.info({
+                event: 'auth_success',
+                serverName: this.serverName,
+                toolName,
+                requestId: msg.id as string | number,
+                agent: result.identity?.sub,
+                clientId: result.identity?.clientId,
+              });
+            }
+          }
+        }
 
         // ── v0.4: Active policy enforcement ──────────────────
         if (this.policyEngine) {
-          const toolName = this.requestToolName || 'unknown';
           const context: CallContext = {
             serverName: this.serverName,
             toolName,
@@ -129,7 +199,6 @@ export class McpProxyServer {
 
           const decision = this.policyEngine.evaluate(context);
 
-          // Log every decision for SIEM audit trail
           StructuredLogger.logPolicyDecision({
             event: 'policy_decision',
             requestId: msg.id as string | number,
@@ -149,30 +218,21 @@ export class McpProxyServer {
               rule: decision.rule,
             });
 
-            // Return JSON-RPC 2.0 error to client — do NOT forward to server
-            const errorResponse = JSON.stringify({
-              jsonrpc: '2.0',
-              id: msg.id,
-              error: {
-                code: -32001,
-                message: `Blocked by MCP Guardian policy: ${decision.reason}`,
-                data: { rule: decision.rule, policy: this.policyEngine.getMode() },
-              },
+            this.sendError(msg.id, -32001, `Blocked by MCP Guardian policy: ${decision.reason}`, {
+              rule: decision.rule,
+              policy: this.policyEngine.getMode(),
             });
-            process.stdout.write(errorResponse + '\n');
 
-            // Reset state
             this.currentRequestId = null;
             this.requestToolName = null;
             this.requestArguments = undefined;
-            return; // ← CRITICAL: do not forward to child
+            return;
           }
         }
       }
     } catch {
       // Non-JSON input — forward as-is
     }
-    // Forward to the underlying MCP server
     this.child.stdin?.write(raw + '\n');
   }
 

@@ -9,6 +9,8 @@ import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
 import { PolicyEngine } from './policy/policy-engine.js';
 import { PolicyConfig } from './policy/policy-types.js';
+import { OAuthValidator } from './auth/oauth.js';
+import { AuthConfig } from './auth/auth-types.js';
 import { createContainer } from './container.js';
 
 // ── Typed option interfaces ──────────────────────────────────────────
@@ -47,6 +49,9 @@ interface ProxyOptions {
   config?: string;
   policy?: string;
   blockingMode?: string;
+  authIssuer?: string;
+  authAudience?: string;
+  authRequired?: boolean;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────
@@ -85,7 +90,7 @@ const program = new Command();
 program
   .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version('0.4.0');
+  .version('0.5.0');
 
 program
   .command('scan')
@@ -231,16 +236,35 @@ program
 
 program
   .command('proxy')
-  .description('Start MCP Guardian proxy to capture real token usage data with active policy enforcement')
+  .description('Start MCP Guardian proxy with optional OAuth 2.1 authentication and active policy enforcement')
   .option('-c, --config <path>', 'Path to MCP config file')
   .option('--policy <path>', 'Path to policy YAML file (enables active blocking)')
   .option('--blocking-mode <mode>', 'Override policy mode: audit (passive), warn (flag), block (enforce)', 'block')
+  .option('--auth-issuer <url>', 'OIDC issuer URL for JWT validation (e.g., https://accounts.google.com)')
+  .option('--auth-audience <aud>', 'Expected audience claim in JWT')
+  .option('--auth-required', 'Require authentication for all tool calls (fail-closed)', false)
   .action(async (opts: ProxyOptions) => {
     const paths = opts.config ? [opts.config] : ConfigParser.findConfigPaths();
     if (paths.length === 0) { console.error(chalk.red('No MCP config files found. Use --config to specify a path.')); process.exit(1); }
 
     const servers = ConfigParser.parse(paths[0]);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
+
+    // Configure OAuth 2.1 if --auth-issuer provided
+    let authValidator: OAuthValidator | undefined;
+    if (opts.authIssuer) {
+      if (!opts.authAudience) {
+        console.error(chalk.red('--auth-audience is required when --auth-issuer is set'));
+        process.exit(1);
+      }
+      const authConfig: AuthConfig = {
+        issuer: opts.authIssuer,
+        audience: opts.authAudience,
+        required: opts.authRequired || false,
+      };
+      authValidator = new OAuthValidator(authConfig);
+      console.error(chalk.green(`OAuth 2.1 enabled: ${authConfig.issuer} (audience: ${authConfig.audience})${authConfig.required ? ' [REQUIRED]' : ' [OPTIONAL]'}`));
+    }
 
     // Load policy config if --policy flag provided
     let policyEngine: PolicyEngine | undefined;
@@ -251,7 +275,6 @@ program
         const policyYaml = readFileSync(opts.policy, 'utf-8');
         const policyConfig = load(policyYaml) as PolicyConfig;
 
-        // Override mode from CLI flag if specified
         if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode)) {
           policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
         }
@@ -264,11 +287,11 @@ program
         process.exit(1);
       }
     } else {
-      console.error(chalk.dim('No policy file specified — running in audit-only mode (no blocking)'));
+      console.error(chalk.dim('No policy file specified — running in audit-only mode'));
     }
 
     const db = new HistoryDatabase();
-    const manager = new ProxyManager(db, policyEngine);
+    const manager = new ProxyManager(db, policyEngine, authValidator);
     await manager.startAll(servers);
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
