@@ -8,6 +8,7 @@ import { FullReport, SecurityReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { ProxyManager } from './proxy/proxy-manager.js';
 import { PolicyEngine } from './policy/policy-engine.js';
+import { PolicyWatcher } from './policy/policy-watcher.js';
 import { PolicyConfig } from './policy/policy-types.js';
 import { OAuthValidator } from './auth/oauth.js';
 import { AuthConfig } from './auth/auth-types.js';
@@ -271,20 +272,23 @@ program
 
     // Load policy config if --policy flag provided
     let policyEngine: PolicyEngine | undefined;
+    let policyWatcher: PolicyWatcher | undefined;
     if (opts.policy) {
       try {
-        const { readFileSync } = await import('fs');
-        const { load } = await import('js-yaml');
-        const policyYaml = readFileSync(opts.policy, 'utf-8');
-        const policyConfig = load(policyYaml) as PolicyConfig;
-
-        if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode)) {
+        // Use PolicyWatcher for hot-reload + actual policy object for dashboard
+        policyWatcher = new PolicyWatcher(opts.policy);
+        policyEngine = policyWatcher.get() || undefined;
+        if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode) && policyEngine) {
+          // Re-create engine with overridden mode
+          const { readFileSync } = await import('fs');
+          const { load } = await import('js-yaml');
+          const policyYaml = readFileSync(opts.policy, 'utf-8');
+          const policyConfig = load(policyYaml) as PolicyConfig;
           policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
+          policyEngine = new PolicyEngine(policyConfig);
         }
-
-        policyEngine = new PolicyEngine(policyConfig);
-        console.error(chalk.green(`Policy loaded: ${opts.policy} (mode: ${policyEngine.getMode()})`));
-        console.error(chalk.dim(`  ${policyConfig.policy.rules.length} rule(s) active`));
+        console.error(chalk.green(`Policy loaded: ${opts.policy} (mode: ${policyEngine?.getMode() || 'none'})`));
+        console.error(chalk.dim(`  ${policyEngine ? '5' : '0'} rule(s) active`));
       } catch (err: any) {
         console.error(chalk.red(`Failed to load policy: ${err?.message}`));
         process.exit(1);
@@ -304,9 +308,9 @@ program
     const metricsPort = parseInt(process.env['METRICS_PORT'] || '9090', 10);
     startMetricsServer(metricsPort).catch(() => {});
 
-    // Start dashboard server if enabled
+    // Start dashboard server if enabled (pass policy watcher for live data)
     const dashboardPort = parseInt(process.env['DASHBOARD_PORT'] || '4000', 10);
-    startDashboardServer(dashboardPort, undefined).catch(() => {});
+    startDashboardServer(dashboardPort, policyWatcher).catch(() => {});
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
     const cleanup = () => { manager.stopAll(); db.close(); process.exit(0); };

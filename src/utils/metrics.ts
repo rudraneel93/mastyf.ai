@@ -7,7 +7,7 @@ import { Logger } from './logger.js';
  *
  * Enable with: METRICS_ENABLED=true METRICS_PORT=9090
  */
-const registry = new Registry();
+export const registry = new Registry();
 collectDefaultMetrics({ register: registry, prefix: 'mcp_guardian_' });
 
 // ── Counters ─────────────────────────────────────────────────────
@@ -64,11 +64,11 @@ export const authLatencyMs = new Histogram({
 });
 
 // ── Metrics server ────────────────────────────────────────────────
-export async function startMetricsServer(port: number = 9090): Promise<void> {
-  if (process.env['METRICS_ENABLED'] !== 'true') {
-    Logger.debug('[metrics] Metrics server not enabled (set METRICS_ENABLED=true)');
-    return;
-  }
+export async function startMetricsServer(port: number = 9090): Promise<Registry> {
+    if (process.env['METRICS_ENABLED'] !== 'true') {
+      Logger.debug('[metrics] Metrics server not enabled (set METRICS_ENABLED=true)');
+      return registry;
+    }
 
   try {
     const { createServer } = await import('http');
@@ -79,7 +79,9 @@ export async function startMetricsServer(port: number = 9090): Promise<void> {
     server.listen(port, () => {
       Logger.info(`[metrics] Prometheus metrics available at http://0.0.0.0:${port}/metrics`);
     });
+    return registry;
   } catch (err: any) {
     Logger.error(`[metrics] Failed to start metrics server: ${err?.message}`);
+    return registry;
   }
 }
