@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-> **Always use the latest version:** `npm install @mcp-guardian/server@latest` — current is **v1.3.1**. See the [Changelog](./CHANGELOG.md) for full version history and [GitHub Releases](https://github.com/rudraneel93/mcp-guardian/releases) for per-version source tags.
+> **Always use the latest version:** `npm install @mcp-guardian/server@latest` — current is **v1.3.3**. See the [Changelog](./CHANGELOG.md) for full version history and [GitHub Releases](https://github.com/rudraneel93/mcp-guardian/releases) for per-version source tags.
 
 MCP Guardian is a **security and governance proxy** for [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) infrastructure. It sits between AI clients and MCP servers, enforcing active security policies, tracking real token costs, and monitoring health — all while providing enterprise-grade observability and audit trails.
 
@@ -77,6 +77,14 @@ MCP Guardian provides:
 - **DPoP (v1.0)** — RFC 9449 sender-constrained token support for replay-proof authentication
 - **OpenTelemetry (v1.0)** — Distributed tracing across proxy and MCP servers via OTLP
 - **HTTP/SSE proxy (v0.8.0)** — Full proxy support for remote HTTP/SSE-based MCP servers
+- **Payload normalization (v1.2.0)** — Multi-stage decoder defeats URL/hex/unicode/HTML entity/shell obfuscation bypass attacks before regex evaluation
+- **Semantic shell analysis (v1.2.0)** — AST-based tokenization detects command substitution, pipe chains, redirects, and 33 dangerous commands semantically
+- **Dashboard authentication (v1.2.0)** — JWT session tokens, API key auth, CSRF protection, and rate-limited login for the web dashboard
+- **mTLS zero-trust networking (v1.3.0)** — Mutual TLS with client certificates for proxy ↔ upstream MCP server communication
+- **E2E proxy tests (v1.3.0)** — Real proxy spawns with `default-policy.yaml`, sends JSON-RPC, verifies block/pass/deny
+- **Supply chain CI (v1.3.0)** — GitHub Actions pipeline with `npm audit --audit-level=high`, CycloneDX SBOM generation, and `.npmrc` enforcement
+- **Operational runbooks (v1.3.0)** — 7 production runbooks covering circuit breaker, Redis, policy corruption, dashboard auth, latency, DB corruption, and token spikes with SLOs
+- **Disaster recovery plan (v1.3.0)** — RTO/RPO for all state types, backup strategy, recovery drills, and rollback procedures
 
 ---
 
@@ -817,12 +825,16 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] Command injection validation (10 suspicious patterns)
 - [x] Active policy engine — YAML-based pass/block/flag with allowlists, regex, rate limiting, token budgets
 - [x] Structured JSON logging (pino) for SIEM ingestion
-- [x] STRIDE threat model (SECURITY.md)
-- [x] 97 tests (13 suites)
-- [x] GitHub Actions CI (Node 18/20/22 matrix)
+- [x] STRIDE threat model (SECURITY.md) + formal THREAT_MODEL.md
+- [x] Payload normalization — multi-stage encode/decode bypass defense
+- [x] Semantic shell AST analysis — command substitution, pipe, and dangerous command detection
+- [x] Dashboard authentication — JWT sessions, API keys, CSRF protection
+- [x] mTLS zero-trust networking for proxy ↔ upstream communication
+- [x] 168 tests across 16 suites (unit, fuzz, integration, E2E)
+- [x] GitHub Actions CI (Node 18/20/22 matrix) + supply chain audit
 - [x] Performance benchmarks (p50: 5ms baseline, +25.78ms proxy overhead, +0.15ms policy)
 - [x] Helm chart + production deployment guide (K8s, fail-open/closed, sidecar pattern, scaling)
-- [x] Published to npm as [`@mcp-guardian/server@1.1.0`](https://www.npmjs.com/package/@mcp-guardian/server)
+- [x] Published to npm as [`@mcp-guardian/server@1.3.3`](https://www.npmjs.com/package/@mcp-guardian/server)
 - [x] OAuth 2.1 / OIDC proxy authentication (v0.5.0)
 - [x] RBAC — scope & client-ID-based access control (v0.5.1)
 - [x] Circuit breaker — 3-state protection for upstream servers (v0.5.2)
@@ -838,10 +850,16 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 - [x] DPoP support — RFC 9449 sender-constrained tokens (v1.0)
 - [x] OpenTelemetry tracing — distributed request tracking (v1.0)
 - [x] HTTP/SSE proxy server — remote MCP transport support (v0.8.0)
-- [ ] OPA integration for Rego policies
+- [x] E2E proxy tests — real CLI spawn with policy file (v1.3.0)
+- [x] Supply chain CI — npm audit, CycloneDX SBOM, npm provenance (v1.3.0)
+- [x] Operational runbooks — 7 scenarios with SLOs (v1.3.0)
+- [x] Disaster recovery plan — RTO/RPO, backup strategy, recovery drills (v1.3.0)
+- [x] GitHub primary language corrected to TypeScript (v1.3.3)
+- [x] npm keywords expanded to 22 terms for discoverability (v1.3.3)
+- [ ] OPA/Rego policy integration
 - [ ] Slack/Discord alerting
-- [ ] Prometheus metrics endpoint
 - [ ] Multi-user proxy
+- [ ] Hosted SaaS version
 
 ---
 
@@ -849,4 +867,4 @@ Token counting uses `tiktoken` with the `o200k_base` encoding (used by GPT-4o an
 
 MIT — see [LICENSE](LICENSE) for details.
 
-**Built with TypeScript, @modelcontextprotocol/sdk, tiktoken, sql.js, commander, chalk, and zod.**
+**Built with TypeScript, @modelcontextprotocol/sdk, tiktoken, sql.js, commander, chalk, zod, jose, pino, and prom-client.**
