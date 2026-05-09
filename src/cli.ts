@@ -12,6 +12,7 @@ import { PolicyConfig } from './policy/policy-types.js';
 import { OAuthValidator } from './auth/oauth.js';
 import { AuthConfig } from './auth/auth-types.js';
 import { startMetricsServer } from './utils/metrics.js';
+import { initTracing } from './utils/tracing.js';
 import { createContainer } from './container.js';
 
 // ── Typed option interfaces ──────────────────────────────────────────
@@ -294,6 +295,9 @@ program
     const db = new HistoryDatabase();
     const manager = new ProxyManager(db, policyEngine, authValidator);
     await manager.startAll(servers);
+
+    // Start OpenTelemetry tracing if configured
+    initTracing().catch(() => {});
 
     // Start Prometheus metrics server if enabled
     const metricsPort = parseInt(process.env['METRICS_PORT'] || '9090', 10);
