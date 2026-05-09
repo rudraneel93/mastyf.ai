@@ -1,10 +1,14 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "default-policy.yaml"
   ],
   "bin": {
     "mcp-guardian": "./dist/cli.js"
