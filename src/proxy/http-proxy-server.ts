@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { request as httpReq } from 'http';
-import { request as httpsReq } from 'https';
+import { request as httpsReq, Agent as HttpsAgent } from 'https';
 import { randomUUID } from 'crypto';
 import { TokenCounter } from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
@@ -12,6 +12,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { SessionCache } from '../auth/session-cache.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
+import { MtlsConfig, createMtlsAgent } from '../utils/mtls-config.js';
 import * as Metrics from '../utils/metrics.js';
 import { Logger } from '../utils/logger.js';
 
@@ -30,6 +31,7 @@ export class HttpProxyServer {
   private db: HistoryDatabase;
   private port: number;
   private server: ReturnType<typeof createServer> | null = null;
+  private httpsAgent: HttpsAgent | undefined;
 
   constructor(
     targetUrl: string,
@@ -38,6 +40,7 @@ export class HttpProxyServer {
     authValidator?: OAuthValidator,
     db?: HistoryDatabase,
     port: number = 4000,
+    mtlsConfig?: MtlsConfig,
   ) {
     this.serverName = serverName;
     this.targetUrl = targetUrl.replace(/\/$/, '');
@@ -48,7 +51,11 @@ export class HttpProxyServer {
     this.tokenCounter = new TokenCounter();
     this.db = db || new HistoryDatabase(':memory:');
     this.port = port;
+    this.httpsAgent = createMtlsAgent(mtlsConfig || { enabled: false, rejectUnauthorized: true });
     Metrics.circuitBreakerState.set({ server_name: this.serverName }, 0);
+    if (this.httpsAgent) {
+      Logger.info(`[http-proxy:${this.serverName}] mTLS enabled for upstream connection`);
+    }
   }
 
   async start(): Promise<void> {
@@ -144,13 +151,20 @@ export class HttpProxyServer {
       const upstreamUrl = new URL(this.targetUrl + (req.url || '/'));
       const isHttps = upstreamUrl.protocol === 'https:';
 
-      const proxyReq = (isHttps ? httpsReq : httpReq)({
+      const reqOpts: any = {
         hostname: upstreamUrl.hostname,
         port: upstreamUrl.port || (isHttps ? 443 : 80),
         path: upstreamUrl.pathname + upstreamUrl.search,
         method: req.method,
         headers: { ...req.headers, host: upstreamUrl.hostname },
-      }, (upstreamRes) => {
+      };
+
+      // Attach mTLS agent for HTTPS connections
+      if (isHttps && this.httpsAgent) {
+        reqOpts.agent = this.httpsAgent;
+      }
+
+      const proxyReq = (isHttps ? httpsReq : httpReq)(reqOpts, (upstreamRes) => {
         res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
         upstreamRes.pipe(res);
         this.circuitBreaker.recordSuccess();

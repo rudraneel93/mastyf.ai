@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Security, cost, and health audit for MCP infrastructure",
   "type": "module",
   "files": [
@@ -13,9 +13,16 @@
   "engines": {
     "node": ">=18"
   },
-  "repository": "github:rudraneel93/mcp-guardian",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudraneel93/mcp-guardian.git"
+  },
   "bugs": "https://github.com/rudraneel93/mcp-guardian/issues",
   "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
+  },
   "keywords": [
     "mcp",
     "model-context-protocol",
