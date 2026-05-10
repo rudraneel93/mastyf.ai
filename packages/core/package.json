@@ -1,0 +1,35 @@
+{
+  "name": "@mcp-guardian/core",
+  "version": "2.0.0",
+  "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./transports/stdio": {
+      "import": "./dist/transports/stdio.js",
+      "types": "./dist/transports/stdio.d.ts"
+    },
+    "./transports/http": {
+      "import": "./dist/transports/http.js",
+      "types": "./dist/transports/http.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0"
+  },
+  "keywords": ["mcp", "security", "prompt-injection", "detection"],
+  "license": "MIT"
+}

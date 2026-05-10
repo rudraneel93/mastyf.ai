@@ -1,0 +1,174 @@
+import { createHash, createHmac, randomBytes } from "node:crypto";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type {
+  ToolDefinition, ToolManifestEntry, ManifestVerifyResult
+} from "./types.js";
+
+const MANIFEST_DIR = join(homedir(), ".mcp-guardian");
+const MANIFEST_PATH = join(MANIFEST_DIR, "tool-manifest.json");
+const SECRET_PATH = join(MANIFEST_DIR, ".local-secret");
+
+function ensureDir(): void {
+  if (!existsSync(MANIFEST_DIR)) {
+    mkdirSync(MANIFEST_DIR, { recursive: true, mode: 0o700 });
+  }
+}
+
+function getLocalSecret(): string {
+  ensureDir();
+  if (!existsSync(SECRET_PATH)) {
+    const secret = randomBytes(32).toString("hex");
+    writeFileSync(SECRET_PATH, secret, { mode: 0o600 });
+    return secret;
+  }
+  return readFileSync(SECRET_PATH, "utf8").trim();
+}
+
+function canonicalize(tool: ToolDefinition): string {
+  // Stable JSON serialization — sorted keys
+  return JSON.stringify({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.inputSchema ?? null,
+  }, Object.keys({
+    name: "", description: "", inputSchema: null,
+  }).sort());
+}
+
+function hashTool(tool: ToolDefinition): string {
+  return createHash("sha256")
+    .update(canonicalize(tool))
+    .digest("hex");
+}
+
+function hmacEntry(entry: Omit<ToolManifestEntry, "hmac">): string {
+  const secret = getLocalSecret();
+  const payload = JSON.stringify({
+    toolName: entry.toolName,
+    serverName: entry.serverName,
+    hash: entry.hash,
+    approvedAt: entry.approvedAt,
+    version: entry.version,
+  });
+  return createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+type ManifestStore = Record<string, ToolManifestEntry>;
+
+function loadManifest(): ManifestStore {
+  ensureDir();
+  if (!existsSync(MANIFEST_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as ManifestStore;
+  } catch {
+    return {};
+  }
+}
+
+function saveManifest(store: ManifestStore): void {
+  ensureDir();
+  writeFileSync(MANIFEST_PATH, JSON.stringify(store, null, 2), {
+    mode: 0o600,  // Owner read/write only
+  });
+}
+
+function manifestKey(serverName: string, toolName: string): string {
+  return `${serverName}::${toolName}`;
+}
+
+export function verifyToolDefinitions(
+  tools: ToolDefinition[],
+  serverName: string
+): ManifestVerifyResult {
+  const store = loadManifest();
+  const result: ManifestVerifyResult = {
+    status: "verified",
+    changedTools: [],
+    newTools: [],
+    removedTools: [],
+    tamperedEntries: [],
+  };
+
+  const currentKeys = new Set<string>();
+
+  for (const tool of tools) {
+    const key = manifestKey(serverName, tool.name);
+    currentKeys.add(key);
+    const currentHash = hashTool(tool);
+    const existing = store[key];
+
+    if (!existing) {
+      result.newTools.push(tool.name);
+      continue;
+    }
+
+    // Check HMAC integrity first
+    const expectedHmac = hmacEntry({
+      toolName: existing.toolName,
+      serverName: existing.serverName,
+      hash: existing.hash,
+      approvedAt: existing.approvedAt,
+      version: existing.version,
+    });
+
+    if (expectedHmac !== existing.hmac) {
+      result.tamperedEntries.push(tool.name);
+      continue;
+    }
+
+    // Check tool hash
+    if (existing.hash !== currentHash) {
+      result.changedTools.push(tool.name);
+    }
+  }
+
+  // Detect removed tools
+  for (const key of Object.keys(store)) {
+    if (key.startsWith(`${serverName}::`) && !currentKeys.has(key)) {
+      result.removedTools.push(key.replace(`${serverName}::`, ""));
+    }
+  }
+
+  if (result.newTools.length > 0 && result.changedTools.length === 0
+    && result.removedTools.length === 0 && result.tamperedEntries.length === 0) {
+    result.status = "created";
+  } else if (result.changedTools.length > 0 || result.removedTools.length > 0) {
+    result.status = "changed";
+  } else if (result.tamperedEntries.length > 0) {
+    result.status = "tampered";
+  }
+
+  return result;
+}
+
+export function approveToolDefinitions(
+  tools: ToolDefinition[],
+  serverName: string
+): void {
+  const store = loadManifest();
+  const now = new Date().toISOString();
+
+  for (const tool of tools) {
+    const key = manifestKey(serverName, tool.name);
+    const existing = store[key];
+    const hash = hashTool(tool);
+    const version = existing ? existing.version + 1 : 1;
+
+    const entryWithoutHmac = {
+      toolName: tool.name,
+      serverName,
+      hash,
+      approvedAt: now,
+      version,
+    };
+
+    store[key] = {
+      ...entryWithoutHmac,
+      hmac: hmacEntry(entryWithoutHmac),
+    };
+  }
+
+  saveManifest(store);
+}
