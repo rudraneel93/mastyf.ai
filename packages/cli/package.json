@@ -1,0 +1,25 @@
+{
+  "name": "@mcp-guardian/cli",
+  "version": "2.0.0",
+  "description": "CLI binary for scanning MCP tool definitions",
+  "type": "module",
+  "bin": {
+    "mcp-guardian": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mcp-guardian/core": "workspace:*",
+    "@mcp-guardian/server": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "@types/node": "^20.0.0"
+  },
+  "license": "MIT"
+}

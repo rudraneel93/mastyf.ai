@@ -1,0 +1,31 @@
+name: Corpus Evaluation
+
+on:
+  schedule:
+    - cron: "0 2 * * *"   # Nightly precision/recall measurement
+  workflow_dispatch:
+
+jobs:
+  eval:
+    name: Precision/Recall Measurement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run corpus evaluation with semantic layer
+        run: pnpm tsx corpus/run-eval.ts
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-eval-results
+          path: corpus-eval-output.txt

@@ -1,0 +1,62 @@
+name: MCP Security Scan
+
+on:
+  push:
+    paths:
+      - "mcp.json"
+      - "claude_desktop_config.json"
+      - ".claude/**"
+  pull_request:
+    paths:
+      - "mcp.json"
+      - "claude_desktop_config.json"
+      - ".claude/**"
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  scan:
+    name: Scan MCP Tool Definitions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan MCP configuration
+        run: |
+          npx --yes @mcp-guardian/cli \
+            ${{ vars.MCP_CONFIG_PATH || 'mcp.json' }} \
+            --skip-semantic \
+            --fail-on-critical \
+            --json > mcp-scan-results.json
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-scan-results
+          path: mcp-scan-results.json
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('mcp-scan-results.json'));
+            const critical = results.flatMap(s => s.tools)
+              .filter(t => t.status === 'critical');
+
+            const body = '## MCP Guardian: Critical Issues Found\n\n' +
+              critical.map(t =>
+                '**' + t.toolName + '**\n' +
+                t.issues.filter(i => i.severity === 'critical')
+                  .map(i => '- `' + i.id + '`: ' + i.message)
+                  .join('\n')
+              ).join('\n\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
