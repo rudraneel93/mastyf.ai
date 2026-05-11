@@ -12,6 +12,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { SessionCache } from '../auth/session-cache.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
+import { LRUCache } from 'lru-cache';
 import * as Metrics from '../utils/metrics.js';
 
 /**
@@ -37,8 +38,12 @@ export class McpProxyServer {
   private authValidator: OAuthValidator | null;
   private sessionCache: SessionCache | null;
   private circuitBreaker: CircuitBreaker;
-  /** v0.5.2: Per-client rate limit counters (key: agentSub:toolName) */
-  private clientRateCounters: Map<string, { count: number; resetAt: number }> = new Map();
+  /** v0.5.2: Per-client rate limit counters — LRU-backed to prevent memory leaks */
+  private clientRateCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
+    max: 10000,
+    ttl: 60000,
+    updateAgeOnGet: true,
+  });
 
   private requestTimeoutMs: number;
   private restartCount: number = 0;
@@ -341,10 +346,10 @@ export class McpProxyServer {
             let counter = this.clientRateCounters.get(rateKey);
             if (!counter || now > counter.resetAt) {
               counter = { count: 1, resetAt: now + 60000 };
-              this.clientRateCounters.set(rateKey, counter);
             } else {
               counter.count++;
             }
+            this.clientRateCounters.set(rateKey, counter);
             // Check if any RBAC rule with per-client rate limit fires
             const perClientLimit = this.checkPerClientRateLimit(agentIdentity, toolName, counter.count);
             if (perClientLimit) {

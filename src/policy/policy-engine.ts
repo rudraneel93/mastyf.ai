@@ -2,18 +2,23 @@ import { PolicyConfig, PolicyDecision, CallContext, PolicyAction, PolicyMode } f
 import { Logger } from '../utils/logger.js';
 import { getNormalizer } from '../utils/payload-normalizer.js';
 import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
+import { LRUCache } from 'lru-cache';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
  * Supports three modes: audit (passive), warn (flag only), block (active enforcement).
  *
  * v1.2: Integrated payload normalization and semantic shell analysis layers
- * to move beyond regex-only detection toward semantic execution security.
+ * v2.1: Replaced Map with LRUCache to prevent memory leaks under sustained load
  */
 export class PolicyEngine {
   private rules: PolicyConfig['policy']['rules'];
   private mode: PolicyMode;
-  private callCounters: Map<string, { count: number; resetAt: number }> = new Map();
+  private callCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
+    max: 50000,
+    ttl: 60000,
+    updateAgeOnGet: true,
+  });
   private normalizer = getNormalizer();
   private shellTokenizer = new ShellTokenizer();
 
@@ -141,19 +146,19 @@ export class PolicyEngine {
       }
     }
 
-    // Rate limiting
+    // Rate limiting (LRU-backed, prevents memory leaks)
     if (rule.maxCallsPerMinute) {
       const key = `${ctx.serverName}:${ctx.toolName}`;
       const now = Date.now();
       let counter = this.callCounters.get(key);
       if (!counter || now > counter.resetAt) {
         counter = { count: 1, resetAt: now + 60000 };
-        this.callCounters.set(key, counter);
       } else {
         counter.count++;
-        if (counter.count > rule.maxCallsPerMinute) {
-          return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Rate limit exceeded: ${counter.count}/${rule.maxCallsPerMinute} calls per minute` };
-        }
+      }
+      this.callCounters.set(key, counter);
+      if (counter.count > rule.maxCallsPerMinute) {
+        return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Rate limit exceeded: ${counter.count}/${rule.maxCallsPerMinute} calls per minute` };
       }
     }
 
