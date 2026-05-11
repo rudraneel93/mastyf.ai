@@ -44,10 +44,16 @@ export class TokenCounter {
 
   /**
    * Backward-compatible count — returns raw number (GPT-4o encoding for consistency with v1).
+   * Falls back to character-based approximation if tiktoken WASM fails to load.
    * Use countWithProvider() for per-provider accuracy.
    */
   count(text: string): number {
-    return this.tiktokenCount(text, 'o200k_base');
+    try {
+      return this.tiktokenCount(text, 'o200k_base');
+    } catch {
+      // Fallback: tiktoken WASM initialisation failed — use char-based approximation (~4 chars/token)
+      return Math.ceil(text.length / 4);
+    }
   }
 
   /** Per-provider count with metadata about estimation accuracy. */
