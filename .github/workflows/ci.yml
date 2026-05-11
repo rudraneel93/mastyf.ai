@@ -72,3 +72,18 @@ jobs:
           node-version: 20
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level=high
+
+  docker-scan:
+    name: Docker Build & Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t mcp-guardian:ci .
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: mcp-guardian:ci
+          severity: 'CRITICAL,HIGH'
+          exit-code: 1
+          format: 'table'
