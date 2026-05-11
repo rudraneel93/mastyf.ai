@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "echo-test": {
+      "command": "node",
+      "args": ["-e", "process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:0,result:{protocolVersion:'2024-11-05',serverInfo:{name:'echo',version:'1.0.0'},capabilities:{tools:{}}})+'\\n'); require('fs').createReadStream('/dev/stdin');"],
+      "env": {},
+      "transport": "stdio"
+    }
+  }
+}
