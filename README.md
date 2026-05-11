@@ -125,8 +125,8 @@ MCP Guardian provides:
 ### 💰 Cost Audit (`audit_costs`)
 
 - **Proxy Interceptor** — `mcp-guardian proxy` sits between your AI client and MCP servers, capturing every `tools/call` request/response
-- **Real Token Counting** — Uses `tiktoken` (o200k_base encoding) on actual JSON-RPC traffic — no hardcoded estimates
-- **Multi-Model Pricing** — 97 models across 17 providers (OpenAI, Anthropic, Google, DeepSeek, xAI, Meta, Mistral, and more)
+- **Real Token Counting** — Uses `tiktoken` per-provider encodings on actual JSON-RPC traffic — exact for OpenAI, char-ratio estimates for Anthropic/Google/others
+- **Live Multi-Model Pricing** — Auto-fetches real pricing from the litellm open-source database (2,700+ models, updated daily) on startup — bootstrap table ensures instant availability
 - **Tool-Level Breakdown** — Per-tool token usage, call counts, duration, and cost estimates
 - **Custom Pricing** — Override via `PRICING_OVERRIDES` env var: `{"my-model": {"input": 2.0, "output": 6.0}}`
 
@@ -750,7 +750,9 @@ Unknown models receive a conservative default estimate of $10/$30 per million to
 | `MCP_GUARDIAN_DB_PATH` | Override SQLite database path | `~/.mcp-guardian/history.db` |
 | `LOG_LEVEL` | Logging level: `DEBUG`, `INFO`, `WARN`, `ERROR` | `INFO` |
 | `PRICING_OVERRIDES` | Custom pricing JSON: `{"my-model": {"input": 2.0, "output": 6.0}}` | (none) |
-| `ENABLE_LIVE_PRICING` | Set to 'true' to fetch live model pricing from litellm data | (none) |
+| `MCP_GUARDIAN_MAX_PAYLOAD_BYTES` | Max JSON-RPC payload size (bytes) before rejection | `10485760` (10 MB) |
+| `REDIS_URL` | Redis connection string for multi-replica HA (rate limits, session cache) | (in-memory fallback) |
+| `GUARDIAN_STRICT_MODE` | Set to 'true' to exit on missing REDIS_URL in K8s/multi-replica environments | `false` |
 
 ---
 
