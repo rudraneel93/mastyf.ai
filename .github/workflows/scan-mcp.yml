@@ -23,9 +23,8 @@ jobs:
 
       - name: Scan MCP configuration
         run: |
-          npx --yes @mcp-guardian/cli \
-            ${{ vars.MCP_CONFIG_PATH || 'mcp.json' }} \
-            --skip-semantic \
+          npx --yes @mcp-guardian/server@latest scan \
+            --config ${{ vars.MCP_CONFIG_PATH || 'mcp.json' }} \
             --fail-on-critical \
             --json > mcp-scan-results.json
 
