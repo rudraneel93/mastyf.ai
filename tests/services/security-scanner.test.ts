@@ -33,14 +33,14 @@ describe('SecurityScanner', () => {
     mockAuth.probe.mockReturnValueOnce({ hasAuthentication: false, isTransportEncrypted: true });
     const report = await scanner.scanServer({ name: 'test', transport: 'stdio' });
     expect(report.score).toBeLessThan(100);
-    expect(report.score).toBe(80); // 100 - 20 for no auth
+    expect(report.score).toBe(70); // 100 - 30 for noAuth
   });
 
   it('deducts for critical CVEs', async () => {
     mockCve.check.mockResolvedValueOnce([{ id: 'CVE-1', severity: 'CRITICAL', summary: 'test' }]);
     mockAuth.probe.mockReturnValueOnce({ hasAuthentication: true, isTransportEncrypted: true });
     const report = await scanner.scanServer({ name: 'test', transport: 'stdio' });
-    expect(report.score).toBe(60); // 100 - 40 for critical CVE
+    expect(report.score).toBe(90); // 100 + 20(auth bonus) - 30(critical CVE) = 90
   });
 
   it('deducts for all issues combined', async () => {
@@ -53,7 +53,7 @@ describe('SecurityScanner', () => {
     mockSecret.scan.mockReturnValueOnce([{ type: 'api_key', location: 'env:', severity: 'MEDIUM' }]);
 
     const report = await scanner.scanServer({ name: 'test', transport: 'sse' });
-    // 100 - 40(crit) - 20(high) - 20(auth) - 10(transport) - 30(typo) - 15(secrets) = -35 → 0
+    // 100 - 30(crit) - 20(high) - 30(noAuth) - 10(transport) - 30(typo) - 25(secrets) = -45 → 0
     expect(report.score).toBe(0);
   });
 });

@@ -38,14 +38,19 @@ describe('PricingClient', () => {
     expect(client.getPricingForModel('nonexistent')).toBeNull();
   });
 
-  it('lists all known models', () => {
-    const models = client.listModels();
-    expect(models.length).toBeGreaterThan(80);
-    expect(models).toContain('gpt-4o');
-    expect(models).toContain('claude-3-5-sonnet');
-    expect(models).toContain('deepseek-chat');
-    expect(models).toContain('gemini-2.5-pro');
-    expect(models).toContain('grok-3');
+  it('lists all known models (bootstrap + live)', async () => {
+    // Bootstrap has 37 models — live fetch adds 2100+
+    const bootstrapCount = client.listModels().length;
+    expect(bootstrapCount).toBeGreaterThanOrEqual(37);
+    expect(client.listModels()).toContain('gpt-4o');
+    expect(client.listModels()).toContain('claude-3-5-sonnet');
+    expect(client.listModels()).toContain('deepseek-chat');
+    expect(client.listModels()).toContain('gemini-2.5-pro');
+    expect(client.listModels()).toContain('grok-3');
+    // Live fetch should add many more (non-blocking, but verify it completes)
+    await client.refreshLivePricing();
+    const liveCount = client.listModels().length;
+    expect(liveCount).toBeGreaterThan(bootstrapCount);
   });
 
   it('can add custom pricing at runtime', () => {

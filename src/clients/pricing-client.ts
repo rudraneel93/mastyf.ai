@@ -34,6 +34,7 @@ const BOOTSTRAP_PRICING: Record<string, PricingEntry> = {
   // Google
   'gemini-2.5-pro': { input: 1.25, output: 10.0 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  'gemini-2.0-flash-lite': { input: 0.075, output: 0.3 },
   'gemini-1.5-pro': { input: 1.25, output: 5.0 },
   'gemini-1.5-flash': { input: 0.075, output: 0.3 },
   'gemma-2-27b': { input: 0.27, output: 0.27 },

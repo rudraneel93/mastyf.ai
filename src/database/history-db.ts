@@ -149,9 +149,19 @@ export class HistoryDatabase implements IDatabase {
   }
 
   async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
-    return this.db
+    const rows = this.db
       .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC')
-      .all(serverName) as ProxyCallRecord[];
+      .all(serverName) as Array<Record<string, unknown>>;
+    // Map snake_case SQLite columns to camelCase ProxyCallRecord fields
+    return rows.map((row: any) => ({
+      serverName: row.server_name ?? '',
+      toolName: row.tool_name ?? '',
+      requestTokens: row.request_tokens ?? 0,
+      responseTokens: row.response_tokens ?? 0,
+      totalTokens: row.total_tokens ?? 0,
+      durationMs: row.duration_ms ?? 0,
+      timestamp: row.created_at ?? new Date().toISOString(),
+    }));
   }
 
   async flush(): Promise<void> {
