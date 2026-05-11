@@ -1,0 +1,38 @@
+{
+  "name": "mcp-guardian",
+  "version": "2.1.2",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, CI/CD",
+  "category": "Security",
+  "tags": ["security", "policy", "governance", "audit", "mcp", "proxy", "zero-trust"],
+  "install": "npm install -g @mcp-guardian/server@latest",
+  "repository": "https://github.com/rudraneel93/mcp-guardian",
+  "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
+  "license": "MIT",
+  "runtime": "node",
+  "transport": ["stdio", "http", "sse"],
+  "entrypoint": "dist/index.js",
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": true,
+    "logging": true
+  },
+  "environmentVariables": {
+    "NVD_API_KEY": {
+      "description": "NIST NVD API key for CVE lookups (optional)",
+      "required": false
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for semantic LLM analysis layer",
+      "required": false
+    },
+    "DASHBOARD_ENABLED": {
+      "description": "Enable web dashboard server",
+      "required": false
+    }
+  },
+  "minimumCliVersion": "18.0.0",
+  "releases": [
+    { "version": "2.1.0", "date": "2026-05-11", "notes": "Production hardening — better-sqlite3, HTTP proxy, transitive CVE, secrets, watchdog, CSP, scoring, retention" }
+  ]
+}
