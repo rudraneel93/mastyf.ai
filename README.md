@@ -92,6 +92,18 @@ MCP Guardian provides:
 - **🆕 Transport layer (v2.0)** — Stdio (JSON-RPC handshake) + HTTP/SSE tool fetching
 - **🆕 Corpus evaluation (v2.0)** — Nightly precision/recall measurement with corpus-eval.yml workflow
 - **🆕 Provenance-signed publishing (v2.0)** — npm provenance attestation on every release via publish.yml
+- **🆕 Production database (v2.1)** — Replaced sql.js (WASM) with better-sqlite3 (native, WAL mode, 3-5x faster, prepared statements)
+- **🆕 HTTP/SSE proxy cost audit (v2.1)** — Transparent HTTP proxy intercepts tools/call, runs policy evaluation + token counting for remote MCP servers
+- **🆕 Transitive dependency CVE scanning (v2.1)** — Full dependency tree scanning via npm ls --json, covering 200+ transitive packages
+- **🆕 Secret patterns expanded (v2.1)** — 40+ patterns: AWS, Azure, GCP, Stripe, Slack, Twilio, SendGrid, HuggingFace, Supabase, PlanetScale, and more
+- **🆕 Per-provider token counting (v2.1)** — OpenAI (tiktoken exact), Anthropic/Google/DeepSeek/Meta/Mistral (char-ratio estimates with isEstimate flag)
+- **🆕 CVE triage (v2.1)** — Distinguishes exploitable direct-dependency CVEs from transitive theoretical CVEs
+- **🆕 Child-process watchdog (v2.1)** — 30s timeout with auto-restart (5 attempts) on hung upstream MCP servers
+- **🆕 Data retention (v2.1)** — Hourly purge of call records older than 30 days, GDPR-compliant
+- **🆕 Dashboard CSP + HSTS (v2.1)** — Content-Security-Policy, HSTS, frame-ancestors via helmet middleware
+- **🆕 Helm chart CI/CD (v2.1)** — Auto-publish to GitHub Pages via chart-releaser-action on every release
+- **🆕 Coverage enforcement (v2.1)** — Vitest coverage thresholds (40% lines) enforced in CI
+- **🆕 Scoring formula (v2.1)** — Positive bonuses (auth +20, mTLS +10, lockfile +5, SBOM +5), clamped 0-100
 
 ---
 
