@@ -2,8 +2,8 @@ apiVersion: v2
 name: mcp-guardian
 description: Security, cost, and health audit proxy for MCP infrastructure
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 2.2.0
+appVersion: "2.2.0"
 keywords:
   - mcp
   - model-context-protocol
