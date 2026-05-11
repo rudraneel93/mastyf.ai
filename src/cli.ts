@@ -280,13 +280,18 @@ program
         policyWatcher = new PolicyWatcher(opts.policy);
         policyEngine = policyWatcher.get() || undefined;
         if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode) && policyEngine) {
-          // Re-create engine with overridden mode
-          const { readFileSync } = await import('fs');
-          const { load } = await import('js-yaml');
-          const policyYaml = readFileSync(opts.policy, 'utf-8');
-          const policyConfig = load(policyYaml) as PolicyConfig;
-          policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
-          policyEngine = new PolicyEngine(policyConfig);
+          // Require env var opt-in to allow CLI-level policy mode override
+          if (process.env['GUARDIAN_ALLOW_MODE_OVERRIDE'] !== 'true') {
+            console.error(chalk.red(`--blocking-mode override requires GUARDIAN_ALLOW_MODE_OVERRIDE=true to be set. Policy mode will remain: ${policyEngine.getMode()}`));
+          } else {
+            // Re-create engine with overridden mode
+            const { readFileSync } = await import('fs');
+            const { load } = await import('js-yaml');
+            const policyYaml = readFileSync(opts.policy, 'utf-8');
+            const policyConfig = load(policyYaml) as PolicyConfig;
+            policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
+            policyEngine = new PolicyEngine(policyConfig);
+          }
         }
         console.error(chalk.green(`Policy loaded: ${opts.policy} (mode: ${policyEngine?.getMode() || 'none'})`));
         console.error(chalk.dim(`  ${policyEngine ? '5' : '0'} rule(s) active`));

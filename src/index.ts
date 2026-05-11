@@ -16,6 +16,44 @@ import { FullReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { Logger } from './utils/logger.js';
 import { createContainer } from './container.js';
+import { homedir } from 'os';
+import { resolve as pathResolve, isAbsolute } from 'path';
+
+/**
+ * Sanitise user-supplied configPath to prevent path-traversal attacks.
+ * Rejects paths containing '..', and paths outside the home directory
+ * unless they match an explicit allowlist (common MCP config locations).
+ */
+function sanitizeConfigPath(input: string): string | null {
+  if (!input || typeof input !== 'string') return null;
+  // Block path-traversal sequences
+  if (input.includes('..')) {
+    Logger.warn(`[guardian] Path-traversal attempt blocked: ${input}`);
+    return null;
+  }
+  const resolved = pathResolve(input);
+  const home = pathResolve(homedir());
+
+  // Allow paths under home directory
+  if (resolved.startsWith(home)) return resolved;
+
+  // Allow common absolute MCP config locations
+  const allowedPrefixes = [
+    '/tmp/', '/var/', '/etc/', '/opt/', '/home/', '/Users/',
+    // CI environments
+    '/github/workspace/', '/runner/',
+  ];
+  if (allowedPrefixes.some((prefix) => resolved.startsWith(prefix))) {
+    return resolved;
+  }
+
+  // Allow CWD-relative paths that resolve to safe locations
+  const cwd = pathResolve('.');
+  if (resolved.startsWith(cwd)) return resolved;
+
+  Logger.warn(`[guardian] Config path rejected (outside allowed directories): ${input}`);
+  return null;
+}
 
 const container = createContainer();
 const reporter = new ReportGenerator();
@@ -197,8 +235,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   let configDescription: string;
 
   if (args?.configPath) {
-    servers = ConfigParser.parse(args.configPath as string);
-    configDescription = args.configPath as string;
+    const rawPath = args.configPath as string;
+    const safePath = sanitizeConfigPath(rawPath);
+    if (!safePath) {
+      return {
+        content: [{ type: 'text', text: `Config path rejected for security reasons: ${rawPath}. Path must be under your home directory or an allowed system location.` }],
+      };
+    }
+    servers = ConfigParser.parse(safePath);
+    configDescription = safePath;
   } else {
     const result = ConfigParser.parseAll();
     servers = result.servers;
