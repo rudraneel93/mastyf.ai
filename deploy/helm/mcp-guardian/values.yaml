@@ -1,111 +1,44 @@
-# ── Image ──────────────────────────────────────────────────────────
-image:
-  repository: node
-  tag: "20-alpine"
-  pullPolicy: IfNotPresent
-
-# ── MCP Guardian Configuration ─────────────────────────────────────
-config:
-  # Path to MCP server config file (cline_mcp_settings.json)
-  # Mount as volume or provide inline
-  mcpConfigPath: /etc/mcp-guardian/cline_mcp_settings.json
-
-  # Policy file configuration
-  policy:
-    # Path to policy YAML file (leave empty for audit-only mode)
-    path: /etc/mcp-guardian/policy.yaml
-    # Override policy mode: audit (passive), warn (flag), block (enforce)
-    mode: warn
-
-  # Environment variables for the proxy
-  env:
-    LOG_LEVEL: "info"
-    MCP_GUARDIAN_DB_PATH: "/data/mcp-guardian/history.db"
-    # NVD_API_KEY: ""  -- set via secrets
-
-  # Fail-open vs fail-closed behavior
-  # "fail-closed": If proxy crashes/restarts, block all MCP traffic
-  # "fail-open": If proxy crashes/restarts, allow traffic through (less secure)
-  failMode: "fail-closed"
-
-# ── Deployment ─────────────────────────────────────────────────────
 replicaCount: 2
 
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1
-    maxUnavailable: 0
+image:
+  repository: ghcr.io/rudraneel93/mcp-guardian
+  tag: latest
+  pullPolicy: Always
 
-# ── Resource Limits ────────────────────────────────────────────────
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
+proxy:
+  config:
+    policy: |-
+      rules:
+        - name: block-dangerous
+          type: tool_denylist
+          tools: ["run_shell", "execute_command", "bash", "eval"]
+        - name: block-injection
+          type: regex
+          pattern: "rm\\s+-rf|curl\\s|\\$\\(|`[^`]+`"
+    mcpConfigPath: /etc/mcp-guardian/cline_mcp_settings.json
 
-# ── Persistence ────────────────────────────────────────────────────
 persistence:
   enabled: true
-  # Size for SQLite database and call records
+  storageClass: standard
   size: 1Gi
-  storageClass: ""
-  # Mount path for database
-  mountPath: /data/mcp-guardian
 
-# ── Service ────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
 service:
   type: ClusterIP
-  port: 8080
+  port: 4000
 
-# ── Ingress / Network ──────────────────────────────────────────────
-ingress:
-  enabled: false
-
-# ── Service Account & RBAC ─────────────────────────────────────────
-serviceAccount:
-  create: true
-  name: mcp-guardian
-  annotations: {}
-
-# ── Pod Security Context ───────────────────────────────────────────
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
+  runAsUser: 1001
+  fsGroup: 1001
 
-securityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: false
-  capabilities:
-    drop:
-      - ALL
-
-# ── Health Checks ──────────────────────────────────────────────────
-livenessProbe:
-  initialDelaySeconds: 10
-  periodSeconds: 30
-  exec:
-    command:
-      - pgrep
-      - node
-
-readinessProbe:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  exec:
-    command:
-      - pgrep
-      - node
-
-# ── Node Selection ─────────────────────────────────────────────────
-nodeSelector: {}
-tolerations: []
-affinity: {}
-
-# ── Pod Disruption Budget ──────────────────────────────────────────
-podDisruptionBudget:
+dashboard:
   enabled: true
-  minAvailable: 1
+  authEnabled: true
