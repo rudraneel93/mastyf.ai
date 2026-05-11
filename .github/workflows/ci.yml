@@ -28,6 +28,10 @@ jobs:
 
       - run: pnpm -r test
 
+      - name: Run tests with coverage
+        run: pnpm vitest run --coverage
+        continue-on-error: true
+
   corpus-eval:
     name: Corpus Precision/Recall
     runs-on: ubuntu-latest

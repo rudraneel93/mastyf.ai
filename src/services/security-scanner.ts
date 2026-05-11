@@ -53,24 +53,66 @@ export class SecurityScanner {
   }
 }
 
+export interface ScoringConfig {
+  penalties: {
+    cveCritical: number;
+    cveHigh: number;
+    cveMedium: number;
+    noAuth: number;
+    unencryptedTransport: number;
+    typosquat: number;
+    secretFound: number;
+    cmdHigh: number;
+    cmdMedium: number;
+  };
+  bonuses: {
+    authPresent: number;
+    mTLS: number;
+    pinnedLockfile: number;
+    sbomPresent: number;
+  };
+}
+
+const DEFAULT_SCORING: ScoringConfig = {
+  penalties: {
+    cveCritical: 30, cveHigh: 20, cveMedium: 10,
+    noAuth: 30, unencryptedTransport: 10,
+    typosquat: 30, secretFound: 25,
+    cmdHigh: 25, cmdMedium: 10,
+  },
+  bonuses: {
+    authPresent: 20, mTLS: 10, pinnedLockfile: 5, sbomPresent: 5,
+  },
+};
+
 function calculateSecurityScore(
   cves: CveFinding[],
   auth: AuthStatus,
   typos: TypoSquatResult[],
   secrets: SecretFinding[],
-  cmdWarnings: import('../scanners/command-validator.js').CommandWarning[]
+  cmdWarnings: import('../scanners/command-validator.js').CommandWarning[],
+  config: ScoringConfig = DEFAULT_SCORING,
+  environmentFlags?: { hasMTLS?: boolean; hasPinnedLockfile?: boolean; hasSBOM?: boolean }
 ): number {
-  let score = 100;
-  if (cves.some((c) => c.severity === 'CRITICAL')) score -= 40;
-  if (cves.some((c) => c.severity === 'HIGH')) score -= 20;
-  if (cves.some((c) => c.severity === 'MEDIUM')) score -= 10;
-  if (!auth.hasAuthentication) score -= 20;
-  if (!auth.isTransportEncrypted) score -= 10;
-  if (typos.length > 0) score -= 30;
-  if (secrets.length > 0) score -= 15;
-  if (cmdWarnings.some((w) => w.severity === 'HIGH')) score -= 25;
-  if (cmdWarnings.some((w) => w.severity === 'MEDIUM')) score -= 10;
-  return Math.max(0, score);
+  let penalty = 0;
+  if (cves.some(c => c.severity === 'CRITICAL')) penalty += config.penalties.cveCritical;
+  if (cves.some(c => c.severity === 'HIGH')) penalty += config.penalties.cveHigh;
+  if (cves.some(c => c.severity === 'MEDIUM')) penalty += config.penalties.cveMedium;
+  if (!auth.hasAuthentication) penalty += config.penalties.noAuth;
+  if (!auth.isTransportEncrypted) penalty += config.penalties.unencryptedTransport;
+  if (typos.length > 0) penalty += config.penalties.typosquat;
+  if (secrets.length > 0) penalty += config.penalties.secretFound * Math.min(secrets.length, 3);
+  if (cmdWarnings.some(w => w.severity === 'HIGH')) penalty += config.penalties.cmdHigh;
+  if (cmdWarnings.some(w => w.severity === 'MEDIUM')) penalty += config.penalties.cmdMedium;
+
+  let bonus = 0;
+  if (auth.hasAuthentication) bonus += config.bonuses.authPresent;
+  if (environmentFlags?.hasMTLS) bonus += config.bonuses.mTLS;
+  if (environmentFlags?.hasPinnedLockfile) bonus += config.bonuses.pinnedLockfile;
+  if (environmentFlags?.hasSBOM) bonus += config.bonuses.sbomPresent;
+
+  const score = 100 - penalty + bonus;
+  return Math.max(0, Math.min(100, score));
 }
 
 function generateRecommendations(

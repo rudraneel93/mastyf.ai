@@ -59,6 +59,26 @@ export class HistoryDatabase implements IDatabase {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('synchronous = NORMAL');
     this.migrate();
+
+    // Schedule hourly purge of old records
+    const PURGE_TTL_DAYS = 30;
+    if (!this.isInMemory) {
+      const purgeInterval = setInterval(() => {
+        try {
+          const result = this.db.prepare(
+            "DELETE FROM call_records WHERE created_at < datetime('now', '-' || ? || ' days')"
+          ).run(PURGE_TTL_DAYS);
+          if (result.changes > 0) {
+            Logger.info(`[db] Scheduled purge: removed ${result.changes} records older than ${PURGE_TTL_DAYS} days`);
+          }
+        } catch (err: any) {
+          Logger.error(`[db] Purge error: ${err?.message}`);
+        }
+      }, 3600000); // Every hour
+
+      // Store reference for cleanup on close
+      (this as any)._purgeInterval = purgeInterval;
+    }
   }
 
   private migrate(): void {
@@ -225,6 +245,16 @@ export class HistoryDatabase implements IDatabase {
     return this.db.prepare(
       'SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC'
     ).all(serverName) as ProxyCallRecord[];
+  }
+
+  /** Purge records older than the configured TTL. Called during startup or scheduled tasks. */
+  purge(ttlDays: number = 30): void {
+    const result = this.db.prepare(
+      "DELETE FROM call_records WHERE created_at < datetime('now', '-' || ? || ' days')"
+    ).run(ttlDays);
+    if (result.changes > 0) {
+      Logger.info(`[db] Purged ${result.changes} call records older than ${ttlDays} days`);
+    }
   }
 
   close(): void {

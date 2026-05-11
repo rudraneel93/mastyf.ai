@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import helmet from 'helmet';
 import { Logger } from './logger.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { DashboardAuth } from '../auth/dashboard-auth.js';
@@ -102,6 +103,24 @@ export async function startDashboardServer(
   const server = createServer(async (req, res) => {
     const url = req.url || '/';
     const method = req.method || 'GET';
+
+    // ── Security headers (CSP + HSTS via helmet) ────────────
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:"],
+          connectSrc: ["'self'", "http://localhost:9090"],
+          frameAncestors: ["'none'"],
+        },
+      },
+      hsts: { maxAge: 63072000, includeSubDomains: true },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' as const },
+    })(req, res, () => {
+      // helmet middleware applied, continue to routing
+    });
 
     // ── CORS preflight ─────────────────────────────────────
     if (method === 'OPTIONS') {

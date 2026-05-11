@@ -24,7 +24,7 @@ import * as Metrics from '../utils/metrics.js';
  * v0.5.2: Consistent SIEM fields (request_id, proxy_latency_ms, authn_success, authz_allowed).
  */
 export class McpProxyServer {
-  private child: ChildProcess;
+  private child!: ChildProcess; // Definitely assigned in spawnChild()
   private tokenCounter: TokenCounter;
   private db: HistoryDatabase;
   private currentRequestId: string | null = null;
@@ -40,6 +40,13 @@ export class McpProxyServer {
   /** v0.5.2: Per-client rate limit counters (key: agentSub:toolName) */
   private clientRateCounters: Map<string, { count: number; resetAt: number }> = new Map();
 
+  private requestTimeoutMs: number;
+  private restartCount: number = 0;
+  private maxRestarts: number;
+  private spawnCommand: string;
+  private spawnArgs: string[];
+  private spawnEnv: Record<string, string>;
+
   constructor(
     command: string,
     args: string[],
@@ -48,21 +55,27 @@ export class McpProxyServer {
     serverName?: string,
     policyEngine?: PolicyEngine,
     authValidator?: OAuthValidator,
+    requestTimeoutMs: number = 30000,
+    maxRestarts: number = 5,
   ) {
     this.serverName = serverName || command.split('/').pop() || command;
     this.policyEngine = policyEngine || null;
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? new SessionCache() : null;
     this.circuitBreaker = new CircuitBreaker(this.serverName);
-    Metrics.circuitBreakerState.set({ server_name: this.serverName }, 0);
-    this.child = spawn(command, args, {
-      env: { ...process.env, ...env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    this.requestTimeoutMs = requestTimeoutMs;
+    this.maxRestarts = maxRestarts;
+    this.spawnCommand = command;
+    this.spawnArgs = args || [];
+    this.spawnEnv = { ...env } as Record<string, string>;
+    for (const [k, v] of Object.entries(process.env)) {
+      if (v !== undefined) (this.spawnEnv as any)[k] = v;
+    }
     this.tokenCounter = new TokenCounter();
     this.db = db;
-    this.setupStdout();
-    this.setupStderr();
+
+    Metrics.circuitBreakerState.set({ server_name: this.serverName }, 0);
+    this.spawnChild();
 
     StructuredLogger.info({
       event: 'proxy_started',
@@ -70,7 +83,35 @@ export class McpProxyServer {
       blockingMode: this.policyEngine ? this.policyEngine.getMode() : 'audit',
       authEnabled: this.authValidator ? this.authValidator.getConfig().required : false,
       circuitBreaker: this.circuitBreaker.getState(),
+      requestTimeoutMs: this.requestTimeoutMs,
     });
+  }
+
+  private spawnChild(): void {
+    this.child = spawn(this.spawnCommand, this.spawnArgs, {
+      env: this.spawnEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    this.child.on('exit', (code, signal) => {
+      if (signal === 'SIGKILL' || code !== 0) {
+        if (this.restartCount < this.maxRestarts) {
+          this.restartCount++;
+          Logger.warn(`[proxy:${this.serverName}] Child process exited (code=${code}, signal=${signal}), restarting (attempt ${this.restartCount}/${this.maxRestarts})...`);
+          setTimeout(() => this.spawnChild(), 1000);
+        } else {
+          Logger.error(`[proxy:${this.serverName}] Child process exceeded max restarts (${this.maxRestarts}), giving up`);
+          StructuredLogger.logError({
+            event: 'proxy_error' as const,
+            serverName: this.serverName,
+            error: `Child process exceeded max restarts (${this.maxRestarts}), code=${code}, signal=${signal}`,
+          });
+        }
+      }
+    });
+
+    this.setupStdout();
+    this.setupStderr();
   }
 
   get stdin(): NodeJS.WritableStream | null {
