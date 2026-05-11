@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
+import { LRUCache } from 'lru-cache';
 import { Logger } from './logger.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { DashboardAuth } from '../auth/dashboard-auth.js';
@@ -84,6 +85,12 @@ export async function startDashboardServer(
     });
   }
 
+  /** LRU-backed rate limiter for login attempts (Phase 4) */
+  const loginRateLimiter: LRUCache<string, number> = new LRUCache({
+    max: 500,
+    ttl: 60000,
+  });
+
   /** Get client IP for rate limiting */
   function getClientIp(req: IncomingMessage): string {
     const forwarded = req.headers['x-forwarded-for'];
@@ -152,10 +159,16 @@ export async function startDashboardServer(
         return;
       }
 
-      // ── Login API endpoint ──────────────────────────────
+      // ── Login API endpoint (with rate limiting) ────────
       if (url === '/api/login' && method === 'POST') {
         setCors();
         const ip = getClientIp(req);
+        const attempts = loginRateLimiter.get(ip) ?? 0;
+        if (attempts >= 5) {
+          writeJson(res, 429, { error: 'Too many login attempts. Please try again later.' });
+          return;
+        }
+        loginRateLimiter.set(ip, attempts + 1);
         const contentType = req.headers['content-type'] || '';
 
         let body: Record<string, string>;
@@ -187,6 +200,7 @@ export async function startDashboardServer(
         }
 
         if (result.success) {
+          loginRateLimiter.delete(ip);
           writeJson(res, 200, { success: true, token: result.token });
         } else {
           writeJson(res, 401, { success: false, error: result.error });
