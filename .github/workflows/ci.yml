@@ -24,9 +24,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      # pnpm -r respects workspace dependency order (core → server → cli)
+      - run: pnpm -r build
 
-      # Compile root src/ — turbo only builds workspace packages (packages/*)
+      # Compile root src/ — workspace packages don't cover root
       - run: npx tsc --project tsconfig.json --noEmit
 
       - run: pnpm -r test
@@ -53,7 +54,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      - run: pnpm -r build
 
       - name: Run corpus evaluation (regex + schema only)
         run: pnpm tsx corpus/run-eval.ts

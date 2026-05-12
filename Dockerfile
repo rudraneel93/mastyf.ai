@@ -1,9 +1,16 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+
+# Copy entire workspace + source for monorepo resolution
 COPY . .
-RUN pnpm build
+
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# Build sequentially to respect workspace dependency order
+RUN cd packages/core && pnpm build
+RUN cd packages/server && pnpm build
+RUN cd packages/cli && pnpm build
+RUN npx tsc --project tsconfig.json
 
 FROM node:20-alpine
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
