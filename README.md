@@ -412,6 +412,94 @@ pnpm dev
 
 ---
 
+## FAQ
+
+### How is MCP Guardian different from a WAF or API gateway?
+
+A WAF inspects HTTP traffic patterns; MCP Guardian operates at the **MCP protocol layer** — it understands `tools/call` semantics, tool names, argument schemas, and agent identities. It can block `execute_command` calls while allowing `read_file`, enforce per-tool rate limits, and validate JWT claims with algorithm pinning. It also scans MCP servers for CVEs, secrets, and typo-squatting — things a WAF cannot do.
+
+### Does the proxy add latency?
+
+Typically **5–25ms** for policy evaluation (regex + schema + semantic shell analysis). JWT validation adds another **5–15ms**. The total proxy overhead is under 50ms for most calls. If LLM semantic analysis is enabled, that adds 200–800ms per tool definition scan (not per call — it runs once during manifest verification, not on every intercepted request).
+
+### Can I run it without blocking anything?
+
+Yes. Set the policy mode to `audit`:
+
+```yaml
+policy:
+  mode: audit
+```
+
+This logs every decision without blocking or flagging. Use it to understand what your agents are calling before enforcing rules. You can also run `mcp-guardian proxy --policy ./policy.yaml --dry-run` to simulate blocking against historical call records.
+
+### What happens if the policy engine crashes?
+
+The proxy does **not** pass traffic through if the engine is unavailable — it returns a JSON-RPC error to the client. This is intentional fail-safe behavior. The policy engine is a synchronous, in-process evaluator (no network calls for regex/schema rules), so crashes are extremely unlikely. The LLM semantic layer gracefully degrades to an info-level "skipped" result if the API is unreachable.
+
+### Can I use it with multiple replicas?
+
+Yes, with caveats. The proxy works single-instance or multi-replica, but **rate limiting and session state require Redis** (`REDIS_URL`) in multi-replica mode. Without Redis, rate limits are per-pod and session tokens from pod A are invalid on pod B. Set `GUARDIAN_STRICT_MODE=true` to refuse startup if Redis is missing in a multi-replica/K8s environment. For the audit database, use separate DB paths (`MCP_GUARDIAN_DB_PATH`) per instance, or migrate to PostgreSQL (planned for v2.4).
+
+### Does the LLM semantic layer send my data to Anthropic?
+
+Only if you configure `ANTHROPIC_API_KEY`. The semantic scanner sends **tool definitions** (name + description + inputSchema) to Claude for security analysis — never the actual tool call arguments or response content. Tool definitions are metadata, not user data. You can disable the semantic layer entirely with `--skip-semantic` or by not setting the API key.
+
+### How do I add my own secret patterns?
+
+Add them to the `MCP_GUARDIAN_SECRET_ALLOWLIST` environment variable (comma-separated) to suppress false positives. For custom detection patterns, you can extend `src/scanners/secret-scanner.ts` and rebuild. The entropy threshold (`4.5` bits per character) is also configurable in source.
+
+### Can I use it as a library in my own tool?
+
+Yes. The `@mcp-guardian/core` package exports the detection engine directly:
+
+```typescript
+import { scanServer, fetchToolsFromStdio } from '@mcp-guardian/core';
+
+const tools = await fetchToolsFromStdio({ command: 'npx', args: ['@my-mcp-server'] });
+const result = await scanServer('my-server', tools, 'stdio');
+// result.status: 'clean' | 'warning' | 'critical'
+// result.tools: per-tool scan results with issues
+```
+
+The root package (`@mcp-guardian/server`) exports the full CLI, proxy, and MCP server.
+
+### What's the default policy if I don't provide one?
+
+The `default-policy.yaml` shipped with the package blocks shell injection patterns (curl, wget, rm -rf, command chaining, /etc/passwd), explicitly denies dangerous tools (execute_command, bash, sh, eval, exec, etc.), rate-limits at 120 calls/min, flags tokens over 50K, and applies `default_action: block` — meaning anything not explicitly allowed is blocked. You can override this with your own policy file.
+
+### Does it work with Windows?
+
+The TypeScript codebase is platform-agnostic, but the **stdio proxy** spawns child processes and uses Unix signal handling. Windows support via WSL2 is fully functional. Native Windows `cmd.exe` / PowerShell is experimentally supported but not the primary target. The HTTP/SSE proxy transport works on any platform.
+
+### How do I get alerted when something gets blocked?
+
+Set `ALERT_WEBHOOK_URL` to a Slack or Discord webhook URL, and optionally `ALERT_MIN_SEVERITY` (default: `warning`). The alerter fires on policy blocks, circuit breaker state changes, and cost threshold breaches. Messages include server name, rule triggered, and timestamp.
+
+### Where is the database stored?
+
+`~/.mcp-guardian/history.db` by default. Override with `MCP_GUARDIAN_DB_PATH`. The database uses SQLite with WAL mode, advisory file locking, and automatic purging of records older than 30 days. For tests, pass `':memory:'` to use an in-memory database.
+
+### How do I verify my policy before deploying?
+
+Use dry-run mode:
+
+```bash
+mcp-guardian proxy --policy ./new-policy.yaml --dry-run
+```
+
+This evaluates the policy against every call record in your history database and prints a per-server block/pass breakdown without activating the proxy. If the block rate is unexpectedly high or low, adjust rules before deploying.
+
+### How do I contribute?
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. The monorepo uses pnpm workspaces with turbo for build orchestration. Run `pnpm install && pnpm build && pnpm test` to verify your setup. All PRs must pass the 80% coverage threshold and the red-team corpus evaluation (F1 ≥ 85%).
+
+### Is it production-ready?
+
+MCP Guardian is **production-grade for controlled environments** (single-instance or Redis-backed multi-replica with `GUARDIAN_STRICT_MODE`). It handles the core use case — active policy enforcement with audit trails — reliably with WAL-mode SQLite and crash-safe writes. For high-trust enterprise deployments, a third-party security audit is planned for v2.5. See [SECURITY.md](SECURITY.md) for details on our security posture.
+
+---
+
 ## Roadmap
 
 ### v2.4
