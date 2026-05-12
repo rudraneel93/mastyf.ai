@@ -63,7 +63,9 @@ export class SecurityScanner {
     const cmdWarnings: import('../scanners/command-validator.js').CommandWarning[] =
       cmdWarningsResult.status === 'fulfilled' ? cmdWarningsResult.value : [];
 
-    const score = calculateSecurityScore(cves, auth, typos, secrets, cmdWarnings);
+    const score = calculateSecurityScore(cves, auth, typos, secrets, cmdWarnings, DEFAULT_SCORING, {
+      hasMTLS: auth.method === 'mTLS',
+    });
     const recommendations = generateRecommendations(cves, auth, typos, secrets, cmdWarnings);
     return {
       serverName: server.name,

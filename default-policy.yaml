@@ -1,53 +1,43 @@
----
-# MCP Guardian — Default Policy Configuration
-# Use with: mcp-guardian proxy --policy ./default-policy.yaml
-
-version: "1.0"
+version: '1.0'
 policy:
-  # Mode: audit (passive, log only), warn (block → flag), block (active enforcement)
-  mode: warn
-
+  mode: block
   rules:
-    # ── Block shell injection patterns ──────────────────────────
-    - name: "block-shell-injection"
-      description: "Block tool calls containing shell injection or command chaining"
+    - name: block-shell-injection
+      description: Block tool calls containing shell injection or command chaining
       action: block
       patterns:
-        - "curl\\s|wget\\s"           # Network download tools
-        - "rm\\s+-rf"                 # Destructive commands
-        - ";\\s*\\w"                  # Shell chaining
-        - "&&|\\|\\|"                 # Shell logical operators
-        - "\\$\\{"                    # Shell variable expansion
-        - "`[^`]+`"                   # Backtick command substitution
-        - "/etc/passwd|/etc/shadow"   # Sensitive system files
-
-    # ── Block path traversal ─────────────────────────────────────
-    - name: "block-path-traversal"
-      description: "Block tool calls with path traversal attempts"
+        - curl\s|wget\s
+        - rm\s+-rf
+        - ;\s*\w
+        - '&&|\|\|'
+        - \$\{
+        - '`[^`]+`'
+        - /etc/passwd|/etc/shadow
+    - name: block-path-traversal
+      description: Block tool calls with path traversal attempts
       action: block
       patterns:
-        - "\\.\\.\\/"                 # Path traversal
-
-    # ── Deny dangerous tools ─────────────────────────────────────
-    - name: "deny-dangerous-tools"
-      description: "Explicitly deny tools that can execute arbitrary code"
+        - \.\.\/
+    - name: deny-dangerous-tools
+      description: Explicitly deny tools that can execute arbitrary code
       action: block
       tools:
         deny:
-          - "execute_command"
-          - "bash"
-          - "sh"
-          - "eval"
-          - "exec"
-
-    # ── Rate limit ───────────────────────────────────────────────
-    - name: "rate-limit-tool-calls"
-      description: "Limit tool calls to 120 per minute per server+tool"
+          - execute_command
+          - bash
+          - sh
+          - eval
+          - exec
+          - system
+          - spawn
+          - fork
+          - popen
+          - source
+    - name: rate-limit-tool-calls
+      description: Limit tool calls to 120 per minute per server+tool
       action: flag
       maxCallsPerMinute: 120
-
-    # ── Token budget ─────────────────────────────────────────────
-    - name: "token-budget"
-      description: "Flag tool calls exceeding 50K input tokens"
+    - name: token-budget
+      description: Flag tool calls exceeding 50K input tokens
       action: flag
       maxTokens: 50000

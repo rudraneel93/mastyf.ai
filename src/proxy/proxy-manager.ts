@@ -3,17 +3,38 @@ import { McpProxyServer } from './proxy-server.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
+import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 
 export class ProxyManager {
   private proxies: McpProxyServer[] = [];
+  private policyEngine: PolicyEngine | undefined;
 
   constructor(
     private db: HistoryDatabase,
-    private policyEngine?: PolicyEngine,
+    policyEngineOrWatcher?: PolicyEngine | PolicyWatcher,
     private authValidator?: OAuthValidator,
-  ) {}
+  ) {
+    // Resolve PolicyWatcher → current engine on construction
+    if (policyEngineOrWatcher instanceof PolicyWatcher) {
+      this.policyEngine = policyEngineOrWatcher.get() ?? undefined;
+      // Register hot-reload callback: on policy file change, atomically swap engines on all proxies
+      const updateEngine = () => {
+        const newEngine = policyEngineOrWatcher!.get();
+        if (newEngine) {
+          this.policyEngine = newEngine;
+          for (const proxy of this.proxies) {
+            proxy.setPolicyEngine(newEngine);
+          }
+          Logger.info(`[proxy-manager] Policy hot-reloaded across ${this.proxies.length} proxy(s)`);
+        }
+      };
+      (policyEngineOrWatcher as PolicyWatcher).onReload = updateEngine;
+    } else {
+      this.policyEngine = policyEngineOrWatcher ?? undefined;
+    }
+  }
 
   getProxies(): McpProxyServer[] {
     return this.proxies;

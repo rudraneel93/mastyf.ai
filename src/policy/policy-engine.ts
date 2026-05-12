@@ -141,7 +141,8 @@ export class PolicyEngine {
     }
 
     // v1.2: Semantic shell detection rule — automatic high-risk pattern block
-    if (rule.name === 'block-shell-injection' || rule.name.includes('shell')) {
+    // Only run semantic shell detection for rules explicitly named for it (not any rule containing "shell")
+    if (rule.name === 'block-shell-injection') {
       // Command substitution is always high-risk
       if (analysis.shellRisk.hasCommandSubstitution) {
         return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: shell command substitution detected in arguments' };

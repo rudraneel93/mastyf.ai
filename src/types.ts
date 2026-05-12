@@ -16,8 +16,10 @@ export interface SecurityReport {
   authStatus: AuthStatus;
   typoSquatRisk: TypoSquatResult[];
   secretsFound: SecretFinding[];
+  cmdWarnings?: import('./scanners/command-validator.js').CommandWarning[];
   score: number; // 0-100
   recommendations: string[];
+  hasMTLS?: boolean;
 }
 
 export interface CveFinding {

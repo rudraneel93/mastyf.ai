@@ -99,6 +99,21 @@ export class PostgresDatabase implements IDatabase {
     );
   }
 
+  async getLatestSecurityScan(serverName: string): Promise<unknown | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM security_scans WHERE server_name = $1 ORDER BY id DESC LIMIT 1',
+      [serverName]
+    );
+    return result.rows.length > 0 ? result.rows[0] : null;
+  }
+
+  async getDistinctScannedServers(): Promise<string[]> {
+    const result = await this.pool.query(
+      'SELECT DISTINCT server_name FROM security_scans ORDER BY server_name'
+    );
+    return result.rows.map((r: any) => r.server_name);
+  }
+
   async addCostRecord(serverName: string, tokens: number, cost: number): Promise<void> {
     await this.pool.query(
       'INSERT INTO cost_records (server_name, tokens_used, cost_usd) VALUES ($1, $2, $3)',

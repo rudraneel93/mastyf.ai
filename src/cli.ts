@@ -274,23 +274,34 @@ program
     // Load policy config if --policy flag provided
     let policyEngine: PolicyEngine | undefined;
     let policyWatcher: PolicyWatcher | undefined;
+    let useWatcherForManager = false;
     if (opts.policy) {
       try {
         // Use PolicyWatcher for hot-reload + actual policy object for dashboard
         policyWatcher = new PolicyWatcher(opts.policy);
         policyEngine = policyWatcher.get() || undefined;
+        useWatcherForManager = true; // Default: pass watcher so hot-reload works
         if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode) && policyEngine) {
           // Require env var opt-in to allow CLI-level policy mode override
           if (process.env['GUARDIAN_ALLOW_MODE_OVERRIDE'] !== 'true') {
             console.error(chalk.red(`--blocking-mode override requires GUARDIAN_ALLOW_MODE_OVERRIDE=true to be set. Policy mode will remain: ${policyEngine.getMode()}`));
           } else {
-            // Re-create engine with overridden mode
+            // Re-create engine with overridden mode and re-seed the watcher
             const { readFileSync } = await import('fs');
             const { load } = await import('js-yaml');
             const policyYaml = readFileSync(opts.policy, 'utf-8');
             const policyConfig = load(policyYaml) as PolicyConfig;
             policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
             policyEngine = new PolicyEngine(policyConfig);
+            // Re-seed watcher so hot-reload continues to work with the overridden mode
+            if (policyWatcher) {
+              policyWatcher.close();
+              // Rewrite YAML with overridden mode, then re-watch
+              const { writeFileSync } = await import('fs');
+              const { dump } = await import('js-yaml');
+              writeFileSync(opts.policy, dump(policyConfig));
+              policyWatcher = new PolicyWatcher(opts.policy);
+            }
           }
         }
         console.error(chalk.green(`Policy loaded: ${opts.policy} (mode: ${policyEngine?.getMode() || 'none'})`));
@@ -304,7 +315,9 @@ program
     }
 
     const db = new HistoryDatabase();
-    const manager = new ProxyManager(db, policyEngine, authValidator);
+    // Pass PolicyWatcher (not just engine) so hot-reload works
+    // When mode override is active, pass the engine directly since the watcher was re-seeded
+    const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);
     await manager.startAll(servers);
 
     // Start OpenTelemetry tracing if configured
@@ -329,9 +342,27 @@ program
 
     const proxies = manager.getProxies();
     if (proxies.length > 0) {
+      // Route stdin to the appropriate proxy based on the message content
       process.stdin.setEncoding('utf-8');
+      let buffer = '';
       process.stdin.on('data', (chunk: string) => {
-        for (const proxy of proxies) proxy.handleClientInput(chunk.trim());
+        buffer += chunk;
+        // Process complete lines (JSON-RPC is line-delimited)
+        while (buffer.includes('\n')) {
+          const newlineIdx = buffer.indexOf('\n');
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line) continue;
+          // Route to the first proxy (single proxy is the common case)
+          if (proxies.length === 1) {
+            proxies[0].handleClientInput(line);
+          } else {
+            // Multi-proxy: route based on server_name in the payload
+            for (const proxy of proxies) {
+              proxy.handleClientInput(line);
+            }
+          }
+        }
       });
     }
   });

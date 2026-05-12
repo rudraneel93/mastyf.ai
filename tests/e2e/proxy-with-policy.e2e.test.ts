@@ -75,7 +75,12 @@ describe('E2E: Proxy with default-policy.yaml', () => {
         '--blocking-mode', 'block',
       ], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, DASHBOARD_ENABLED: 'false', METRICS_ENABLED: 'false' },
+        env: {
+          ...process.env,
+          DASHBOARD_ENABLED: 'false',
+          METRICS_ENABLED: 'false',
+          GUARDIAN_ALLOW_MODE_OVERRIDE: 'true',
+        },
       });
 
       proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });

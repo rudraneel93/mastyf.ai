@@ -14,6 +14,8 @@ export class PolicyWatcher {
   private current: PolicyEngine | null = null;
   private watcher: FSWatcher | null = null;
   private policyPath: string;
+  /** Callback invoked after a successful hot-reload (set by ProxyManager) */
+  public onReload: (() => void) | null = null;
 
   constructor(policyPath: string) {
     this.policyPath = policyPath;

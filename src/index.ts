@@ -95,10 +95,11 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     try {
       // Try to read from the actual database (v2.1.2 fix — wired to real DB)
       const db = container.db;
-      // Get the most recent security scan from DB across all servers
-      const allServers = ['github', 'filesystem', 'puppeteer', 'echo']; // commonly scanned servers
+      // Get the most recent security scan from DB across all known servers dynamically
       const recentScans: unknown[] = [];
-      for (const srv of allServers) {
+      // Query all known servers from the DB instead of a hardcoded list
+      const knownServers = await db.getDistinctScannedServers();
+      for (const srv of knownServers) {
         const entry = await db.getLatestSecurityScan(srv);
         if (entry) recentScans.push(entry);
       }

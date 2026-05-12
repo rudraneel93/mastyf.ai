@@ -81,8 +81,17 @@ export class McpProxyServer {
     this.spawnArgs = args || [];
     // Explicit env — do NOT leak parent process secrets to child
     this.spawnEnv = { ...env } as Record<string, string>;
+    // Only pass whitelisted system env vars to child processes
+    const SAFE_ENV_KEYS = new Set([
+      'PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TZ',
+      'NODE_PATH', 'NODE_ENV',
+      // Allow explicit MCP-related env vars
+      'MCP_GUARDIAN_MAX_PAYLOAD_BYTES',
+    ]);
     for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined) (this.spawnEnv as any)[k] = v;
+      if (v !== undefined && SAFE_ENV_KEYS.has(k)) {
+        (this.spawnEnv as any)[k] = v;
+      }
     }
     this.tokenCounter = new TokenCounter();
     this.db = db;
@@ -426,6 +435,12 @@ export class McpProxyServer {
       return `Per-client rate limit exceeded: ${currentCount}/100 calls per minute (agent: ${identity.sub})`;
     }
     return null;
+  }
+
+  /** Atomically swap the active policy engine (used by hot-reload) */
+  setPolicyEngine(engine: PolicyEngine): void {
+    this.policyEngine = engine;
+    Logger.info(`[proxy:${this.serverName}] Policy engine hot-swapped — mode: ${engine.getMode()}`);
   }
 
   kill(): void {

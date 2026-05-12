@@ -148,10 +148,10 @@ export class HistoryDatabase implements IDatabase {
     });
   }
 
-  async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
+  async getCallRecordsForServer(serverName: string, limit = 5000): Promise<ProxyCallRecord[]> {
     const rows = this.db
-      .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC')
-      .all(serverName) as Array<Record<string, unknown>>;
+      .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC LIMIT ?')
+      .all(serverName, limit) as Array<Record<string, unknown>>;
     // Map snake_case SQLite columns to camelCase ProxyCallRecord fields
     return rows.map((row: any) => ({
       serverName: row.server_name ?? '',
@@ -188,6 +188,14 @@ export class HistoryDatabase implements IDatabase {
     return this.db
       .prepare('SELECT * FROM security_scans WHERE server_name = ? ORDER BY id DESC LIMIT ?')
       .all(serverName, limit) as SecurityRecord[];
+  }
+
+  /** Returns a deduplicated list of all server names that have been scanned. */
+  async getDistinctScannedServers(): Promise<string[]> {
+    const rows = this.db
+      .prepare('SELECT DISTINCT server_name FROM security_scans ORDER BY server_name')
+      .all() as Array<{ server_name: string }>;
+    return rows.map((r) => r.server_name);
   }
 
   // ── Cost records ─────────────────────────────────────────────────────────
