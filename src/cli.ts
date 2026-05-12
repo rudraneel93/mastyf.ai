@@ -54,6 +54,7 @@ interface ProxyOptions {
   config?: string;
   policy?: string;
   blockingMode?: string;
+  dryRun?: boolean;
   authIssuer?: string;
   authAudience?: string;
   authRequired?: boolean;
@@ -249,12 +250,83 @@ program
   .option('--auth-issuer <url>', 'OIDC issuer URL for JWT validation (e.g., https://accounts.google.com)')
   .option('--auth-audience <aud>', 'Expected audience claim in JWT')
   .option('--auth-required', 'Require authentication for all tool calls (fail-closed)', false)
+  .option('--dry-run', 'Simulate policy against historical call_records without activating the proxy')
   .action(async (opts: ProxyOptions) => {
     const paths = opts.config ? [opts.config] : ConfigParser.findConfigPaths();
     if (paths.length === 0) { console.error(chalk.red('No MCP config files found. Use --config to specify a path.')); process.exit(1); }
 
     const servers = ConfigParser.parse(paths[0]);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
+
+    // ── --dry-run: simulate policy against historical call_records ──
+    if (opts.dryRun) {
+      if (!opts.policy) {
+        console.error(chalk.red('--dry-run requires --policy to be specified'));
+        process.exit(1);
+      }
+      // Load policy inline for dry-run (before policyEngine is declared in normal proxy path)
+      let dryRunEngine: PolicyEngine;
+      try {
+        const { readFileSync } = await import('fs');
+        const { load } = await import('js-yaml');
+        const policyYaml = readFileSync(opts.policy, 'utf-8');
+        const policyConfig = load(policyYaml) as PolicyConfig;
+        if (opts.blockingMode && ['audit', 'warn', 'block'].includes(opts.blockingMode)) {
+          policyConfig.policy.mode = opts.blockingMode as 'audit' | 'warn' | 'block';
+        }
+        dryRunEngine = new PolicyEngine(policyConfig);
+      } catch (err: any) {
+        console.error(chalk.red(`Failed to load policy for dry-run: ${err?.message}`));
+        process.exit(1);
+      }
+      const db = new HistoryDatabase();
+      let totalBlocked = 0;
+      let totalPassed = 0;
+      const perServer: Record<string, { blocked: number; passed: number }> = {};
+
+      console.error(chalk.dim(`Dry-run: evaluating ${dryRunEngine.getMode()} policy against historical call records...\n`));
+
+      for (const server of servers) {
+        const records = await db.getCallRecordsForServer(server.name);
+        perServer[server.name] = { blocked: 0, passed: 0 };
+
+        for (const rec of records) {
+          const context = {
+            serverName: rec.serverName,
+            toolName: rec.toolName,
+            arguments: {},
+            requestId: `dry-run-${rec.serverName}-${rec.toolName}`,
+            requestTokens: rec.requestTokens,
+            timestamp: new Date().toISOString(),
+          };
+          const decision = dryRunEngine.evaluate(context);
+          if (decision.action === 'block') {
+            perServer[server.name].blocked++;
+            totalBlocked++;
+          } else {
+            perServer[server.name].passed++;
+            totalPassed++;
+          }
+        }
+      }
+
+      // ── Print summary ────────────────────────────────────
+      console.log(chalk.bold('\n📊 Dry-Run Results\n'));
+      for (const [srv, counts] of Object.entries(perServer)) {
+        const total = counts.blocked + counts.passed;
+        const pct = total > 0 ? Math.round((counts.blocked / total) * 100) : 0;
+        const color = pct > 50 ? chalk.red : pct > 10 ? chalk.yellow : chalk.green;
+        console.log(`  ${srv}: ${color(`${counts.blocked} blocked`)}, ${counts.passed} passed (${pct}% block rate)`);
+      }
+      console.log(chalk.bold(`\n  Total: ${chalk.red(`${totalBlocked} would be blocked`)}, ${chalk.green(`${totalPassed} would pass`)}`));
+
+      if (totalBlocked > 0) {
+        console.log(chalk.yellow('\n💡 Tip: Use --blocking-mode audit first, then switch to warn, then block.'));
+      }
+
+      db.close();
+      process.exit(0);
+    }
 
     // Configure OAuth 2.1 if --auth-issuer provided
     let authValidator: OAuthValidator | undefined;
