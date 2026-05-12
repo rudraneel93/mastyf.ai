@@ -8,11 +8,23 @@ export class CostAuditor {
   private tokenCounter: TokenCounter;
   private pricing: PricingClient;
   private db: HistoryDatabase | undefined;
+  private pricingModel: string;
 
-  constructor(pricingClient?: PricingClient, db?: HistoryDatabase) {
+  constructor(pricingClient?: PricingClient, db?: HistoryDatabase, pricingModel?: string) {
     this.tokenCounter = new TokenCounter();
     this.pricing = pricingClient || new PricingClient();
     this.db = db;
+    this.pricingModel = pricingModel || process.env['MCP_PRICING_MODEL'] || 'gpt-4o';
+  }
+
+  /** Dynamically change the pricing model for cost estimation. */
+  setPricingModel(model: string): void {
+    this.pricingModel = model;
+  }
+
+  /** Returns the currently active pricing model. */
+  getPricingModel(): string {
+    return this.pricingModel;
   }
 
   async auditServer(server: McpServerConfig): Promise<CostReport> {
@@ -51,7 +63,7 @@ export class CostAuditor {
   }
 
   private buildReportFromRecords(serverName: string, records: ProxyCallRecord[]): CostReport {
-    const pricingModel = 'gpt-4o';
+    const model = this.pricingModel;
     const toolMap = new Map<string, { inputTokens: number; outputTokens: number; calls: number }>();
 
     for (const r of records) {
@@ -68,9 +80,8 @@ export class CostAuditor {
 
     for (const [toolName, data] of toolMap) {
       const totalTokens = data.inputTokens + data.outputTokens;
-      const inputCost = this.pricing.calculateCost(data.inputTokens, pricingModel, false);
-      const outputCost = this.pricing.calculateCost(data.outputTokens, pricingModel, true);
-      // pricingModel is 'gpt-4o' which is always in the 97-model table — null is unreachable
+      const inputCost = this.pricing.calculateCost(data.inputTokens, model, false);
+      const outputCost = this.pricing.calculateCost(data.outputTokens, model, true);
       const cost = (inputCost ?? 0) + (outputCost ?? 0);
 
       breakdown.push({
@@ -90,7 +101,7 @@ export class CostAuditor {
       inputTokens: totalInput,
       outputTokens: totalOutput,
       estimatedCostUSD: Math.round(totalCost * 10000) / 10000,
-      pricingModel,
+      pricingModel: model,
       toolBreakdown: breakdown,
     };
   }
