@@ -1,7 +1,7 @@
 {
   "name": "mcp-guardian",
-  "version": "2.1.2",
-  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, CI/CD",
+  "version": "2.3.4",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, CI/CD, mTLS, zero-trust",
   "category": "Security",
   "tags": ["security", "policy", "governance", "audit", "mcp", "proxy", "zero-trust"],
   "install": "npm install -g @mcp-guardian/server@latest",

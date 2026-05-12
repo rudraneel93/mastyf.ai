@@ -96,7 +96,7 @@ const program = new Command();
 program
   .name('mcp-guardian')
   .description('Security, cost, and health audit for MCP infrastructure')
-  .version(process.env.npm_package_version || '2.1.1');
+  .version(process.env.npm_package_version || '2.3.4');
 
 program
   .command('scan')
@@ -220,7 +220,8 @@ program
     ]);
     container.db.close();
 
-    const overallScore = calculateOverallScore(security, health);
+    const costScores = costs.map(c => ({ estimatedCostUSD: c.estimatedCostUSD, pricingModel: c.pricingModel }));
+    const overallScore = calculateOverallScore(security, health, costScores);
     const configPath = opts.all ? `aggregated (${sourcePaths.length} files)` : (sourcePaths[0] || 'auto-detected');
     const fullReport: FullReport = { timestamp: new Date().toISOString(), configPath, security, costs, health, overallScore };
     const reporter = new ReportGenerator();

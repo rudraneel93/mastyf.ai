@@ -11,7 +11,7 @@ import {
 import { scanServer, verifyToolDefinitions, fetchToolsFromStdio, fetchToolsFromHttp } from '@mcp-guardian/core';
 
 const server = new Server(
-  { name: 'mcp-guardian', version: '2.0.0' },
+  { name: 'mcp-guardian', version: process.env.npm_package_version || '2.3.4' },
   { capabilities: { tools: {} } }
 );
 

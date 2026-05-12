@@ -7,7 +7,7 @@ import { runSemanticScan, type SemanticScanOptions } from "./semantic-scanner.js
 
 export interface ScanEngineOptions {
   semantic?: SemanticScanOptions & {
-    // Run semantic only if regex/schema already fired (default: true, saves cost)
+    // Run semantic only if regex/schema already fired (default: false for full coverage)
     onlyOnHits?: boolean;
     // Minimum confidence to report a semantic issue (default: 0.7)
     confidenceThreshold?: number;
@@ -49,7 +49,7 @@ export async function scanTool(
   options: ScanEngineOptions = {}
 ): Promise<ToolScanResult> {
   const confidenceThreshold = options.semantic?.confidenceThreshold ?? 0.7;
-  const onlyOnHits = options.semantic?.onlyOnHits ?? true;
+  const onlyOnHits = options.semantic?.onlyOnHits ?? false;
 
   let regexIssues: Issue[] = [];
   let schemaIssues: Issue[] = [];

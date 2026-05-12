@@ -27,14 +27,25 @@ function getLocalSecret(): string {
 }
 
 function canonicalize(tool: ToolDefinition): string {
-  // Stable JSON serialization — sorted keys
-  return JSON.stringify({
+  // Stable JSON serialization — deeply sorted keys for consistent hashing.
+  // This ensures that schema changes in nested inputSchema.properties are
+  // properly detected, not just top-level key reordering.
+  function deepSort(obj: unknown): unknown {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(deepSort);
+    const sorted: Record<string, unknown> = {};
+    const keys = Object.keys(obj as Record<string, unknown>).sort();
+    for (const key of keys) {
+      sorted[key] = deepSort((obj as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+
+  return JSON.stringify(deepSort({
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema ?? null,
-  }, Object.keys({
-    name: "", description: "", inputSchema: null,
-  }).sort());
+  }));
 }
 
 function hashTool(tool: ToolDefinition): string {

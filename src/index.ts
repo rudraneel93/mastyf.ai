@@ -59,7 +59,7 @@ const container = createContainer();
 const reporter = new ReportGenerator();
 
 const server = new Server(
-  { name: 'mcp-guardian', version: process.env.npm_package_version || '2.1.1' },
+  { name: 'mcp-guardian', version: process.env.npm_package_version || '2.3.4' },
   { capabilities: { tools: {} } }
 );
 
@@ -292,7 +292,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
         Promise.all(servers.map((s) => container.healthMonitor.checkServer(s))),
       ]);
-      const overallScore = calculateOverallScore(security, health);
+      const costScores = costs.map(c => ({ estimatedCostUSD: c.estimatedCostUSD, pricingModel: c.pricingModel }));
+      const overallScore = calculateOverallScore(security, health, costScores);
       const fullReport: FullReport = {
         timestamp: new Date().toISOString(),
         configPath: configDescription,
