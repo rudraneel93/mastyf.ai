@@ -1,9 +1,9 @@
 {
   "name": "mcp-guardian",
-  "version": "2.3.4",
-  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, CI/CD, mTLS, zero-trust",
+  "version": "2.3.9",
+  "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure — three-layer detection engine (regex → schema → LLM), YAML policy engine with hot-reload, 50+ secret patterns + Shannon entropy, AST command validation, JWT algorithm pinning, default-deny fail-closed, K8s Helm with probes and NetworkPolicy",
   "category": "Security",
-  "tags": ["security", "policy", "governance", "audit", "mcp", "proxy", "zero-trust"],
+  "tags": ["security", "policy", "governance", "audit", "mcp", "proxy", "zero-trust", "compliance", "observability", "cost-tracking"],
   "install": "npm install -g @mcp-guardian/server@latest",
   "repository": "https://github.com/rudraneel93/mcp-guardian",
   "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
@@ -17,6 +17,24 @@
     "prompts": true,
     "logging": true
   },
+  "tools": [
+    {
+      "name": "scan_security",
+      "description": "Scan MCP server configurations for CVEs, hardcoded secrets, typo-squatting, auth weaknesses, and command injection"
+    },
+    {
+      "name": "audit_costs",
+      "description": "Audit token usage and estimate costs per MCP server"
+    },
+    {
+      "name": "check_health",
+      "description": "Check health, latency, and reliability of MCP servers"
+    },
+    {
+      "name": "full_report",
+      "description": "Generate a complete security, cost, and health report for all MCP servers"
+    }
+  ],
   "environmentVariables": {
     "NVD_API_KEY": {
       "description": "NIST NVD API key for CVE lookups (optional)",
@@ -27,12 +45,26 @@
       "required": false
     },
     "DASHBOARD_ENABLED": {
-      "description": "Enable web dashboard server",
+      "description": "Enable web dashboard (port 4000)",
+      "required": false
+    },
+    "METRICS_ENABLED": {
+      "description": "Expose Prometheus metrics at /metrics, /healthz, /readyz",
+      "required": false
+    },
+    "REDIS_URL": {
+      "description": "Redis connection for HA rate limiting and session state (required for multi-replica)",
+      "required": false
+    },
+    "ALERT_WEBHOOK_URL": {
+      "description": "Slack/Discord webhook for critical policy alerts",
       "required": false
     }
   },
   "minimumCliVersion": "18.0.0",
   "releases": [
+    { "version": "2.3.9", "date": "2026-05-13", "notes": "Production hardening — 50+ secret patterns + entropy, AST command validator, DB file locking, DI interfaces, JWT algorithm pinning, WebSocket dashboard, default-deny fail-closed, /healthz /readyz, Helm NetworkPolicy, Slack/Discord alerter, comprehensive README with 15 FAQs" },
+    { "version": "2.3.4", "date": "2026-05-12", "notes": "Preview features — expanded secret scanner, semantic coverage, stdio retry, secret provider" },
     { "version": "2.1.0", "date": "2026-05-11", "notes": "Production hardening — better-sqlite3, HTTP proxy, transitive CVE, secrets, watchdog, CSP, scoring, retention" }
   ]
 }
