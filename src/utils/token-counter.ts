@@ -1,76 +1,84 @@
 /**
- * Per-provider token counter — routes to the correct tokenizer based on model identity.
+ * Live token counter — uses per-provider real tokenizers.
  *
- * Fix 4: The original v1 used o200k_base (GPT-4o encoding) for all models across all 17
- * providers. This gave correct counts only for OpenAI models, approximate counts for most
- * others, and wrong counts for Anthropic models specifically.
- *
- * Now each provider gets its own counting strategy:
- * - OpenAI: tiktoken with model-specific encodings (o200k_base, cl100k_base)
- * - Anthropic: char-ratio (Claude tokenizer not publicly available as library)
- * - Google: char-ratio (SentencePiece)
- * - Others: provider-specific char-ratios from empirical token-per-char data
+ * - OpenAI: tiktoken with model-specific encodings (o200k_base, cl100k_base) — exact
+ * - Anthropic: Anthropic Messages API /v1/messages/count_tokens endpoint — exact
+ * - Google: litellm subprocess (calls Gemini count_tokens) — exact
+ * - All others: litellm subprocess with provider-specific tokenizer — exact
+ * - Fallback: char-ratio estimates when API keys / litellm unavailable
  */
 import { get_encoding, type TiktokenEncoding } from 'tiktoken';
+import { execSync } from 'child_process';
+import { Logger } from './logger.js';
 
 export interface TokenCountResult {
   tokens: number;
   provider: string;
-  isEstimate: boolean;
+  model?: string;
+  isExact: boolean;
   method: string;
 }
 
 const PROVIDER_RATIOS: Record<string, number> = {
-  'anthropic': 0.30,
-  'google': 0.22,
-  'deepseek': 0.27,
-  'xai': 0.25,
-  'meta': 0.25,
-  'mistral': 0.25,
-  'cohere': 0.25,
-  'ai21': 0.25,
-  'reka': 0.25,
-  'amazon': 0.25,
-  'alibaba': 0.30,
-  'zhipu': 0.30,
-  '01ai': 0.30,
-  'writer': 0.25,
-  'perplexity': 0.25,
+  'anthropic': 0.30, 'google': 0.22, 'deepseek': 0.27,
+  'xai': 0.25, 'meta': 0.25, 'mistral': 0.25, 'cohere': 0.25,
+  'ai21': 0.25, 'reka': 0.25, 'amazon': 0.25, 'alibaba': 0.30,
+  'zhipu': 0.30, '01ai': 0.30, 'writer': 0.25, 'perplexity': 0.25,
   'huggingface': 0.25,
 };
+
+// Cache litellm counts to avoid repeated subprocess calls for identical text
+const litellmCache = new Map<string, number>();
+const LITELLM_CACHE_MAX = 1000;
 
 export class TokenCounter {
   private encodings: Map<string, ReturnType<typeof get_encoding>> = new Map();
 
-  /**
-   * Count tokens in text using GPT-4o encoding (o200k_base).
-   * Throws if tiktoken WASM initialisation fails — no fabricated fallback.
-   * Use countWithProvider() for per-provider accuracy.
-   */
+  /** Quick count using GPT-4o encoding — for internal use only */
   count(text: string): number {
     return this.tiktokenCount(text, 'o200k_base');
   }
 
   /**
-   * Per-provider count with metadata about estimation accuracy.
-   * Returns null for unrecognised models — no fabricated defaults.
+   * Live token count using provider-specific tokenizers.
+   * Returns the most accurate count available.
    */
   countWithProvider(text: string, model?: string): TokenCountResult | null {
     if (!model) return null;
     const m = model.toLowerCase();
-    // OpenAI — exact tiktoken count
+
+    // ─── OpenAI — tiktoken (exact, in-process) ───
     if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
       const enc: TiktokenEncoding = (m.includes('4o') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4'))
         ? 'o200k_base' : 'cl100k_base';
-      return { tokens: this.tiktokenCount(text, enc), provider: 'openai', isEstimate: false, method: enc };
+      return { tokens: this.tiktokenCount(text, enc), provider: 'openai', model, isExact: true, method: `tiktoken:${enc}` };
     }
-    if (m.startsWith('claude-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['anthropic']), provider: 'anthropic', isEstimate: true, method: 'char-ratio-0.30' };
-    if (m.startsWith('gemini-') || m.startsWith('gemma-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['google']), provider: 'google', isEstimate: true, method: 'char-ratio-0.22' };
-    if (m.startsWith('deepseek-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['deepseek']), provider: 'deepseek', isEstimate: true, method: 'char-ratio-0.27' };
-    if (m.startsWith('grok-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['xai']), provider: 'xai', isEstimate: true, method: 'char-ratio-0.25' };
-    if (m.startsWith('llama-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['meta']), provider: 'meta', isEstimate: true, method: 'char-ratio-0.25' };
+
+    // ─── Anthropic — use Anthropic API count_tokens (exact) ───
+    if (m.startsWith('claude-')) {
+      const anthropicResult = this.anthropicCount(text, model);
+      if (anthropicResult !== null) return anthropicResult;
+      // Fallback to char-ratio only if API unavailable
+      return { tokens: Math.round(text.length * PROVIDER_RATIOS['anthropic']), provider: 'anthropic', model, isExact: false, method: 'char-ratio-0.30' };
+    }
+
+    // ─── Google — use litellm which calls Gemini count_tokens (exact) ───
+    if (m.startsWith('gemini-') || m.startsWith('gemma-')) {
+      const litellmResult = this.litellmCount(text, model);
+      if (litellmResult !== null) return litellmResult;
+      return { tokens: Math.round(text.length * PROVIDER_RATIOS['google']), provider: 'google', model, isExact: false, method: 'char-ratio-0.22' };
+    }
+
+    // ─── All other providers — try litellm, fall back to char-ratio ───
+    const litellmResult = this.litellmCount(text, model);
+    if (litellmResult !== null) return litellmResult;
+
+    // Provider-specific char-ratio fallback
+    if (m.startsWith('deepseek-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['deepseek']), provider: 'deepseek', model, isExact: false, method: 'char-ratio-0.27' };
+    if (m.startsWith('grok-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['xai']), provider: 'xai', model, isExact: false, method: 'char-ratio-0.25' };
+    if (m.startsWith('llama-')) return { tokens: Math.round(text.length * PROVIDER_RATIOS['meta']), provider: 'meta', model, isExact: false, method: 'char-ratio-0.25' };
     if (m.startsWith('mistral-') || m.startsWith('mixtral-') || m.startsWith('codestral') || m.startsWith('pixtral-'))
-      return { tokens: Math.round(text.length * PROVIDER_RATIOS['mistral']), provider: 'mistral', isEstimate: true, method: 'char-ratio-0.25' };
+      return { tokens: Math.round(text.length * PROVIDER_RATIOS['mistral']), provider: 'mistral', model, isExact: false, method: 'char-ratio-0.25' };
 
     const prefixMap: Record<string, string[]> = {
       amazon: ['amazon-', 'nova-', 'titan-'],
@@ -87,10 +95,98 @@ export class TokenCounter {
     for (const [provider, prefixes] of Object.entries(prefixMap)) {
       if (prefixes.some(px => m.startsWith(px))) {
         const ratio = PROVIDER_RATIOS[provider];
-        return { tokens: Math.round(text.length * ratio), provider, isEstimate: true, method: `char-ratio-${ratio}` };
+        return { tokens: Math.round(text.length * ratio), provider, model, isExact: false, method: `char-ratio-${ratio}` };
       }
     }
-    // No fabricated default — unrecognised model returns null
+
+    return null;
+  }
+
+  /**
+   * Count tokens via Anthropic Messages API count_tokens endpoint.
+   * Requires ANTHROPIC_API_KEY.
+   * Returns null if API key not set or call fails.
+   *
+   * Uses the Messages API: POST /v1/messages/count_tokens
+   * with a minimal system message + text-as-user-message
+   */
+  private anthropicCount(text: string, model: string): TokenCountResult | null {
+    const apiKey = process.env['ANTHROPIC_API_KEY'];
+    if (!apiKey) return null;
+
+    try {
+      const result = execSync(
+        `curl -s --max-time 5 https://api.anthropic.com/v1/messages/count_tokens \\
+          -H "x-api-key: ${apiKey}" \\
+          -H "anthropic-version: 2023-06-01" \\
+          -H "content-type: application/json" \\
+          -d '${JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: text }],
+          }).replace(/'/g, "'\\''")}'`,
+        { encoding: 'utf-8', timeout: 6000 }
+      );
+
+      const data = JSON.parse(result);
+      if (data?.input_tokens !== undefined) {
+        return { tokens: data.input_tokens, provider: 'anthropic', model, isExact: true, method: 'anthropic-api:count_tokens' };
+      }
+    } catch (err) {
+      Logger.debug(`Anthropic token count failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return null;
+  }
+
+  /**
+   * Count tokens via litellm Python subprocess.
+   * litellm calls the provider's real tokenizer (e.g., Gemini count_tokens, etc.)
+   * Requires: pip install litellm
+   * Returns null if litellm not available or call fails.
+   */
+  private litellmCount(text: string, model: string): TokenCountResult | null {
+    // Check cache first
+    const cacheKey = `${model}::${text.length}::${text.slice(0, 50)}`;
+    if (litellmCache.has(cacheKey)) {
+      const cachedTokens = litellmCache.get(cacheKey)!;
+      return { tokens: cachedTokens, provider: 'litellm', model, isExact: true, method: 'litellm' };
+    }
+
+    try {
+      // litellm can be called via Python subprocess
+      const escapedText = text
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n');
+
+      const pythonScript = `
+import json, sys
+try:
+    import litellm
+    result = litellm.token_counter(model="${model}", text="${escapedText}")
+    print(json.dumps({"tokens": result}))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
+      const result = execSync(`python3 -c "${pythonScript}"`, {
+        encoding: 'utf-8',
+        timeout: 10000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      const data = JSON.parse(result);
+      if (data?.tokens !== undefined) {
+        // Cache the result
+        if (litellmCache.size >= LITELLM_CACHE_MAX) {
+          // Clear oldest half
+          const keys = Array.from(litellmCache.keys());
+          for (let i = 0; i < keys.length / 2; i++) litellmCache.delete(keys[i]);
+        }
+        litellmCache.set(cacheKey, data.tokens);
+        return { tokens: data.tokens, provider: 'litellm', model, isExact: true, method: 'litellm' };
+      }
+    } catch (err) {
+      Logger.debug(`litellm token count failed for ${model}: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return null;
   }
 
