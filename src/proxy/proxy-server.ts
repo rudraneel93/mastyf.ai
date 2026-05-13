@@ -194,13 +194,15 @@ export class McpProxyServer {
               responseText,
             );
 
-            if (injectionFindings.length > 0 || allDetections.length > 0) {
+            const hasCritical = injectionFindings.some(f => f.severity === 'critical');
+            const hasHigh = injectionFindings.some(f => f.severity === 'high');
+            const hasDetections = injectionFindings.length > 0 || allDetections.length > 0;
+
+            if (hasDetections) {
               const allMessages = [
                 ...allDetections,
                 ...injectionFindings.map(f => `${f.severity.toUpperCase()}: ${f.description} (${f.matchPreview})`),
               ];
-
-              const hasCritical = injectionFindings.some(f => f.severity === 'critical');
 
               Logger.warn(
                 `[proxy:${this.serverName}] Suspicious response from '${this.requestToolName}': ${allMessages.slice(0, 5).join('; ')}` +
@@ -214,6 +216,7 @@ export class McpProxyServer {
                 detections: allMessages,
                 criticalCount: injectionFindings.filter(f => f.severity === 'critical').length,
                 highCount: injectionFindings.filter(f => f.severity === 'high').length,
+                blocked: (hasCritical || hasHigh) && this.policyEngine?.getMode() === 'block',
                 requestId: this.currentRequestId,
               });
 
@@ -221,6 +224,43 @@ export class McpProxyServer {
                 server_name: this.serverName,
                 severity: hasCritical ? 'critical' : 'high',
               });
+            }
+
+            // ═══ BLOCK response forwarding when policy is in block mode ═══
+            const policyMode = this.policyEngine?.getMode() ?? 'audit';
+            if ((hasCritical || hasHigh) && policyMode === 'block') {
+              // Record as blocked
+              const blockedRecord: ProxyCallRecord = {
+                serverName: this.serverName,
+                toolName: this.requestToolName || 'unknown',
+                requestTokens: this.requestTokens,
+                responseTokens: 0,
+                totalTokens: this.requestTokens,
+                durationMs: Date.now() - this.requestStartTime,
+                timestamp: new Date().toISOString(),
+              };
+              this.db.addCallRecord(blockedRecord).catch(() => {});
+              Metrics.blockedRequestsTotal.inc({
+                server_name: this.serverName,
+                block_reason: hasCritical ? 'response_injection_critical' : 'response_injection_high',
+                rule: 'response-inspection',
+              });
+              Metrics.requestsTotal.inc({
+                server_name: this.serverName,
+                decision: 'block',
+                authn_success: 'true',
+              });
+
+              // Send error response instead of the malicious upstream response
+              this.sendError(
+                msg.id,
+                -32002,
+                'MCP Guardian: Tool response blocked — ' +
+                  `${hasCritical ? 'critical' : 'high'}-severity prompt injection detected`
+              );
+              this.currentRequestId = null;
+              this.requestToolName = null;
+              return; // ❌ Do NOT forward the malicious response to the AI client
             }
           }
 
