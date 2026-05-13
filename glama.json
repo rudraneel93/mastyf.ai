@@ -1,15 +1,30 @@
 {
   "name": "mcp-guardian",
-  "version": "2.3.11",
+  "version": "2.3.16",
   "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure — three-layer detection engine (regex → schema → LLM), YAML policy engine with hot-reload, 50+ secret patterns + Shannon entropy, AST command validation, JWT algorithm pinning, default-deny fail-closed, K8s Helm with probes and NetworkPolicy",
   "category": "Security",
-  "tags": ["security", "policy", "governance", "audit", "mcp", "proxy", "zero-trust", "compliance", "observability", "cost-tracking"],
+  "tags": [
+    "security",
+    "policy",
+    "governance",
+    "audit",
+    "mcp",
+    "proxy",
+    "zero-trust",
+    "compliance",
+    "observability",
+    "cost-tracking"
+  ],
   "install": "npm install -g @mcp-guardian/server@latest",
   "repository": "https://github.com/rudraneel93/mcp-guardian",
   "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
   "license": "MIT",
   "runtime": "node",
-  "transport": ["stdio", "http", "sse"],
+  "transport": [
+    "stdio",
+    "http",
+    "sse"
+  ],
   "entrypoint": "dist/index.js",
   "capabilities": {
     "tools": true,
@@ -63,8 +78,20 @@
   },
   "minimumCliVersion": "18.0.0",
   "releases": [
-    { "version": "2.3.9", "date": "2026-05-13", "notes": "Production hardening — 50+ secret patterns + entropy, AST command validator, DB file locking, DI interfaces, JWT algorithm pinning, WebSocket dashboard, default-deny fail-closed, /healthz /readyz, Helm NetworkPolicy, Slack/Discord alerter, comprehensive README with 15 FAQs" },
-    { "version": "2.3.4", "date": "2026-05-12", "notes": "Preview features — expanded secret scanner, semantic coverage, stdio retry, secret provider" },
-    { "version": "2.1.0", "date": "2026-05-11", "notes": "Production hardening — better-sqlite3, HTTP proxy, transitive CVE, secrets, watchdog, CSP, scoring, retention" }
+    {
+      "version": "2.3.9",
+      "date": "2026-05-13",
+      "notes": "Production hardening — 50+ secret patterns + entropy, AST command validator, DB file locking, DI interfaces, JWT algorithm pinning, WebSocket dashboard, default-deny fail-closed, /healthz /readyz, Helm NetworkPolicy, Slack/Discord alerter, comprehensive README with 15 FAQs"
+    },
+    {
+      "version": "2.3.4",
+      "date": "2026-05-12",
+      "notes": "Preview features — expanded secret scanner, semantic coverage, stdio retry, secret provider"
+    },
+    {
+      "version": "2.1.0",
+      "date": "2026-05-11",
+      "notes": "Production hardening — better-sqlite3, HTTP proxy, transitive CVE, secrets, watchdog, CSP, scoring, retention"
+    }
   ]
 }
