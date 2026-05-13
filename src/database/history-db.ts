@@ -14,9 +14,10 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
+import { createRequire } from 'node:module';
+const _require = createRequire(import.meta.url);
 // `proper-lockfile` has no published `@types/` — safe: API surface is tiny
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const lockfile = require('proper-lockfile') as typeof import('proper-lockfile');
+const lockfile = _require('proper-lockfile') as typeof import('proper-lockfile');
 
 export interface SecurityRecord {
   id: number;
