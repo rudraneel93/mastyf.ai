@@ -56,6 +56,13 @@ const SECRET_RULES: SecretRule[] = [
   { id: 'generic-password', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: "password\\s*[:=]\\s*['\\\"]([^'\\\"]{8,})['\\\"]", entropy: 2.5, falsePositiveExclusions: ['changeme', 'password123', 'example'] },
   // JWT
   { id: 'jwt-secret', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: "jwt[_-]?secret\\s*[=:]\\s*['\\\"]?[a-zA-Z0-9\\-_]{20,}['\\\"]?" },
+  // Database connection strings — high-value, commonly leaked
+  { id: 'postgres-url',  provider: 'Database', severity: 'HIGH', flags: '', regex: 'postgres(?:ql)?://[^:]+:[^@\\s]+@[^\\s]+', entropy: 3.0 },
+  { id: 'mysql-url',     provider: 'Database', severity: 'HIGH', flags: '', regex: 'mysql://[^:]+:[^@\\s]+@[^\\s]+', entropy: 3.0 },
+  { id: 'mongodb-url',   provider: 'Database', severity: 'HIGH', flags: '', regex: 'mongodb(?:\\+srv)?://[^:]+:[^@\\s]+@[^\\s]+', entropy: 3.0 },
+  { id: 'redis-url',     provider: 'Database', severity: 'HIGH', flags: '', regex: 'redis://:?[^@\\s]+@[^\\s]+', entropy: 3.0 },
+  { id: 'db-url-generic', provider: 'Database', severity: 'HIGH', flags: 'i', regex: '(?:DATABASE_URL|DB_URL|DATABASE_URI)\\s*[=:]\\s*([a-z]+://[^@:\\s]+:[^@\\s]+@[^\\s]+)', entropy: 3.0 },
+  { id: 'uri-credentials', provider: 'Generic', severity: 'HIGH', flags: '', regex: '[a-z][a-z0-9+-]+://[^:@\\s]+:[^:@\\s]+@[^\\s]+', entropy: 3.5, falsePositiveExclusions: ['localhost', '127\\.0\\.0\\.1', '::1', 'example\\.com', 'test\\.com', '\\.local', '\\.internal'] },
 ];
 
 let compiledRules: Array<{ id: string; provider: string; severity: string; regex: RegExp; entropy?: number; exclusions?: RegExp[] }> | null = null;
