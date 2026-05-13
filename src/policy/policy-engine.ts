@@ -238,8 +238,17 @@ export class PolicyEngine {
   ];
 
   private static RESPONSE_EXFILTRATION_PATTERNS: RegExp[] = [
+    // curl/wget with explicit http(s):// URLs
     /\b(?:curl|wget|fetch|XMLHttpRequest|axios)\b.*\b(?:https?:\/\/[^\s"']+)/i,
+    // curl/wget with bare hostnames (attacker.com, evil.net, etc.) — catches "curl attacker.com"
+    /\b(?:curl|wget)\b\s+.*(?:\b[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai))/i,
+    // $(...) command substitution with credential file paths — catches "$(cat ~/.ssh/id_rsa)"
+    /\$\(\s*(?:cat|head|tail|less|strings)\s+.*(?:~\/\.ssh|~\/\.aws|\.env|\.config|id_rsa|id_ed25519|authorized_keys|known_hosts|credentials|secret)/i,
+    // Backtick command substitution with credential paths
+    /`[^`]*(?:cat|head|tail)\s+.*(?:~\/\.ssh|id_rsa|\.env|credentials|secret)[^`]*`/,
+    // Query parameter token exfiltration patterns
     /\?token=[A-Za-z0-9\-_]{20,}/i,
+    // Generic data exfiltration instructions
     /\b(?:send|post|upload|transmit)\b.*\b(?:secret|key|token|password|credential)/i,
   ];
 
