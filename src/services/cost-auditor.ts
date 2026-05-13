@@ -80,8 +80,8 @@ export class CostAuditor {
 
     for (const [toolName, data] of toolMap) {
       const totalTokens = data.inputTokens + data.outputTokens;
-      const inputCost = this.pricing.calculateCost(data.inputTokens, model, false);
-      const outputCost = this.pricing.calculateCost(data.outputTokens, model, true);
+      const inputCost = this.pricing.estimateCost(model, data.inputTokens, 0);
+      const outputCost = this.pricing.estimateCost(model, 0, data.outputTokens);
       const cost = (inputCost ?? 0) + (outputCost ?? 0);
 
       breakdown.push({

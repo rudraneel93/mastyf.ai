@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
-import { nvdLimiter, nvdApiKeyLimiter } from '../utils/rate-limiter.js';
+import { RateLimiter } from '../utils/rate-limiter.js';
+const nvdLimiter = new RateLimiter({ tokensPerInterval: 5, interval: 60_000 });
+const nvdApiKeyLimiter = new RateLimiter({ tokensPerInterval: 30, interval: 60_000 });
 
 /**
  * Client for NIST NVD API (https://services.nvd.nist.gov/rest/json/cves/2.0).

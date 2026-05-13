@@ -1,39 +1,40 @@
-import chalk from 'chalk';
+import pino from 'pino';
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
+/**
+ * Detect if running as an MCP server (stdio transport).
+ * In server mode, stdout is reserved for JSON-RPC frames.
+ * ALL log output must go to stderr.
+ */
+export function detectMcpServerMode(): boolean {
+  if (process.env['MCP_GUARDIAN_MODE'] === 'server') return true;
+  if (process.env['MCP_GUARDIAN_MODE'] === 'cli')    return false;
+  const arg0 = process.argv[1] ?? '';
+  return arg0.endsWith('index.js') || arg0.endsWith('index.ts');
 }
 
-const rawLevel = process.env.LOG_LEVEL?.toUpperCase();
-const LOG_LEVEL: LogLevel = (rawLevel !== undefined && rawLevel in LogLevel)
-  ? LogLevel[rawLevel as keyof typeof LogLevel]
-  : LogLevel.INFO;
+export const IS_MCP_SERVER_MODE = detectMcpServerMode();
+
+export const logger = pino(
+  {
+    level: process.env['LOG_LEVEL']?.toLowerCase() ?? 'info',
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers["x-api-key"]',
+        '*.token', '*.apiKey', '*.password', '*.secret', '*.privateKey',
+      ],
+      censor: '[REDACTED]',
+    },
+  },
+  pino.destination({ fd: 2, sync: false }),
+);
 
 export class Logger {
-  static debug(msg: string): void {
-    if (LOG_LEVEL <= LogLevel.DEBUG) {
-      console.error(chalk.gray(`[DEBUG] ${msg}`));
-    }
-  }
-
-  static info(msg: string): void {
-    if (LOG_LEVEL <= LogLevel.INFO) {
-      console.error(chalk.blue(`[INFO] ${msg}`));
-    }
-  }
-
-  static warn(msg: string): void {
-    if (LOG_LEVEL <= LogLevel.WARN) {
-      console.error(chalk.yellow(`[WARN] ${msg}`));
-    }
-  }
-
-  static error(msg: string): void {
-    if (LOG_LEVEL <= LogLevel.ERROR) {
-      console.error(chalk.red(`[ERROR] ${msg}`));
-    }
-  }
+  static debug(msg: string): void { logger.debug(msg); }
+  static info(msg: string): void  { logger.info(msg); }
+  static warn(msg: string): void  { logger.warn(msg); }
+  static error(msg: string): void { logger.error(msg); }
 }
+
+// Backward-compatible LogLevel enum kept for existing consumers
+export enum LogLevel { DEBUG = 0, INFO = 1, WARN = 2, ERROR = 3 }

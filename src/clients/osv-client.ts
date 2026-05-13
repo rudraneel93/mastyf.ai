@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
-import { osvLimiter } from '../utils/rate-limiter.js';
+import { RateLimiter } from '../utils/rate-limiter.js';
+const osvLimiter = new RateLimiter({ tokensPerInterval: 10, interval: 60_000 });
 
 /**
  * Client for the OSV.dev API (https://api.osv.dev).
