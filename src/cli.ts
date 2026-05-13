@@ -441,4 +441,17 @@ program
     }
   });
 
+// ── Default action: when piped stdin (Glama/mcp-proxy), start MCP server ──
+const isPiped = !process.stdin.isTTY;
+const isServer = process.env['MCP_GUARDIAN_MODE'] === 'server';
+
+program.action(async () => {
+  if (isServer || isPiped) {
+    const { startMcpServer } = await import('./index.js');
+    await startMcpServer();
+    return;
+  }
+  program.outputHelp();
+});
+
 program.parse();
