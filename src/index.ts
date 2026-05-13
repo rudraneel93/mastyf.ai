@@ -60,7 +60,7 @@ const reporter = new ReportGenerator();
 
 const server = new Server(
   { name: 'mcp-guardian', version: process.env.npm_package_version || '2.3.4' },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} } }
 );
 
 // ── Logging capability (MCP spec requirement) ─────────────────────
