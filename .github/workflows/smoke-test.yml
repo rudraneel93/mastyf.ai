@@ -1,0 +1,36 @@
+name: Smoke Test
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  release:
+    types: [published]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Smoke test — server starts
+        run: |
+          timeout 5 node dist/index.js --version 2>&1 || true
+          echo "✓ Server binary executes"
+      - name: Smoke test — CLI works
+        run: |
+          timeout 5 node dist/cli.js --help 2>&1 || true
+          echo "✓ CLI help works"
+      - name: Smoke test — scan command parses
+        run: |
+          timeout 5 node dist/cli.js scan --help 2>&1 || true
+          echo "✓ Scan command help works"

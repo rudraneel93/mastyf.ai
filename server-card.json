@@ -1,6 +1,6 @@
 {
   "name": "rudraneel93/mcp-guardian",
-  "description": "Security, cost, and health governance proxy for MCP infrastructure",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure. Three-layer detection engine (regex → schema → LLM), YAML policy engine with hot-reload, real tiktoken cost enforcement, self-auditing MCP server.",
   "version": "2.3.21",
   "repository": "https://github.com/rudraneel93/mcp-guardian",
   "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
@@ -15,10 +15,63 @@
     "logging": true
   },
   "tools": [
-    { "name": "scan_security", "description": "Scan MCP server configurations for CVEs, hardcoded secrets, typo-squatting, auth weaknesses, and command injection" },
-    { "name": "audit_costs", "description": "Audit token usage and estimate costs per MCP server" },
-    { "name": "check_health", "description": "Check health, latency, and reliability of MCP servers" },
-    { "name": "full_report", "description": "Generate a complete security, cost, and health report for all MCP servers" }
+    {
+      "name": "scan_security",
+      "description": "Scan MCP server configurations for CVEs, hardcoded secrets, typo-squatting, auth weaknesses, and command injection",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "configPath": {
+            "type": "string",
+            "description": "Path to an MCP config file (cline_mcp_settings.json). If omitted, auto-discovers configs."
+          }
+        }
+      }
+    },
+    {
+      "name": "audit_costs",
+      "description": "Audit token usage and estimate costs per MCP server using real tiktoken counting",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serverName": {
+            "type": "string",
+            "description": "Filter to a specific server name. If omitted, audits all."
+          }
+        }
+      }
+    },
+    {
+      "name": "check_health",
+      "description": "Check health, latency, and reliability of MCP servers with circuit breaker status",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "serverName": {
+            "type": "string",
+            "description": "Filter to a specific server name. If omitted, checks all."
+          }
+        }
+      }
+    },
+    {
+      "name": "full_report",
+      "description": "Generate a complete security, cost, and health report for all MCP servers",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "configPath": {
+            "type": "string",
+            "description": "Path to MCP config file (optional)"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["json", "markdown", "text"],
+            "description": "Output format (default: text)"
+          }
+        }
+      }
+    }
   ],
   "install": "npx -y @mcp-guardian/server"
 }
