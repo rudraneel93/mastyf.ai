@@ -90,11 +90,23 @@ mcp-guardian       # stdio transport, auto-starts MCP server
 - **Supply chain CI** — `npm audit`, CycloneDX SBOM generation, npm provenance attestation
 
 ### Testing & Quality
-- **33 tests** across 3 packages (core: 12, server: 12, cli: 9)
+- **207 tests** across 19 test files (core, server, cli, integration, e2e, fuzz)
 - **Code coverage** — 80% lines, 80% functions, 75% branches enforced in CI
 - **E2E proxy tests** — Real proxy spawns with policy YAML, sends JSON-RPC, verifies block/pass decisions
 - **Fuzz testing** — Payload normalizer and policy engine fuzzing
 - **Red-team corpus** — Labeled poisoned/benign test cases with precision/recall measurement
+
+### Cost Audit & Auto-Detection
+- **CLI cost audit** — `mcp-guardian audit --all` queries proxy databases for real token counts and estimates costs per model
+- **Auto-detection scripts** — `scripts/full-cost-report.cjs` reads Cline model config from `~/.cline/data/globalState.json`, auto-detects pricing, queries proxy DBs for precise MCP tool call costs, and computes LLM conversation cost estimates
+- **Multi-proxy DB isolation** — `MCP_GUARDIAN_DB_PATH` env var allows running multiple proxy instances (e.g., github + filesystem) with separate databases, preventing lock conflicts
+- **Per-call breakdown** — Every `tools/call` through the proxy is logged with request/response tokens, duration, and estimated cost
+
+### Recent Fixes (v2.3.24)
+- **DB lock resolution** — `HistoryDatabase` constructor now checks `MCP_GUARDIAN_DB_PATH` env var as fallback, enabling multiple concurrent proxy instances without lock conflicts
+- **container.ts** — `createContainer()` respects `MCP_GUARDIAN_DB_PATH` for all CLI commands (scan, audit, health, report, proxy)
+- **index.ts** — MCP server startup sets a separate DB path to avoid conflicts with running proxy instances
+- **macOS `/tmp` symlink** — Launch scripts use `/private/tmp` to avoid `proper-lockfile` stat errors on macOS
 
 ---
 

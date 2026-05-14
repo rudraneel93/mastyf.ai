@@ -19,7 +19,8 @@ export interface Container {
 let startupWarningEmitted = false;
 
 export function createContainer(dbPath?: string): Container {
-  const db = new HistoryDatabase(dbPath);
+  const effectivePath = dbPath ?? (process.env.MCP_GUARDIAN_DB_PATH || undefined);
+  const db = new HistoryDatabase(effectivePath);
   const cveChecker = new CveChecker();
   const authProber = new AuthProber();
   const typoDetector = new TypoSquatDetector();

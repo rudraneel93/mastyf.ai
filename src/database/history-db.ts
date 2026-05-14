@@ -70,7 +70,7 @@ export class HistoryDatabase implements IDatabase {
       return;
     }
 
-    this.dbPath = dbPathOrMemory ?? DEFAULT_DB_PATH;
+    this.dbPath = dbPathOrMemory ?? (process.env['MCP_GUARDIAN_DB_PATH'] || DEFAULT_DB_PATH);
     this.lockfilePath = this.dbPath + '.lock';
     const dir = dirname(this.dbPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

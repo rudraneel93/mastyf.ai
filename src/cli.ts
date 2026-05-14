@@ -280,7 +280,7 @@ program
         console.error(chalk.red(`Failed to load policy for dry-run: ${err?.message}`));
         process.exit(1);
       }
-      const db = new HistoryDatabase();
+      const db = new HistoryDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
       let totalBlocked = 0;
       let totalPassed = 0;
       const perServer: Record<string, { blocked: number; passed: number }> = {};
@@ -388,7 +388,7 @@ program
       console.error(chalk.dim('No policy file specified — running in audit-only mode'));
     }
 
-    const db = new HistoryDatabase();
+    const db = new HistoryDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
     // Pass PolicyWatcher (not just engine) so hot-reload works
     // When mode override is active, pass the engine directly since the watcher was re-seeded
     const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);

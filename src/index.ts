@@ -55,7 +55,11 @@ function sanitizeConfigPath(input: string): string | null {
   return null;
 }
 
-const container = createContainer();
+// ── DB path override: Cline does not support env vars in MCP config,
+//     so fall back to a separate path to avoid lock conflicts with proxy instances
+process.env['MCP_GUARDIAN_DB_PATH'] = process.env['MCP_GUARDIAN_DB_PATH'] || '/private/tmp/mcp-guardian-server.db';
+
+const container = createContainer(process.env['MCP_GUARDIAN_DB_PATH']);
 const reporter = new ReportGenerator();
 
 const server = new Server(

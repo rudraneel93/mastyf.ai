@@ -2,6 +2,22 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.3.24] - 2026-05-14
+
+### Fixed
+- **DB lock isolation** — `HistoryDatabase` constructor (line 73) now reads `MCP_GUARDIAN_DB_PATH` env var as fallback, enabling multiple concurrent proxy instances with separate databases
+- **container.ts** — `createContainer()` respects `MCP_GUARDIAN_DB_PATH` for all CLI commands (scan, audit, health, report, proxy), preventing lock conflicts when proxies are running
+- **index.ts** — MCP server startup hardcodes a separate DB path (`/private/tmp/mcp-guardian-server.db`) to avoid lock conflicts with proxy instances; Cline does not support `env` field in MCP config
+- **macOS `/tmp` symlink** — Launch scripts now use `/private/tmp` instead of `/tmp` to avoid `proper-lockfile` ENOENT stat errors on macOS
+- **`mcp-guardian proxy`** — `HistoryDatabase(dbPath)` at lines 283 and 391 now passes `process.env.MCP_GUARDIAN_DB_PATH || undefined`
+
+### Added
+- **`scripts/full-cost-report.cjs`** — Auto-detects Cline model from `~/.cline/data/globalState.json`, reads proxy databases for precise MCP tool call costs, estimates LLM conversation costs
+- **`scripts/launch-proxies.sh`** — Clean startup script for multiple proxy instances with separate DB paths, health-check polling, and port cleanup
+- **`scripts/cost-audit.cjs`** — CLI cost audit with per-model pricing support
+- **`scripts/query-tokens.cjs`** — Quick token query from proxy databases
+- **`scripts/mcp-guardian-server.sh`** — Wrapper script for mcp-guardian MCP server with env var export
+
 ## [2.1.2] - 2026-05-11
 
 ### Fixed
