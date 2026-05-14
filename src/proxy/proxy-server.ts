@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { createInterface } from 'readline';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { TokenCounter } from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
 import { HistoryDatabase } from '../database/history-db.js';
@@ -52,6 +52,11 @@ export class McpProxyServer {
     ttl: 60000,
     updateAgeOnGet: true,
   });
+
+  /** P0 Week 2: SHA-256 fingerprint of the tools/list response at session init.
+   *  Compared on every subsequent tools/list to detect rug-pull attacks
+   *  (OWASP MCP03 — server mutates tool descriptions mid-session). */
+  private toolFingerprint: string | null = null;
 
   private requestTimeoutMs: number;
   private restartCount: number = 0;
@@ -152,6 +157,39 @@ export class McpProxyServer {
     rl.on('line', (line: string) => {
       try {
         const msg = JSON.parse(line);
+
+        // ── P0 Week 2: Rug-pull detection via tool definition fingerprinting ──
+        if (!msg.id && msg.result?.tools && Array.isArray(msg.result.tools)) {
+          const canonical = JSON.stringify(msg.result.tools.map((t: any) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })).sort((a: any, b: any) => a.name.localeCompare(b.name)));
+          const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
+
+          if (!this.toolFingerprint) {
+            this.toolFingerprint = hash;
+            Logger.debug(`[proxy:${this.serverName}] Tool fingerprint registered: ${hash} (${msg.result.tools.length} tools)`);
+          } else if (this.toolFingerprint !== hash) {
+            const prev = this.toolFingerprint;
+            this.toolFingerprint = hash;
+            const alert = `[proxy:${this.serverName}] 🚨 RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous fingerprint: ${prev}, New: ${hash}. Server may have been compromised.`;
+            Logger.error(alert);
+            StructuredLogger.info({
+              event: 'rug_pull_detected' as any,
+              serverName: this.serverName,
+              previousFingerprint: prev,
+              currentFingerprint: hash,
+              toolCount: msg.result.tools.length,
+            });
+            Metrics.blockedRequestsTotal?.inc({
+              server_name: this.serverName,
+              block_reason: 'rug_pull',
+              rule: 'tool-fingerprint-mismatch',
+            });
+          }
+        }
+
         if (msg.id && msg.id === this.currentRequestId) {
           const proxyLatencyMs = Date.now() - this.requestStartTime;
           const responseTokens = this.tokenCounter.count(line);
