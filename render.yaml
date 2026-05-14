@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: mcp-guardian
+    runtime: node
+    repo: https://github.com/rudraneel93/mcp-guardian
+    buildCommand: npm install && npm run build
+    startCommand: node render-start.js
+    buildFilter:
+      paths:
+        - src/**/*.ts
+        - packages/**/*.ts
+        - package.json
+        - tsconfig.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MCP_GUARDIAN_DB_PATH
+        value: /tmp/guardian.db

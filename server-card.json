@@ -1,0 +1,24 @@
+{
+  "name": "rudraneel93/mcp-guardian",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure",
+  "version": "2.3.21",
+  "repository": "https://github.com/rudraneel93/mcp-guardian",
+  "homepage": "https://www.npmjs.com/package/@mcp-guardian/server",
+  "license": "MIT",
+  "runtime": "node",
+  "entrypoint": "dist/index.js",
+  "transport": ["stdio"],
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "prompts": true,
+    "logging": true
+  },
+  "tools": [
+    { "name": "scan_security", "description": "Scan MCP server configurations for CVEs, hardcoded secrets, typo-squatting, auth weaknesses, and command injection" },
+    { "name": "audit_costs", "description": "Audit token usage and estimate costs per MCP server" },
+    { "name": "check_health", "description": "Check health, latency, and reliability of MCP servers" },
+    { "name": "full_report", "description": "Generate a complete security, cost, and health report for all MCP servers" }
+  ],
+  "install": "npx -y @mcp-guardian/server"
+}
