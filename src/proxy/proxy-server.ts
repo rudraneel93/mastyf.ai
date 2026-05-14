@@ -14,6 +14,7 @@ import { SessionCache } from '../auth/session-cache.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { LRUCache } from 'lru-cache';
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import { scanForSecrets } from '../scanners/secret-scanner.js';
 import * as Metrics from '../utils/metrics.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
@@ -364,6 +365,47 @@ export class McpProxyServer {
         this.requestTokens = this.tokenCounter.count(raw);
         this.requestArguments = msg.params?.arguments;
         const toolName = this.requestToolName || 'unknown';
+
+        // ── P0 Week 3: DLP on tool call arguments (runtime exfiltration) ──
+        if (this.requestArguments) {
+          const argString = JSON.stringify(this.requestArguments);
+          const secretFindings = scanForSecrets(argString, `proxy:${this.serverName}:${toolName}`);
+          if (secretFindings.length > 0) {
+            const secretSummary = secretFindings.map(f => f.type).slice(0, 5).join(', ');
+            Logger.warn(
+              `[proxy:${this.serverName}] 🔑 SECRET DETECTED in arguments of '${toolName}': ${secretSummary}` +
+              (secretFindings.length > 5 ? `... (+${secretFindings.length - 5} more)` : '')
+            );
+            StructuredLogger.info({
+              event: 'secret_in_args_detected' as any,
+              serverName: this.serverName,
+              toolName,
+              secretCount: secretFindings.length,
+              secrets: secretFindings.map(f => ({ type: f.type, redacted: f.redacted })),
+              requestId,
+            });
+
+            // DLP block in blocking mode — stop exfiltration before it reaches the server
+            if (this.policyEngine?.getMode() === 'block') {
+              this.sendError(
+                msg.id, -32001,
+                `Blocked: ${secretFindings.length} potential secret(s) detected in '${toolName}' arguments. ` +
+                `Detected: ${secretSummary}. Use policy mode 'audit' to log only.`
+              );
+              StructuredLogger.info({
+                event: 'request_denied',
+                requestId,
+                serverName: this.serverName,
+                toolName,
+                blockReason: `dlp:${secretFindings.length}_secrets_in_args`,
+                proxyLatencyMs: Date.now() - proxyStartTime,
+              });
+              Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: 'dlp_secrets_in_args', rule: 'secret-scan' });
+              Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: 'true' });
+              return;
+            }
+          }
+        }
 
         let agentIdentity: AgentIdentity | undefined;
         let authnSuccess = false;
