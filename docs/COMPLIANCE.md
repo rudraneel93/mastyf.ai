@@ -9,14 +9,60 @@
 | HA state | `REDIS_URL` + optional `DB_TYPE=postgres` |
 | DPoP replay (multi-replica) | `REDIS_URL` → Redis `SET NX` jti store (`dpop-nonce-store.ts`) |
 | Secrets | `GUARDIAN_SECRET_PROVIDER` (env, Vault, AWS) |
-| GDPR erasure | 30-day TTL purge in `history-db.ts`; operator must run DB-level `DELETE` for Article 17 erasure requests |
+| Data retention | 30-day TTL auto-purge of `call_records` (`history-db.ts` `purge()`) |
+| GDPR erasure | `HistoryDatabase.eraseAllAuditData()` + operator SIEM purge |
+
+## Data retention (default)
+
+- **call_records**: Deleted after **30 days** via hourly `purge()` when using on-disk `history.db`
+- **cost_records / security_scans / health_checks**: Not TTL-purged automatically — include in erasure workflow or extend `purge()` for your policy
+- Override path: `MCP_GUARDIAN_DB_PATH` (all processes must share the same file for a single tenant)
+
+## GDPR Article 17 (right to erasure)
+
+1. Stop proxy/TUI writers using the DB file.
+2. Run erasure on the canonical DB:
+
+```typescript
+import { HistoryDatabase } from '@mcp-guardian/server/dist/database/history-db.js';
+
+const db = new HistoryDatabase(); // uses MCP_GUARDIAN_DB_PATH / ~/.mcp-guardian/history.db
+const removed = db.eraseAllAuditData();
+console.log(removed);
+db.close();
+```
+
+3. Purge replicated logs (CloudWatch, Datadog, Splunk) per your DPA.
+4. For Postgres HA (`DB_TYPE=postgres`), run equivalent `DELETE` on all audit tables in your schema.
+
+## HIPAA §164.312(a)(2)(i) — encryption at rest
+
+`history.db` is **plain SQLite** in the OSS package. Acceptable operator controls:
+
+| Approach | Notes |
+|----------|--------|
+| Encrypted volume (EBS, LUKS, FileVault) | Recommended default |
+| SQLCipher build of SQLite | Replace `better-sqlite3` binding in a private fork — not shipped here |
+| KMS envelope | Encrypt DB file at rest via cloud KMS + mount |
+
+Guardian does not manage keys; document your KMS owner in your HIPAA BAA evidence pack.
 
 ## Honest gaps (not certified without your controls)
 
 | Requirement | Status |
 |-------------|--------|
-| **HIPAA at-rest encryption** | `history.db` is plain SQLite by default. Use encrypted volumes (EBS, LUKS), or external SQLCipher/KMS integration — not built into the OSS package. |
-| **SOC2 evidence pack** | Audit logs exist; formal evidence bundle is operator-owned. |
-| **GDPR purge in prod** | Requires real Postgres + scheduled purge job validation in your environment. |
+| **HIPAA BAA / formal evidence** | Audit events exist; BAA and control evidence are operator-owned |
+| **SOC2 evidence pack** | Audit logs exist; formal evidence bundle is operator-owned |
+| **SQLCipher in-box** | Not bundled — use volume encryption or custom build |
+| **Native Windows MSI** | PowerShell wrapper shipped; MSI installer planned (see `installer/README.md`) |
+
+## Proxy observability events
+
+Integration tests expect these structured events on the stdio proxy path:
+
+| Event | When |
+|-------|------|
+| `request_forwarded` | Safe tool call forwarded upstream |
+| `response_sent` | Upstream JSON-RPC response written to the IDE client |
 
 See [PEN_TEST_SCOPE.md](./PEN_TEST_SCOPE.md) for security assessment scope.

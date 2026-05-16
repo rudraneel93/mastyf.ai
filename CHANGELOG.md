@@ -2,6 +2,18 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.7] - 2026-05-17
+
+### Fixed (MASTER test report)
+- **Cost pricing recursion** — `resolveModelId` no longer calls `getActivePricing()` (breaks `detectActivePricing` ↔ `resolveModelId` stack overflow when only env/Cline model id is set).
+- **Proxy response observability** — `response_sent` structured event when upstream JSON-RPC is written to the IDE client.
+
+### Added
+- **GDPR Article 17** — `HistoryDatabase.eraseAllAuditData()` wipes all audit tables; documented in [docs/COMPLIANCE.md](docs/COMPLIANCE.md) with retention defaults.
+
+### Tests
+- `tests/services/runtime-model-pricing.test.ts`, `tests/database/gdpr-erase.test.ts`.
+
 ## [2.6.6] - 2026-05-17
 
 ### Fixed (comprehensive real test report)

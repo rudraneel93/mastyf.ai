@@ -240,6 +240,14 @@ export class McpProxyServer {
           Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: 'true' });
           if (this.sessionCache) Metrics.activeSessions.set(this.sessionCache.size);
 
+          StructuredLogger.info({
+            event: 'response_sent',
+            serverName: this.serverName,
+            requestId: msg.id,
+            toolName: this.requestToolName,
+            proxyLatencyMs,
+          });
+
           // ── v2.5+: Response inspection for prompt injection / data exfiltration ──
           if (msg?.result) {
             const responseText = JSON.stringify(msg.result);

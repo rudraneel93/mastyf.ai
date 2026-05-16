@@ -446,6 +446,29 @@ export class HistoryDatabase implements IDatabase {
     }
   }
 
+  /**
+   * GDPR Article 17 — erase all audit data in this database file.
+   * Operator must also purge SIEM/log shipping destinations separately.
+   */
+  eraseAllAuditData(): {
+    callRecords: number;
+    costRecords: number;
+    securityScans: number;
+    healthChecks: number;
+  } {
+    if (this.openedReadOnly) {
+      throw new Error('[HistoryDb] Cannot erase audit data on a read-only connection');
+    }
+    const counts = {
+      callRecords: this.db.prepare('DELETE FROM call_records').run().changes,
+      costRecords: this.db.prepare('DELETE FROM cost_records').run().changes,
+      securityScans: this.db.prepare('DELETE FROM security_scans').run().changes,
+      healthChecks: this.db.prepare('DELETE FROM health_checks').run().changes,
+    };
+    Logger.info(`[HistoryDb] GDPR eraseAllAuditData: ${JSON.stringify(counts)}`);
+    return counts;
+  }
+
   close(): void {
     if (this.purgeInterval) {
       clearInterval(this.purgeInterval);

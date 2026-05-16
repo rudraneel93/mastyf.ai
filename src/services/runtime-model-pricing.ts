@@ -72,10 +72,14 @@ export class RuntimeModelPricing {
   }
 
   async resolveModelId(modelId: string): Promise<ResolvedModelPricing | null> {
-    const active = await this.getActivePricing();
-    if (active && this.modelsMatch(active.modelId, modelId)) {
-      return active;
+    if (this.cached && this.modelsMatch(this.cached.modelId, modelId)) {
+      return this.cached;
     }
+    return this.resolveModelIdDirect(modelId);
+  }
+
+  /** Resolve rates for a model without calling getActivePricing (avoids detectActivePricing ↔ resolve recursion). */
+  private async resolveModelIdDirect(modelId: string): Promise<ResolvedModelPricing | null> {
     const cline = this.readClinePricing();
     if (cline && this.modelsMatch(cline.modelId, modelId)) {
       return cline;
@@ -144,14 +148,14 @@ export class RuntimeModelPricing {
 
     const clineId = this.readClineModelIdOnly();
     if (clineId) {
-      const resolved = await this.resolveModelId(clineId);
+      const resolved = await this.resolveModelIdDirect(clineId);
       if (resolved) return resolved;
     }
 
     const envModel = process.env.GUARDIAN_MODEL || process.env.ANTHROPIC_MODEL
       || process.env.OPENAI_MODEL || process.env.MCP_PRICING_MODEL;
     if (envModel?.trim()) {
-      return this.resolveModelId(envModel.trim());
+      return this.resolveModelIdDirect(envModel.trim());
     }
 
     return null;
