@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.5.7",
+  "version": "2.5.8",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -78,7 +78,7 @@
     "@opentelemetry/sdk-node": "^0.217.0",
     "axios": "^1.7.0",
     "bash-parser": "^0.5.0",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^12.10.0",
     "chalk": "^5.3.0",
     "chokidar": "^5.0.0",
     "commander": "^12.0.0",

@@ -2,6 +2,18 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.5.8] - 2026-05-16
+
+### Security (supply chain hardening)
+- **`better-sqlite3` ^12.10.0** — Bundled SQLite 3.53.x (≥ 3.50.2) for inherited SQLite CVE mitigation.
+- **`jose` ^6.2.3** — Already ≥ 4.15.5 (CVE-2024-28176); documented minimum in SECURITY.md.
+- **Typo-squat** — `MALICIOUS_PACKAGE_WATCHLIST` (`pino-sdk-v2`); trusted `@mcp-guardian/cli` and `pino` for lookalike detection.
+- **CI** — `supply-chain.yml` audit + CycloneDX SBOM; cosign image signing on GHCR publish; `attest-build-provenance` on npm release artifacts.
+- **Docs** — [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md) (lockfile policy, SQLite upgrade path, signing status).
+
+### Changed
+- Version **2.5.8**; `pnpm audit --audit-level=high` enforced in CI (moderate dev-only advisories may remain).
+
 ## [2.5.7] - 2026-05-16
 
 ### Security

@@ -539,6 +539,8 @@ pnpm eval                 # red-team corpus
 
 Monorepo layout: [packages/PACKAGING.md](packages/PACKAGING.md)
 
+**Supply chain:** `pnpm-lock.yaml` is committed; use `pnpm install --frozen-lockfile`. CI runs `pnpm audit --audit-level=high` and publishes CycloneDX SBOMs. npm releases use `--provenance` on version tags; GHCR images are cosign-signed. We do **not** claim SLSA Level 3 yet — see [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md).
+
 ---
 
 ## FAQ
@@ -629,6 +631,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3, pino, prom-client, jose, commander, chalk, tiktoken, and the MCP SDK.

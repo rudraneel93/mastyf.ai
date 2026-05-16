@@ -8,6 +8,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  attestations: write
 
 jobs:
   publish:
@@ -59,3 +60,10 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Attest build provenance (root package)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/index.js
+            dist/cli.js

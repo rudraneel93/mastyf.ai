@@ -30,6 +30,13 @@ const TRUSTED_MCP_PACKAGES = [
   'mcp-guardian',
   '@mcp-guardian/server',
   '@mcp-guardian/core',
+  '@mcp-guardian/cli',
+  'pino',
+] as const;
+
+/** Known malicious or deceptive packages (exact name match, case-insensitive). */
+export const MALICIOUS_PACKAGE_WATCHLIST = [
+  'pino-sdk-v2',
 ] as const;
 
 /**
@@ -93,6 +100,16 @@ export class TypoSquatDetector {
     if (!name.trim()) return [];
     const cleaned = name.toLowerCase();
     const results: TypoSquatResult[] = [];
+
+    for (const malicious of MALICIOUS_PACKAGE_WATCHLIST) {
+      if (cleaned === malicious.toLowerCase()) {
+        results.push({
+          suspiciousName: name,
+          similarityTo: malicious === 'pino-sdk-v2' ? 'pino' : malicious,
+          distance: 0,
+        });
+      }
+    }
 
     const candidates = [cleaned, tailSegment(cleaned)];
     for (const trusted of this.trustedPackages) {

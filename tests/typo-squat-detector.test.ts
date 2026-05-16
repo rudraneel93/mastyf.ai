@@ -65,4 +65,23 @@ describe('TypoSquatDetector', () => {
     // Should match case-insensitively
     expect(results).toHaveLength(0); // exact match (distance 0)
   });
+
+  it('flags known malicious watchlist package (pino-sdk-v2)', () => {
+    const results = detector.detect('pino-sdk-v2');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].similarityTo).toBe('pino');
+    expect(results[0].distance).toBe(0);
+  });
+
+  it('detects @mcp-guardian/server typo', () => {
+    const results = detector.detect('@mcp-guardian/servre');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((r) => r.similarityTo === '@mcp-guardian/server')).toBe(true);
+  });
+
+  it('detects mcp-guardian package name typo', () => {
+    const results = detector.detect('mcp-guardia');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((r) => r.similarityTo === 'mcp-guardian')).toBe(true);
+  });
 });

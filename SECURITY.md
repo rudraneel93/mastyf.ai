@@ -99,10 +99,20 @@ Response timeline:
 
 ### Dependency Supply Chain
 
-- All dependencies are pinned via `package-lock.json`
-- CI pipeline runs `npm audit` on every commit
-- Critical dependencies (`@modelcontextprotocol/sdk`, `jose`, `pg`) are reviewed on each major version bump
-- OTel gRPC exporter removed (v1.0.1) due to critical CVE in protobufjs dependency chain
+- Dependencies are pinned via **`pnpm-lock.yaml`** (committed). CI and Docker use `pnpm install --frozen-lockfile`.
+- **`pnpm audit --audit-level=high`** runs on every PR/push ([`ci.yml`](.github/workflows/ci.yml), [`supply-chain.yml`](.github/workflows/supply-chain.yml)). SBOM artifacts are generated in the supply-chain workflow.
+- Published npm tarballs ship **built `dist/` only** (lockfile not on npm). See [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md).
+- **`better-sqlite3`**: upgrade when releases bundle SQLite ≥ 3.50.2 (inherited CVEs in the amalgamation).
+- **`jose`**: maintain **≥ 4.15.5** (CVE-2024-28176); current major line is 6.x.
+- Critical dependencies (`@modelcontextprotocol/sdk`, `jose`, `better-sqlite3`, `pg`) are reviewed on each major bump.
+- OTel gRPC exporter removed (v1.0.1) due to critical CVE in protobufjs dependency chain.
+
+### Reporting dependency vulnerabilities
+
+1. Email **rudraneel93@gmail.com** (do not open a public issue for exploitable dependency chains).
+2. Include package name, installed version, advisory ID (GHSA/CVE), and whether it is runtime or dev-only.
+3. For **`better-sqlite3` / SQLite**, include output of `select sqlite_version()` from a built install if relevant.
+4. We aim to triage dependency reports on the same timeline as code vulnerabilities (ack within 24h).
 
 ## Security Design Principles
 
@@ -120,12 +130,12 @@ MCP Guardian requires these critical dependencies:
 |---|---|---|
 | `@modelcontextprotocol/sdk` | MCP protocol implementation | Keep updated to latest; CVE monitoring |
 | `tiktoken` | Token counting (o200k_base encoding) | Pure JS, no native bindings |
-| `sql.js` | SQLite storage | WASM-based, no native compilation |
+| `better-sqlite3` | SQLite storage (WAL, migrations) | Bundled SQLite amalgamation; upgrade for inherited CVEs (see [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md)) |
 | `pino` | Structured logging | High-performance JSON logger |
 | `js-yaml` | YAML policy parsing | Policy files only |
-| `jose` | JWT/JWK validation | OAuth 2.1/OIDC support |
+| `jose` | JWT/JWK validation | OAuth 2.1/OIDC; require ≥ 4.15.5 (CVE-2024-28176) |
 | `ioredis` | Redis client | Session cache and rate limit store |
 | `pg` | PostgreSQL client | Production DB backend |
 | `prom-client` | Prometheus metrics | Monitoring |
 
-Run `npm audit` regularly and update dependencies through Dependabot or similar tools.
+Run `pnpm audit --audit-level=high` regularly. Supply-chain CI and signing details: [docs/SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md).
