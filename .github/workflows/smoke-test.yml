@@ -34,3 +34,14 @@ jobs:
         run: |
           timeout 5 node dist/cli.js scan --help 2>&1 || true
           echo "✓ Scan command help works"
+      # Tarball smoke test — validates the published artifact, not just the monorepo-hoisted build
+      - name: Smoke test — tarball audit
+        run: |
+          npm pack
+          TGZ=$(ls *.tgz | head -1)
+          mkdir -p /tmp/mcp-guardian-smoke
+          cd /tmp/mcp-guardian-smoke
+          npm install "$GITHUB_WORKSPACE/$TGZ" --no-audit --no-fund
+          npx mcp-guardian --help
+          npx mcp-guardian scan --all
+          echo "✓ Tarball smoke test passed"

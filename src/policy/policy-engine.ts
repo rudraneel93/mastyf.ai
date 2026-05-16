@@ -156,48 +156,43 @@ export class PolicyEngine {
       }
     }
 
-    // v2.2: Argument-level field patterns (e.g., block /etc/ in 'path' arguments)
-    if (rule.argPatterns && rule.argPatterns.length > 0 && ctx.arguments) {
-      for (const { field, patterns } of rule.argPatterns) {
-        const values: string[] =
-          field === '*'
-            ? Object.values(ctx.arguments).map((v) => String(v))
-            : ctx.arguments[field] !== undefined
-            ? [String(ctx.arguments[field])]
-            : [];
+    // v2.2: Argument-level field patterns — uses pre-compiled regexes, recursive leaf walk
+    if (ctx.arguments) {
+      const compiledAps = this.compiledArgPatterns.get(rule.name) || [];
+      for (const { field, compiled, rule: r } of compiledAps) {
+        if (r.name !== rule.name) continue;
+        const values: string[] = field === '*'
+          ? this.extractLeafValues(ctx.arguments)
+          : (ctx.arguments[field] !== undefined ? this.extractLeafValues(ctx.arguments[field]) : []);
         for (const value of values) {
-          for (const pattern of patterns) {
-            try {
-              if (new RegExp(pattern, 'i').test(value)) {
-                return {
-                  action: this.resolveAction(rule.action),
-                  rule: rule.name,
-                  reason: `Argument field '${field}' matches blocked pattern '${pattern}' in rule '${rule.name}'`,
-                };
-              }
-            } catch {
-              Logger.warn(`Policy: invalid argPattern regex in rule '${rule.name}': ${pattern}`);
+          for (const regex of compiled) {
+            if (regex.test(value)) {
+              return {
+                action: this.resolveAction(rule.action),
+                rule: rule.name,
+                reason: `Argument field '${field}' matches blocked pattern in rule '${rule.name}'`,
+              };
             }
           }
         }
       }
     }
 
-    // v1.2: Malicious pattern detection — runs against NORMALIZED payload
-    if (rule.patterns) {
-      for (const pattern of rule.patterns) {
-        try {
-          if (new RegExp(pattern).test(analysis.argsStr)) {
-            return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern '${pattern}' matched in tool call (normalized)` };
+    // v1.2: Malicious pattern detection — uses pre-compiled regexes
+    if (ctx.arguments) {
+      const compiledPs = this.compiledPatterns.get(rule.name) || [];
+      for (const { compiled, rule: r } of compiledPs) {
+        if (r.name !== rule.name) continue;
+        for (const regex of compiled) {
+          if (regex.test(analysis.argsStr)) {
+            return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern matched in tool call (normalized)` };
           }
-        } catch {
-          Logger.warn(`Policy: invalid regex pattern in rule '${rule.name}': ${pattern}`);
         }
       }
     }
 
-    // v1.2: Semantic shell detection — opt-in via rule config flag
-    if ((rule as any).enableSemanticShellAnalysis) {
+    // v1.2: Semantic shell detection — always-on by default
+    {
       // Command substitution is always high-risk
       if (analysis.shellRisk.hasCommandSubstitution) {
         return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: shell command substitution detected in arguments' };
@@ -215,7 +210,7 @@ export class PolicyEngine {
       // Pipe chains with dangerous patterns
       if (analysis.shellRisk.hasPipes && analysis.shellRisk.hasCommandSubstitution) {
         return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: pipe chain with command substitution' };
-      }
+      } // end semantic shell detection block
     }
 
     // Max tokens per call
