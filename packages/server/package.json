@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "description": "MCP server exposing security scan tools to AI assistants",
   "type": "module",
   "main": "./dist/index.js",
