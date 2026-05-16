@@ -3,6 +3,9 @@ import { readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { PolicyConfig } from './policy-types.js';
 import { PolicyEngine } from './policy-engine.js';
+import { parsePolicyConfig } from './policy-schema.js';
+import { getPolicyAuditor } from '../utils/enterprise-bootstrap.js';
+import { registerReadinessCheck } from '../utils/readiness.js';
 import { Logger } from '../utils/logger.js';
 
 /**
@@ -19,6 +22,10 @@ export class PolicyWatcher {
 
   constructor(policyPath: string) {
     this.policyPath = policyPath;
+    registerReadinessCheck(async () => ({
+      ok: this.current !== null,
+      detail: this.current ? 'policy loaded' : 'policy not loaded',
+    }));
     this.loadPolicy();
     this.startWatching();
   }
@@ -26,7 +33,17 @@ export class PolicyWatcher {
   private loadPolicy(): void {
     try {
       const yaml = readFileSync(this.policyPath, 'utf-8');
-      const config = load(yaml) as PolicyConfig;
+      const auditor = getPolicyAuditor();
+      if (auditor?.hasChanged(yaml)) {
+        auditor.record({
+          timestamp: new Date().toISOString(),
+          actor: process.env['GUARDIAN_POLICY_ACTOR'] || 'system',
+          change: 'policy_hot_reload',
+          newValue: auditor.computeHash(yaml),
+          sourceHash: auditor.computeHash(yaml),
+        });
+      }
+      const config = parsePolicyConfig(load(yaml));
       const oldMode = this.current?.getMode();
         this.current = new PolicyEngine(config);
         Logger.info(`[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})${oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''}`);

@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "production-filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/shared/project-data"
+      ],
+      "env": {},
+      "transport": "stdio"
+    },
+    "suspicious-typo-package": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotool/server-filesystem",
+        "/tmp"
+      ],
+      "env": {},
+      "transport": "stdio"
+    },
+    "dev-echo-backend": {
+      "command": "node",
+      "args": [
+        "benchmarks/fixtures/echo-server.cjs"
+      ],
+      "env": {},
+      "transport": "stdio"
+    },
+    "misconfigured-analytics": {
+      "command": "node",
+      "args": [
+        "-e",
+        "console.log('analytics stub')"
+      ],
+      "env": {
+        "OPENAI_API_KEY": "sk-proj-EXAMPLE_REDACTED_NOT_A_REAL_KEY",
+        "DATABASE_URL": "postgres://admin:EXAMPLE_PASSWORD@db.internal.corp:5432/analytics",
+        "SLACK_WEBHOOK": "https://example.invalid/webhook/not-real"
+      },
+      "transport": "stdio"
+    },
+    "legacy-shell-runner": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "npx -y @modelcontextprotocol/server-everything"
+      ],
+      "env": {},
+      "transport": "stdio"
+    }
+  }
+}

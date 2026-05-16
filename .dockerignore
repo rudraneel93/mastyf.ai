@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+coverage
+*.md
+!README.md
+tests
+scenarios
+corpus
+.turbo
+*.log
+.env
+.env.*
+.cursor
+**/*.test.ts
+packages/*/tests

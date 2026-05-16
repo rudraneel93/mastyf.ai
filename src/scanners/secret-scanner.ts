@@ -53,6 +53,7 @@ const SECRET_RULES: SecretRule[] = [
   // Generic
   { id: 'generic-api-key', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: "(?:api[_-]?key|apikey|api[_-]?secret)\\s*[:=]\\s*['\\\"]?([A-Za-z0-9_\\-]{20,})['\\\"]?", entropy: 3.5, falsePositiveExclusions: ['your.api.key', 'placeholder', 'example', 'xxxx', '\\*{4,}'] },
   { id: 'generic-private-key', provider: 'Generic', severity: 'HIGH', flags: '', regex: '-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----' },
+  { id: 'rsa_private', provider: 'Generic', severity: 'HIGH', flags: '', regex: '-----BEGIN RSA PRIVATE KEY-----' },
   { id: 'generic-password', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: "password\\s*[:=]\\s*['\\\"]([^'\\\"]{8,})['\\\"]", entropy: 2.5, falsePositiveExclusions: ['changeme', 'password123', 'example'] },
   // JWT
   { id: 'jwt-secret', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: "jwt[_-]?secret\\s*[=:]\\s*['\\\"]?[a-zA-Z0-9\\-_]{20,}['\\\"]?" },
@@ -63,6 +64,13 @@ const SECRET_RULES: SecretRule[] = [
   { id: 'redis-url',     provider: 'Database', severity: 'HIGH', flags: '', regex: 'redis://:?[^@\\s]+@[^\\s]+', entropy: 3.0 },
   { id: 'db-url-generic', provider: 'Database', severity: 'HIGH', flags: 'i', regex: '(?:DATABASE_URL|DB_URL|DATABASE_URI)\\s*[=:]\\s*([a-z]+://[^@:\\s]+:[^@\\s]+@[^\\s]+)', entropy: 3.0 },
   { id: 'uri-credentials', provider: 'Generic', severity: 'HIGH', flags: '', regex: '[a-z][a-z0-9+-]+://[^:@\\s]+:[^:@\\s]+@[^\\s]+', entropy: 3.5, falsePositiveExclusions: ['localhost', '127\\.0\\.0\\.1', '::1', 'example\\.com', 'test\\.com', '\\.local', '\\.internal'] },
+  // Legacy rule ids (backward compat with tests and dashboards)
+  { id: 'base64_large', provider: 'Generic', severity: 'MEDIUM', flags: '', regex: '(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{60,}={0,2})' },
+  { id: 'sk-token-arg', provider: 'OpenAI', severity: 'HIGH', flags: '', regex: 'sk-[A-Za-z0-9]{20,}' },
+  { id: 'api_key_header', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: 'api[_-]?key\\s*=\\s*([A-Za-z0-9_\\-]{16,})', entropy: 3.0 },
+  { id: 'bearer_token', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: '(?:token|auth|bearer)\\s*=\\s*([A-Za-z0-9_\\-]{16,})', entropy: 3.0 },
+  { id: 'github_token', provider: 'GitHub', severity: 'HIGH', flags: '', regex: 'ghp_[A-Za-z0-9]{20,}' },
+  { id: 'password_assign', provider: 'Generic', severity: 'MEDIUM', flags: 'i', regex: 'password\\s*=\\s*([^\\s]{8,})', entropy: 2.5, falsePositiveExclusions: ['changeme', 'password123', 'example'] },
 ];
 
 let compiledRules: Array<{ id: string; provider: string; severity: string; regex: RegExp; entropy?: number; exclusions?: RegExp[] }> | null = null;
@@ -138,7 +146,7 @@ export class SecretScanner {
         if (value && typeof value === 'string' && value.length >= 8) findings.push(...scanForSecrets(value, `env:${key}`));
       }
     }
-    if (serverConfig.args) for (const arg of serverConfig.args) findings.push(...scanForSecrets(arg, 'command-arg'));
+    if (serverConfig.args) for (const arg of serverConfig.args) findings.push(...scanForSecrets(arg, 'command_args'));
     if (serverConfig.command) findings.push(...scanForSecrets(serverConfig.command, 'command'));
     return findings;
   }

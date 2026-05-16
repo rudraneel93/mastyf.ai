@@ -22,6 +22,8 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
+      - name: Run full test suite
+        run: pnpm test
       - name: Smoke test — server starts
         run: |
           timeout 5 node dist/index.js --version 2>&1 || true

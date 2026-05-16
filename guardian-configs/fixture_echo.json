@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "fixture_echo": {
+      "command": "node",
+      "args": [
+        "benchmarks/fixtures/echo-server.cjs"
+      ],
+      "transport": "stdio"
+    }
+  }
+}

@@ -12,6 +12,20 @@ import { Registry } from 'prom-client';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+function getCorsOrigin(req: IncomingMessage): string {
+  const allowed = process.env['DASHBOARD_ALLOWED_ORIGINS']?.split(',').map(s => s.trim()).filter(Boolean)
+    || ['http://localhost:4000', 'http://127.0.0.1:4000'];
+  const origin = req.headers.origin;
+  if (origin && allowed.includes(origin)) return origin;
+  if (allowed.length === 1) return allowed[0];
+  return allowed[0];
+}
+
+function applyCors(req: IncomingMessage, res: ServerResponse): void {
+  res.setHeader('Access-Control-Allow-Origin', getCorsOrigin(req));
+  res.setHeader('Vary', 'Origin');
+}
+
 // ── Real data source (set externally before dashboard starts) ─────
 let runtimeHistoryDb: any = null;
 
@@ -114,14 +128,15 @@ export async function startDashboardServer(
     })(req, res, () => {});
 
     if (method === 'OPTIONS') {
+      applyCors(req, res);
       res.writeHead(204, {
-        'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-ID',
       });
       res.end(); return;
     }
 
-    const setCors = () => { res.setHeader('Access-Control-Allow-Origin', '*'); };
+    const setCors = () => applyCors(req, res);
 
     try {
       if (url === '/login' && method === 'GET') {
@@ -182,13 +197,38 @@ export async function startDashboardServer(
         writeJson(res, 200, { status: 'ok', message: 'Policy watcher auto-detects changes' }); return;
       }
 
+      if (url === '/api/admin/tenant' && method === 'GET') {
+        setCors();
+        writeJson(res, 200, {
+          tenantId: process.env['GUARDIAN_TENANT_ID'] || 'default',
+          policyPath: process.env['GUARDIAN_POLICY_PATH'] || process.env['MCP_GUARDIAN_POLICY_PATH'] || 'default-policy.yaml',
+        });
+        return;
+      }
+
+      if (url === '/api/admin/audit-trail' && method === 'GET') {
+        setCors();
+        const { getPolicyAuditor } = await import('./enterprise-bootstrap.js');
+        const auditor = getPolicyAuditor();
+        writeJson(res, 200, { entries: auditor?.readAuditTrail() || [] });
+        return;
+      }
+
       if (url === '/metrics') {
         setCors();
+        if (auth.isEnabled() && process.env['DASHBOARD_METRICS_PUBLIC'] !== 'true') {
+          const metricsAuth = auth.authenticate({ url, headers: req.headers, method });
+          if (!metricsAuth.authenticated) {
+            writeJson(res, 401, { error: 'Authentication required for metrics' });
+            return;
+          }
+        }
         try {
           const metricsPort = process.env['METRICS_PORT'] || '9090';
           const mr = await fetch(`http://localhost:${metricsPort}/metrics`);
           if (!mr.ok) throw new Error(`status ${mr.status}`);
-          res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+          applyCors(req, res);
+          res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' });
           res.end(await mr.text());
         } catch { writeJson(res, 200, { error: 'Metrics unavailable' }); }
         return;
@@ -202,7 +242,13 @@ export async function startDashboardServer(
         writeJson(res, 200, { status: 'ok' }); return;
       }
 
-      // ── AI APIs (wired to running SuggestionEngine) ────────
+      // ── AI APIs (experimental; set GUARDIAN_EXPERIMENTAL_AI=true) ──
+      if (url.startsWith('/api/ai/') && process.env['GUARDIAN_EXPERIMENTAL_AI'] !== 'true') {
+        setCors();
+        writeJson(res, 503, { error: 'Experimental AI disabled. Set GUARDIAN_EXPERIMENTAL_AI=true to enable.' });
+        return;
+      }
+
       if (url === '/api/ai/suggestions' && method === 'GET') {
         setCors();
         try {

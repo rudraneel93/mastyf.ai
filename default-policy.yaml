@@ -1,7 +1,8 @@
 version: '1.0'
 policy:
   mode: block
-  default_action: block
+  default_action: pass
+  semantic_shell: true
   rules:
     - name: block-shell-injection
       description: Block tool calls containing shell injection or command chaining

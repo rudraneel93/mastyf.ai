@@ -15,16 +15,19 @@ RUN cd packages/cli && pnpm build
 
 FROM node:20-alpine
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl su-exec
 WORKDIR /app
 COPY --from=builder /app/dist/ ./dist/
 COPY --from=builder /app/node_modules/ ./node_modules/
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/default-policy.yaml ./default-policy.yaml
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /data && chown appuser:appgroup /data
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4000/ || exit 1
-USER appuser
 EXPOSE 4000 9090
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
-ENTRYPOINT ["node", "dist/cli.js", "proxy"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["node", "dist/cli.js", "proxy"]

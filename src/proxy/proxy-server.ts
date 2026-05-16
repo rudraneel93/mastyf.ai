@@ -3,19 +3,20 @@ import { createInterface } from 'readline';
 import { randomUUID, createHash } from 'crypto';
 import { TokenCounter } from '../utils/token-counter.js';
 import { ProxyCallRecord } from '../types.js';
-import { HistoryDatabase } from '../database/history-db.js';
+import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
-import { SessionCache } from '../auth/session-cache.js';
+import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { LRUCache } from 'lru-cache';
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import * as Metrics from '../utils/metrics.js';
+import { alertPolicyBlock } from '../alerting/webhook-alerter.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
@@ -36,7 +37,7 @@ const RESTART_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]; // Exponential
 export class McpProxyServer {
   private child!: ChildProcess; // Definitely assigned in spawnChild()
   private tokenCounter: TokenCounter;
-  private db: HistoryDatabase;
+  private db: IDatabase;
   private currentRequestId: string | null = null;
   private requestStartTime: number = 0;
   private requestToolName: string | null = null;
@@ -45,7 +46,7 @@ export class McpProxyServer {
   private serverName: string;
   private policyEngine: PolicyEngine | null;
   private authValidator: OAuthValidator | null;
-  private sessionCache: SessionCache | null;
+  private sessionCache: GuardianSessionCache | null;
   private circuitBreaker: CircuitBreaker;
   /** Per-client rate limit counters — LRU-backed to prevent memory leaks */
   private clientRateCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
@@ -70,7 +71,7 @@ export class McpProxyServer {
     command: string,
     args: string[],
     env: Record<string, string>,
-    db: HistoryDatabase,
+    db: IDatabase,
     serverName?: string,
     policyEngine?: PolicyEngine,
     authValidator?: OAuthValidator,
@@ -80,7 +81,7 @@ export class McpProxyServer {
     this.serverName = serverName || command.split('/').pop() || command;
     this.policyEngine = policyEngine || null;
     this.authValidator = authValidator || null;
-    this.sessionCache = authValidator ? new SessionCache() : null;
+    this.sessionCache = authValidator ? createSessionCache() : null;
     this.circuitBreaker = new CircuitBreaker(this.serverName);
     this.requestTimeoutMs = requestTimeoutMs;
     this.maxRestarts = maxRestarts;
@@ -432,7 +433,13 @@ export class McpProxyServer {
               return;
             }
           } else {
-            const result: AuthValidationResult = await this.authValidator.validate(token);
+            let result: AuthValidationResult = await this.authValidator.validate(token);
+            if (!result.valid && this.sessionCache) {
+              const sessionIdentity = await validateSessionToken(this.sessionCache, token);
+              if (sessionIdentity) {
+                result = { valid: true, identity: sessionIdentity };
+              }
+            }
             authnSuccess = result.valid;
             if (result.identity) agentIdentity = result.identity;
 
@@ -503,10 +510,11 @@ export class McpProxyServer {
             requestId,
             requestTokens: this.requestTokens,
             timestamp: new Date().toISOString(),
+            tenantId: process.env['GUARDIAN_TENANT_ID'] || msg.params?._meta?.tenantId as string | undefined,
             agentIdentity,
           };
 
-          const decision = this.policyEngine.evaluate(context);
+          const decision = await this.policyEngine.evaluateAsync(context);
 
           StructuredLogger.logPolicyDecision({
             event: 'policy_decision',
@@ -543,6 +551,7 @@ export class McpProxyServer {
 
             Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: blockReason || 'policy', rule: decision.rule });
             Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
+            void alertPolicyBlock(this.serverName, toolName, decision.rule, decision.reason, requestId);
             this.sendError(msg.id, -32001, `Blocked by MCP Guardian policy: ${decision.reason}`, {
               rule: decision.rule,
               policy: this.policyEngine.getMode(),

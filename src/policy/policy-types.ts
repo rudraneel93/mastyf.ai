@@ -52,8 +52,10 @@ export interface PolicyConfig {
   version: string;
   policy: {
     mode: PolicyMode;
-    /** GAP 14: default_action when no rule matches. 'allow' = fail-open, 'block' = fail-closed */
+    /** When no rule matches: pass (fail-open) or block (zero-trust allowlist). Omitted → pass. */
     default_action?: PolicyAction;
+    /** Run semantic shell analysis once per request (default: true) */
+    semantic_shell?: boolean;
     rules: PolicyRule[];
   };
 }
@@ -71,6 +73,8 @@ export interface CallContext {
   requestId: string | number;
   requestTokens: number;
   timestamp: string;
+  /** Multi-tenant isolation — set via GUARDIAN_TENANT_ID or X-Tenant-ID */
+  tenantId?: string;
   /** v0.5.1: Agent identity from OAuth (for RBAC) */
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
 }

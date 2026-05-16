@@ -2,7 +2,6 @@ import http from 'http';
 import https from 'https';
 import { EventEmitter } from 'events';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import { HistoryDatabase } from '../database/history-db.js';
 import { TokenCounter } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 
@@ -10,7 +9,7 @@ interface SseProxyOptions {
   upstreamUrl: string;
   serverName: string;
   policy?: PolicyEngine;
-  db: HistoryDatabase;
+  db: import('../database/database-interface.js').IDatabase;
   authHeader?: string;
 }
 

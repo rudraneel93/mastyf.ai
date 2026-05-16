@@ -4,6 +4,28 @@ import { Logger } from '../utils/logger.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
 const osvLimiter = new RateLimiter({ tokensPerInterval: 10, interval: 60_000 });
 
+export type CveLookupStatus = 'ok' | 'degraded' | 'unavailable';
+
+export interface OsvCheckResult {
+  findings: CveFinding[];
+  status: CveLookupStatus;
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status !== 403 && status !== 429) throw err;
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Client for the OSV.dev API (https://api.osv.dev).
  * Queries known vulnerabilities for open-source packages.
@@ -21,26 +43,32 @@ export class OsvClient {
    * @param version - Optional version string
    * @returns Array of CVE findings
    */
-  async check(packageName: string, version?: string): Promise<CveFinding[]> {
+  async check(packageName: string, version?: string): Promise<OsvCheckResult> {
     try {
-      await osvLimiter.acquire();
-      // Normalize to purl-compatible format
-      const purl = this.toPurl(packageName, version);
-      const response = await axios.post(`${this.baseUrl}/query`, {
-        package: { purl },
-      }, {
-        timeout: 10000,
+      const response = await withRetry(async () => {
+        await osvLimiter.acquire();
+        const purl = this.toPurl(packageName, version);
+        return axios.post(`${this.baseUrl}/query`, { package: { purl } }, { timeout: 10000 });
       });
-      const vulns: any[] = response.data?.vulns ?? [];
-      return vulns.map((v: any) => ({
-        id: v.id ?? 'unknown',
-        severity: this.mapSeverity(v.severity),
-        summary: v.summary ?? v.details?.substring(0, 200) ?? 'No description',
-        fixedVersion: v.affected?.[0]?.ranges?.[0]?.events?.find((e: any) => e.fixed)?.fixed,
-      }));
-    } catch (error: any) {
-      Logger.warn(`OSV lookup failed for ${packageName}: ${error?.message ?? 'Unknown error'}`);
-      return [];
+      const vulns = (response.data?.vulns ?? []) as Array<Record<string, unknown>>;
+      return {
+        status: 'ok',
+        findings: vulns.map((v) => ({
+          id: String(v.id ?? 'unknown'),
+          severity: this.mapSeverity(v.severity as string | undefined),
+          summary: String(v.summary ?? (v.details as string)?.substring(0, 200) ?? 'No description'),
+          fixedVersion: (v.affected as Array<{ ranges?: Array<{ events?: Array<{ fixed?: string }> }> }>)?.[0]
+            ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
+        })),
+      };
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const msg = error instanceof Error ? error.message : String(error);
+      Logger.warn(`OSV lookup failed for ${packageName}: ${msg}`);
+      return {
+        findings: [],
+        status: status === 403 || status === 429 ? 'unavailable' : 'degraded',
+      };
     }
   }
 
@@ -71,25 +99,32 @@ export class OsvClient {
   }
 
   /** Check with explicit ecosystem (for Python/uvx MCP servers). */
-  async checkEcosystem(packageName: string, ecosystem: 'npm' | 'pypi', version?: string): Promise<CveFinding[]> {
+  async checkEcosystem(packageName: string, ecosystem: 'npm' | 'pypi', version?: string): Promise<OsvCheckResult> {
     try {
-      await osvLimiter.acquire();
-      const purl = this.toPurl(packageName, version, ecosystem);
-      const response = await axios.post(`${this.baseUrl}/query`, {
-        package: { purl },
-      }, {
-        timeout: 10000,
+      const response = await withRetry(async () => {
+        await osvLimiter.acquire();
+        const purl = this.toPurl(packageName, version, ecosystem);
+        return axios.post(`${this.baseUrl}/query`, { package: { purl } }, { timeout: 10000 });
       });
-      const vulns: any[] = response.data?.vulns ?? [];
-      return vulns.map((v: any) => ({
-        id: v.id ?? 'unknown',
-        severity: this.mapSeverity(v.severity),
-        summary: v.summary ?? v.details?.substring(0, 200) ?? 'No description',
-        fixedVersion: v.affected?.[0]?.ranges?.[0]?.events?.find((e: any) => e.fixed)?.fixed,
-      }));
-    } catch (error: any) {
-      Logger.warn(`OSV lookup failed for ${packageName} (${ecosystem}): ${error?.message ?? 'Unknown error'}`);
-      return [];
+      const vulns = (response.data?.vulns ?? []) as Array<Record<string, unknown>>;
+      return {
+        status: 'ok',
+        findings: vulns.map((v) => ({
+          id: String(v.id ?? 'unknown'),
+          severity: this.mapSeverity(v.severity as string | undefined),
+          summary: String(v.summary ?? (v.details as string)?.substring(0, 200) ?? 'No description'),
+          fixedVersion: (v.affected as Array<{ ranges?: Array<{ events?: Array<{ fixed?: string }> }> }>)?.[0]
+            ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
+        })),
+      };
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      const msg = error instanceof Error ? error.message : String(error);
+      Logger.warn(`OSV lookup failed for ${packageName} (${ecosystem}): ${msg}`);
+      return {
+        findings: [],
+        status: status === 403 || status === 429 ? 'unavailable' : 'degraded',
+      };
     }
   }
 

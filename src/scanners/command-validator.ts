@@ -1,5 +1,8 @@
 import { parse as shellParse } from 'shell-quote';
 
+/** Legitimate MCP launchers — not flagged when used as the root command */
+const MCP_LAUNCHERS = new Set(['node', 'nodejs', 'npx', 'python', 'python3', 'uv', 'uvx', 'deno']);
+
 // Tier-1: Commands that should never appear in an MCP server invocation
 const DANGEROUS_COMMANDS = new Set([
   'rm', 'rmdir', 'shred', 'dd',          // destructive
@@ -8,8 +11,7 @@ const DANGEROUS_COMMANDS = new Set([
   'bash', 'sh', 'zsh', 'fish', 'dash',   // shell spawning
   'exec', 'eval', 'source', '.',          // code execution
   'mkfifo', 'mknod',                      // IPC/device tricks
-  'python', 'python3', 'node', 'ruby',    // interpreter spawning
-  'perl', 'php', 'lua', 'tclsh',
+  'ruby', 'perl', 'php', 'lua', 'tclsh',
   'crontab', 'at', 'atq',                // persistence
   'passwd', 'useradd', 'usermod',         // account manipulation
   'iptables', 'ufw', 'pfctl',             // firewall tampering
@@ -64,6 +66,7 @@ export function validateCommand(
   args: string[] = []
 ): CommandValidationResult {
   const threats: CommandThreat[] = [];
+  const rootCommand = command.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
 
   // Normalise unicode homoglyphs BEFORE tokenizing
   const normalised = normaliseHomoglyphs(command + ' ' + args.join(' '));
@@ -86,7 +89,8 @@ export function validateCommand(
     if (typeof token === 'string') {
       // Plain word token — check if it's a dangerous command
       const word = token.toLowerCase();
-      if (DANGEROUS_COMMANDS.has(word)) {
+      const isRootLauncher = word === rootCommand && MCP_LAUNCHERS.has(word);
+      if (DANGEROUS_COMMANDS.has(word) && !isRootLauncher) {
         threats.push({
           type:     'dangerous-command',
           severity: 'critical',
@@ -151,15 +155,11 @@ function normaliseHomoglyphs(input: string): string {
  */
 export class CommandValidator {
   validate(serverConfig: { command?: string; args?: string[] }): CommandWarning[] {
-    const command = serverConfig.command || '';
+    const command = serverConfig.command ?? '';
     const args = serverConfig.args || [];
+    // HTTP/SSE-only configs may omit command — not a security finding
     if (!command.trim()) {
-      return [{
-        type: 'dangerous-command' as const,
-        severity: 'critical' as const,
-        message: 'Empty command detected in MCP server configuration',
-        token: command,
-      }];
+      return [];
     }
     const result = validateCommand(command, args);
     return result.threats.map(t => ({

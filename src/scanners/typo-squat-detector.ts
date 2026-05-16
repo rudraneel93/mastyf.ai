@@ -90,11 +90,12 @@ export class TypoSquatDetector {
   }
 
   detect(name: string): TypoSquatResult[] {
-    const cleaned = name.replace(/^@[^/]+\//, '').toLowerCase();
+    if (!name.trim()) return [];
+    const cleaned = name.toLowerCase();
     const results: TypoSquatResult[] = [];
 
     for (const trusted of this.trustedPackages) {
-      const trustedName = trusted.replace(/^@[^/]+\//, '').toLowerCase();
+      const trustedName = trusted.toLowerCase();
       const dist = levenshtein(cleaned, trustedName);
 
       if (dist === 1) {

@@ -13,6 +13,8 @@ export interface McpServerConfig {
 export interface SecurityReport {
   serverName: string;
   cves: CveFinding[];
+  /** ok = feeds responded; degraded/unavailable = rate-limited or offline — not "no CVEs" */
+  cveLookupStatus?: 'ok' | 'degraded' | 'unavailable';
   authStatus: AuthStatus;
   typoSquatRisk: TypoSquatResult[];
   secretsFound: SecretFinding[];

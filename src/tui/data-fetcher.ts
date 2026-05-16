@@ -6,7 +6,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
-import { LlmAssistant } from '../ai/llm-assistant.js';
+import { isExperimentalAiEnabled } from '../utils/experimental-ai.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -55,12 +55,10 @@ export class DataFetcher {
   private cache: TuiData | null = null;
   private listeners: Set<() => void> = new Set();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private llm: LlmAssistant;
   private lastAnalysis = '';
 
   constructor(_dashboardUrl?: string) {
     this.db = new HistoryDatabase();
-    this.llm = new LlmAssistant();
   }
 
   getData(): TuiData | null { return this.cache; }
@@ -155,19 +153,22 @@ export class DataFetcher {
       // Use cached analysis first so TUI renders immediately
       let analysis = this.lastAnalysis || '';
 
-      // Fire LLM analysis in background (non-blocking)
-      const topTools = this.getTopTools(allRecords);
-      const securityIssues = secReports.filter((r: any) => r.score < 70).map((r: any) => r.name);
-      const prompt = this.buildAnalysisPrompt(totalRequests, costUSD, avgLatency, servers.length, threats, aiState, topTools, securityIssues, allRecords);
-      this.llm.generate(
-        'You are an MCP security operations analyst. Write a concise 3-4 sentence security/cost assessment of this MCP proxy deployment. Be direct, specify actual risks, and recommend one action. No disclaimers.',
-        prompt
-      ).then(result => {
-        if (result?.text) {
-          this.lastAnalysis = result.text;
-          if (this.cache) { this.cache.ai.analysis = result.text; this.notify(); }
-        }
-      }).catch(() => {});
+      if (isExperimentalAiEnabled()) {
+        const topTools = this.getTopTools(allRecords);
+        const securityIssues = secReports.filter((r: any) => r.score < 70).map((r: any) => r.name);
+        const prompt = this.buildAnalysisPrompt(totalRequests, costUSD, avgLatency, servers.length, threats, aiState, topTools, securityIssues, allRecords);
+        import('../ai/llm-assistant.js').then(({ LlmAssistant }) => {
+          new LlmAssistant().generate(
+            'You are an MCP security operations analyst. Write a concise 3-4 sentence security/cost assessment of this MCP proxy deployment. Be direct, specify actual risks, and recommend one action. No disclaimers.',
+            prompt,
+          ).then(result => {
+            if (result?.text) {
+              this.lastAnalysis = result.text;
+              if (this.cache) { this.cache.ai.analysis = result.text; this.notify(); }
+            }
+          }).catch(() => {});
+        }).catch(() => {});
+      }
 
       this.cache = {
         overview: { totalInstances: 1, activeInstances: 1, totalRequests, blockedRequests: 0, passRate: 100, totalCostUsd: costUSD, burnRatePerHour: totalRequests > 0 ? (costUSD / totalRequests) * 100 : 0, avgLatencyMs: avgLatency, activeServers: servers.length, lastUpdated: new Date().toISOString() },

@@ -4,6 +4,10 @@ metadata:
   name: {{ include "mcp-guardian.fullname" . }}
   labels:
     {{- include "mcp-guardian.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -11,5 +15,11 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    {{- if .Values.metrics.enabled }}
+    - port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+    {{- end }}
   selector:
     {{- include "mcp-guardian.selectorLabels" . | nindent 4 }}

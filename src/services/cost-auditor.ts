@@ -1,16 +1,16 @@
 import { CostReport, ToolCost, McpServerConfig, ProxyCallRecord } from '../types.js';
 import { TokenCounter } from '../utils/token-counter.js';
 import { PricingClient } from '../clients/pricing-client.js';
-import { HistoryDatabase } from '../database/history-db.js';
+import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
 
 export class CostAuditor {
   private tokenCounter: TokenCounter;
   private pricing: PricingClient;
-  private db: HistoryDatabase | undefined;
+  private db: IDatabase | undefined;
   private pricingModel: string;
 
-  constructor(pricingClient?: PricingClient, db?: HistoryDatabase, pricingModel?: string) {
+  constructor(pricingClient?: PricingClient, db?: IDatabase, pricingModel?: string) {
     this.tokenCounter = new TokenCounter();
     this.pricing = pricingClient || new PricingClient();
     this.db = db;

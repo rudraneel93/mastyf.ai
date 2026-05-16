@@ -5,6 +5,7 @@ import { TypoSquatDetector } from '../scanners/typo-squat-detector.js';
 import { SecretScanner } from '../scanners/secret-scanner.js';
 import { CommandValidator } from '../scanners/command-validator.js';
 import { Logger } from '../utils/logger.js';
+import { extractPackagesFromServer } from '../utils/package-extractor.js';
 
 async function safeRun<T>(
   name: string,
@@ -44,17 +45,23 @@ export class SecurityScanner {
   }
 
   async scanServer(server: McpServerConfig): Promise<SecurityReport> {
+    const packages = extractPackagesFromServer(server);
+
     const [
       cvesResult, authResult, typosResult, secretsResult, cmdWarningsResult,
     ] = await Promise.allSettled([
-      safeRun('cve', () => this.cveChecker.check(server.packageName || server.name, server.version)),
+      safeRun('cve', () => this.cveChecker.checkServerPackages(server.name, packages, server.version)),
       safeRun('auth', () => Promise.resolve(this.authProber.probe(server))),
-      safeRun('typo', () => Promise.resolve(this.typoDetector.detect(server.name))),
+      safeRun('typo', () => Promise.resolve(this.scanTypoSquats(server.name, packages))),
       safeRun('secret', () => Promise.resolve(this.secretScanner.scan(server))),
       safeRun('command', () => Promise.resolve(this.cmdValidator.validate(server))),
     ]);
 
-    const cves: CveFinding[] = cvesResult.status === 'fulfilled' ? cvesResult.value : [];
+    const cveResult = cvesResult.status === 'fulfilled'
+      ? cvesResult.value
+      : { findings: [] as CveFinding[], lookupStatus: 'degraded' as const };
+    const cves = cveResult.findings;
+    const cveLookupStatus = cveResult.lookupStatus;
     const auth: AuthStatus = authResult.status === 'fulfilled'
       ? authResult.value
       : { hasAuthentication: false, isTransportEncrypted: false };
@@ -66,16 +73,33 @@ export class SecurityScanner {
     const score = calculateSecurityScore(cves, auth, typos, secrets, cmdWarnings, DEFAULT_SCORING, {
       hasMTLS: auth.method === 'mTLS',
     });
-    const recommendations = generateRecommendations(cves, auth, typos, secrets, cmdWarnings);
+    const recommendations = generateRecommendations(cves, auth, typos, secrets, cmdWarnings, cveLookupStatus);
     return {
       serverName: server.name,
       cves,
+      cveLookupStatus,
       authStatus: auth,
       typoSquatRisk: typos,
       secretsFound: secrets,
       score,
       recommendations,
     };
+  }
+
+  /** Check server display name and npm/uvx packages from command line */
+  private scanTypoSquats(serverName: string, packages: string[]): TypoSquatResult[] {
+    const seen = new Set<string>();
+    const results: TypoSquatResult[] = [];
+    for (const target of [serverName, ...packages]) {
+      for (const hit of this.typoDetector.detect(target)) {
+        const key = `${hit.suspiciousName}:${hit.similarityTo}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(hit);
+        }
+      }
+    }
+    return results;
   }
 }
 
@@ -151,9 +175,15 @@ function generateRecommendations(
   auth: AuthStatus,
   typos: TypoSquatResult[],
   secrets: SecretFinding[],
-  cmdWarnings: import('../scanners/command-validator.js').CommandWarning[]
+  cmdWarnings: import('../scanners/command-validator.js').CommandWarning[],
+  cveLookupStatus?: 'ok' | 'degraded' | 'unavailable',
 ): string[] {
   const recs: string[] = [];
+  if (cveLookupStatus === 'unavailable') {
+    recs.push('CVE lookup unavailable (OSV/NVD rate-limited or blocked) — retry later or set NVD_API_KEY');
+  } else if (cveLookupStatus === 'degraded' && cves.length === 0) {
+    recs.push('CVE lookup partially failed — absence of CVEs may not mean the package is clean');
+  }
   if (cves.length > 0) {
     const criticalCount = cves.filter((c) => c.severity === 'CRITICAL').length;
     const highCount = cves.filter((c) => c.severity === 'HIGH').length;

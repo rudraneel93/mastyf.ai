@@ -53,7 +53,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json && turbo run build",
-    "test": "turbo run test",
+    "test": "vitest run && turbo run test",
     "typecheck": "turbo run typecheck",
     "eval": "tsx corpus/run-eval.ts",
     "eval:full": "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY tsx corpus/run-eval.ts",
@@ -100,7 +100,7 @@
     "@types/pg": "^8.20.0",
     "@types/shell-quote": "^1.7.5",
     "@types/ws": "^8.18.1",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/coverage-v8": "^1.6.0",
     "tsx": "^4.7.0",
     "turbo": "^2.9.12",
     "typescript": "^5.4.0",

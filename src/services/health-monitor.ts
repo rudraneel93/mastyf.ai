@@ -1,11 +1,11 @@
 import { McpServerConfig, HealthReport } from '../types.js';
-import { HistoryDatabase } from '../database/history-db.js';
+import { IDatabase } from '../database/database-interface.js';
 import { McpClient, McpProbeResult } from '../utils/mcp-client.js';
 
 export class HealthMonitor {
-  private db: HistoryDatabase;
+  private db: IDatabase;
 
-  constructor(db: HistoryDatabase) {
+  constructor(db: IDatabase) {
     this.db = db;
   }
 

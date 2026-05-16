@@ -6,6 +6,15 @@ import { Logger } from './logger.js';
  * Extends the in-memory counters with shared Redis state.
  * Enable with: REDIS_URL=redis://localhost:6379
  */
+let sharedLimiter: RedisRateLimiter | null = null;
+
+export function getSharedRedisRateLimiter(): RedisRateLimiter {
+  if (!sharedLimiter) {
+    sharedLimiter = new RedisRateLimiter();
+  }
+  return sharedLimiter;
+}
+
 export class RedisRateLimiter {
   private redis: Redis;
   private prefix = 'mcp_guardian:ratelimit:';
@@ -44,7 +53,10 @@ export class RedisRateLimiter {
 
       return { allowed: count <= maxRequests, count };
     } catch (err: any) {
-      // Redis unavailable — fall back to local
+      if (process.env['GUARDIAN_STRICT_MODE'] === 'true') {
+        Logger.error(`[redis-rate-limiter] Redis unavailable in strict mode: ${err?.message}`);
+        return { allowed: false, count: maxRequests + 1 };
+      }
       Logger.debug(`[redis-rate-limiter] Redis error, using local: ${err?.message}`);
       const now = Date.now();
       let localCounter = this.local.get(key);

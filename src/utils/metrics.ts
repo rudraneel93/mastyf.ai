@@ -1,5 +1,6 @@
 import { Registry, Counter, Gauge, Histogram, collectDefaultMetrics } from 'prom-client';
 import { Logger } from './logger.js';
+import { runReadinessChecks } from './readiness.js';
 
 export const registry = new Registry();
 collectDefaultMetrics({ register: registry, prefix: 'mcp_guardian_' });
@@ -100,8 +101,9 @@ export async function startMetricsServer(port: number = 9090): Promise<Registry>
         return;
       }
       if (url === '/readyz') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ready' }));
+        const result = await runReadinessChecks();
+        res.writeHead(result.ready ? 200 : 503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: result.ready ? 'ready' : 'not_ready', checks: result.checks }));
         return;
       }
       res.writeHead(200, { 'Content-Type': registry.contentType });

@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "/Users/rudraneeldas/Desktop/mcp-guardian/scripts/guardian-proxy.sh",
+      "args": [
+        "--config",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/github.json",
+        "--policy",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+      ],
+      "transport": "stdio"
+    },
+    "filesystem": {
+      "command": "/Users/rudraneeldas/Desktop/mcp-guardian/scripts/guardian-proxy.sh",
+      "args": [
+        "--config",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/filesystem.json",
+        "--policy",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+      ],
+      "transport": "stdio"
+    },
+    "puppeteer": {
+      "command": "/Users/rudraneeldas/Desktop/mcp-guardian/scripts/guardian-proxy.sh",
+      "args": [
+        "--config",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/puppeteer.json",
+        "--policy",
+        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+      ],
+      "transport": "stdio"
+    },
+    "mcp-guardian": {
+      "command": "node",
+      "args": [
+        "/Users/rudraneeldas/Desktop/mcp-guardian/dist/index.js"
+      ],
+      "env": {
+        "MCP_GUARDIAN_DB_PATH": "/private/tmp/mcp-guardian-server.db"
+      },
+      "transport": "stdio"
+    }
+  }
+}

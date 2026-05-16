@@ -15,32 +15,105 @@ export function getPricingStalenessWarning(): string | null {
   return null;
 }
 
-// Hardcoded fallback — used only when litellm is unavailable
+// Hardcoded fallback — used when litellm is unavailable; also drives sync calculateCost()
 const STATIC_PRICING: Record<string, { input: number; output: number }> = {
-  'gpt-4.5-preview':   { input: 75.00, output: 150.00 },
-  'gpt-4-turbo':       { input: 10.00, output: 30.00 },
-  'gpt-4o':            { input: 2.50,  output: 10.00 },
-  'gpt-4o-mini':       { input: 0.15,  output: 0.60 },
-  'o1-preview':        { input: 15.00, output: 60.00 },
-  'o1-mini':           { input: 3.00,  output: 12.00 },
-  'claude-3-opus':     { input: 15.00, output: 75.00 },
-  'claude-3-5-sonnet': { input: 3.00,  output: 15.00 },
-  'claude-3-5-haiku':  { input: 0.80,  output: 4.00 },
-  'gemini-2.0-flash':  { input: 0.10,  output: 0.40 },
-  'gemini-1.5-pro':    { input: 1.25,  output: 5.00 },
-  'deepseek-chat':     { input: 0.28,  output: 0.42 },
-  'deepseek-reasoner': { input: 0.55,  output: 2.19 },
-  'llama-3.1-405b':    { input: 3.50,  output: 3.50 },
-  'llama-3.1-70b':     { input: 0.59,  output: 0.79 },
-  'mistral-large':     { input: 4.00,  output: 12.00 },
-  'mistral-small':     { input: 1.00,  output: 3.00 },
+  'gpt-4.5-preview':        { input: 75.00, output: 150.00 },
+  'gpt-4-turbo':            { input: 10.00, output: 30.00 },
+  'gpt-4o':                 { input: 5.00,  output: 15.00 },
+  'gpt-4o-mini':            { input: 0.15,  output: 0.60 },
+  'o1-preview':             { input: 15.00, output: 60.00 },
+  'o1-mini':                { input: 3.00,  output: 12.00 },
+  'claude-3-opus':          { input: 15.00, output: 75.00 },
+  'claude-3-5-sonnet':      { input: 3.00,  output: 15.00 },
+  'claude-3-5-haiku':       { input: 0.80,  output: 4.00 },
+  'gemini-2.5-pro':         { input: 1.25,  output: 5.00 },
+  'gemini-2.0-flash':       { input: 0.10,  output: 0.40 },
+  'gemini-2.0-flash-lite':  { input: 0.075, output: 0.30 },
+  'gemini-1.5-pro':         { input: 1.25,  output: 5.00 },
+  'deepseek-chat':          { input: 0.28,  output: 0.42 },
+  'deepseek-reasoner':      { input: 0.55,  output: 2.19 },
+  'grok-3':                 { input: 3.00,  output: 15.00 },
+  'llama-3.1-405b':         { input: 3.50,  output: 3.50 },
+  'llama-3.1-70b':          { input: 0.59,  output: 0.79 },
+  'mistral-large':          { input: 4.00,  output: 12.00 },
+  'mistral-small':          { input: 1.00,  output: 3.00 },
+  'gpt-3.5-turbo':          { input: 0.50,  output: 1.50 },
+  'gpt-4':                  { input: 30.00, output: 60.00 },
+  'gpt-4-32k':              { input: 60.00, output: 120.00 },
+  'claude-3-sonnet':        { input: 3.00,  output: 15.00 },
+  'claude-3-haiku':         { input: 0.25,  output: 1.25 },
+  'claude-3-7-sonnet':      { input: 3.00,  output: 15.00 },
+  'claude-sonnet-4':        { input: 3.00,  output: 15.00 },
+  'claude-opus-4':          { input: 15.00, output: 75.00 },
+  'gemini-1.5-flash':       { input: 0.075, output: 0.30 },
+  'gemini-2.5-flash':       { input: 0.15,  output: 0.60 },
+  'gemini-pro':             { input: 1.25,  output: 5.00 },
+  'o3-mini':                { input: 1.10,  output: 4.40 },
+  'o3':                     { input: 10.00, output: 40.00 },
+  'llama-3.1-8b':           { input: 0.18,  output: 0.18 },
+  'llama-3.3-70b':          { input: 0.59,  output: 0.79 },
+  'codestral':              { input: 0.30,  output: 0.90 },
+  'command-r-plus':         { input: 3.00,  output: 15.00 },
+  'command-r':              { input: 0.50,  output: 1.50 },
+  'grok-2':                 { input: 2.00,  output: 10.00 },
+  'grok-2-mini':            { input: 0.20,  output: 0.80 },
+  'sonar':                  { input: 1.00,  output: 1.00 },
+  'sonar-pro':              { input: 3.00,  output: 15.00 },
 };
+
+const DEFAULT_UNKNOWN_PRICING = { input: 10.0, output: 30.0 };
 
 // Live pricing from litellm, cached with 1-hour TTL
 const pricingCache = new Map<string, { input: number; output: number; fetchedAt: number }>();
 const CACHE_TTL_MS = 3600_000; // 1 hour
 
 export class PricingClient {
+  private customPricing = new Map<string, { input: number; output: number }>();
+  private liveModels: string[] = [];
+
+  /**
+   * Sync cost estimate (per-million tokens). Third arg `true` = output pricing.
+   * Uses static + custom tables only — safe for unit tests and offline use.
+   */
+  calculateCost(tokens: number, model: string, isOutput = false): number {
+    const pricing = this.getPricingForModel(model) ?? DEFAULT_UNKNOWN_PRICING;
+    const rate = isOutput ? pricing.output : pricing.input;
+    return (tokens / 1_000_000) * rate;
+  }
+
+  getPricingForModel(model: string): { input: number; output: number } | null {
+    return this.customPricing.get(model)
+      ?? STATIC_PRICING[model]
+      ?? null;
+  }
+
+  listModels(): string[] {
+    const names = new Set([
+      ...Object.keys(STATIC_PRICING),
+      ...this.customPricing.keys(),
+      ...this.liveModels,
+    ]);
+    return [...names].sort();
+  }
+
+  addPricing(model: string, inputPerMillion: number, outputPerMillion: number): void {
+    this.customPricing.set(model, { input: inputPerMillion, output: outputPerMillion });
+  }
+
+  /** Best-effort live refresh via litellm; no-op when Python/litellm unavailable */
+  async refreshLivePricing(): Promise<void> {
+    const models = this.getAvailableModels();
+    const fetched: string[] = [];
+    for (const model of models.slice(0, 5)) {
+      const live = await this.fetchLivePricing(model);
+      if (live) {
+        this.customPricing.set(model, live);
+        fetched.push(model);
+      }
+    }
+    this.liveModels = fetched;
+  }
+
   /**
    * Get live pricing for a model via litellm.
    * Falls back to static table if litellm unavailable.
@@ -120,7 +193,7 @@ except Exception as e:
   /**
    * Calculate cost using live pricing when available, static fallback otherwise.
    */
-  async calculateCost(model: string, inputTokens: number, outputTokens: number): Promise<{ cost: number; isLive: boolean }> {
+  async calculateCostAsync(model: string, inputTokens: number, outputTokens: number): Promise<{ cost: number; isLive: boolean }> {
     const pricing = await this.getModelPricing(model);
     if (!pricing) {
       // Default to gpt-4o pricing as last resort

@@ -49,7 +49,8 @@ interface RpcResponse {
   error?: { code: number; message: string };
 }
 
-const SKIP_E2E = process.env['SKIP_E2E'] === 'true' || process.env['CI'] === 'true';
+// Opt out with SKIP_E2E=true (e.g. local quick runs); CI runs these after build
+const SKIP_E2E = process.env['SKIP_E2E'] === 'true';
 
 describe('E2E: Proxy with default-policy.yaml', () => {
   let proc: ChildProcess | null = null;

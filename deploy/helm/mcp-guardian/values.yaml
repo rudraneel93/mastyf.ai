@@ -1,26 +1,51 @@
-replicaCount: 2
+replicaCount: 1
 
 image:
   repository: ghcr.io/rudraneel93/mcp-guardian
   tag: latest
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
 
-proxy:
-  config:
-    policy: |-
-      rules:
-        - name: block-dangerous
-          type: tool_denylist
-          tools: ["run_shell", "execute_command", "bash", "eval"]
-        - name: block-injection
-          type: regex
-          pattern: "rm\\s+-rf|curl\\s|\\$\\(|`[^`]+`"
-    mcpConfigPath: /etc/mcp-guardian/cline_mcp_settings.json
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: false
+
+config:
+  mcpConfigPath: /etc/mcp-guardian/mcp.json
+  policy:
+    path: /etc/mcp-guardian/policy.yaml
+    mode: block
+  env:
+    NODE_ENV: production
+    DASHBOARD_ENABLED: "true"
+    METRICS_ENABLED: "true"
+    GUARDIAN_STRICT_MODE: "true"
+    POLICY_AUDIT_ENABLED: "true"
+    GUARDIAN_SECRET_PROVIDER: env
 
 persistence:
   enabled: true
   storageClass: standard
   size: 1Gi
+  mountPath: /data
 
 resources:
   requests:
@@ -33,43 +58,72 @@ resources:
 service:
   type: ClusterIP
   port: 4000
+  metricsPort: 9090
+  annotations: {}
+
+dashboard:
+  enabled: true
+  authEnabled: false
+  allowedCidr: ""
+
+metrics:
+  enabled: true
+  port: 9090
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+externalSecrets:
+  enabled: false
+  secretStore: vault-backend
+  path: mcp-guardian/prod
+
+networkPolicy:
+  enabled: false
+  allowedNamespace: default
+
+secrets:
+  mode: external
+  existingSecret: ""
+
+database:
+  type: sqlite
+  url: ""
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 15
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: metrics
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1001
   fsGroup: 1001
 
-dashboard:
-  enabled: true
-  authEnabled: true
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
 
-metrics:
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+backup:
   enabled: false
-  port: 9090
-
-externalSecrets:
-  enabled: false
-  secretStore: "vault-backend"
-  path: "mcp-guardian/prod"
-
-networkPolicy:
-  enabled: false
-  allowedNamespace: "default"
-
-secrets:
-  # Use Vault or SOPS instead of plain values for production
-  # Set to 'external' to use an existing Secret object
-  mode: "external"
-  existingSecret: ""     # Name of pre-created K8s Secret
-
-# Proxy port for intra-namespace traffic
-service:
-  proxyPort: 3000
-  dashboardPort: 4000
-</replace_in_file>
-<task_progress>
-- [x] GAP 6, 9, 14, 16
-- [x] GAP 10: Helm values.yaml secrets + ports, healthz configmap
-- [ ] GAP 15: Agent cost attribution
-- [ ] Build, test, commit, push, publish
-</task_progress>
+  schedule: "0 2 * * *"

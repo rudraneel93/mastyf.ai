@@ -15,6 +15,12 @@ spec:
     metadata:
       labels:
         {{- include "mcp-guardian.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- if .Values.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.metrics.port | quote }}
+        prometheus.io/path: "/metrics"
+        {{- end }}
     spec:
       serviceAccountName: {{ include "mcp-guardian.fullname" . }}
       securityContext:
@@ -24,25 +30,60 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - /bin/sh
-            - -c
-            - |
-              npm install -g @mcp-guardian/server && \
-              mcp-guardian proxy \
-                --config {{ .Values.config.mcpConfigPath }} \
-                {{- if .Values.config.policy.path }}
-                --policy {{ .Values.config.policy.path }} \
-                --blocking-mode {{ .Values.config.policy.mode }}
-                {{- end }}
+            - node
+            - dist/cli.js
+            - proxy
+            - --config
+            - {{ .Values.config.mcpConfigPath }}
+            - --policy
+            - {{ .Values.config.policy.path }}
+            - --blocking-mode
+            - {{ .Values.config.policy.mode }}
           env:
+            - name: REPLICA_COUNT
+              value: {{ .Values.replicaCount | quote }}
+            - name: MCP_GUARDIAN_DB_PATH
+              value: {{ .Values.persistence.mountPath }}/history.db
+            {{- if eq .Values.database.type "postgres" }}
+            - name: DB_TYPE
+              value: postgres
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret | default (printf "%s-secret" (include "mcp-guardian.fullname" .)) }}
+                  key: database-url
+                  optional: true
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_URL
+              value: redis://{{ .Release.Name }}-redis-master:6379
+            {{- else if .Values.secrets.existingSecret }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: redis-url
+                  optional: true
+            {{- end }}
             {{- range $key, $val := .Values.config.env }}
             - name: {{ $key }}
               value: {{ $val | quote }}
             {{- end }}
+          {{- if or .Values.externalSecrets.enabled .Values.secrets.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret | default (printf "%s-secret" (include "mcp-guardian.fullname" .)) }}
+                optional: true
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           securityContext:
@@ -56,9 +97,17 @@ spec:
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
           livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            httpGet:
+              path: {{ .Values.livenessProbe.httpGet.path }}
+              port: {{ .Values.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
           readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
+            httpGet:
+              path: {{ .Values.readinessProbe.httpGet.path }}
+              port: {{ .Values.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
       volumes:
         - name: config
           configMap:

@@ -1,0 +1,44 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  mcp-guardian:
+    build: .
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+      - "9090:9090"
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      METRICS_ENABLED: "true"
+      METRICS_PORT: "9090"
+      DASHBOARD_ENABLED: "true"
+      DASHBOARD_PORT: "4000"
+      GUARDIAN_STRICT_MODE: "true"
+      POLICY_AUDIT_ENABLED: "true"
+      MCP_GUARDIAN_DB_PATH: /data/history.db
+    volumes:
+      - ./mcp.json:/etc/mcp-guardian/mcp.json:ro
+      - ./default-policy.yaml:/etc/mcp-guardian/policy.yaml:ro
+      - guardian-data:/data
+    command:
+      - node
+      - dist/cli.js
+      - proxy
+      - --config
+      - /etc/mcp-guardian/mcp.json
+      - --policy
+      - /etc/mcp-guardian/policy.yaml
+
+volumes:
+  guardian-data:

@@ -5,12 +5,14 @@ import { SecretScanner } from './scanners/secret-scanner.js';
 import { SecurityScanner } from './services/security-scanner.js';
 import { CostAuditor } from './services/cost-auditor.js';
 import { HealthMonitor } from './services/health-monitor.js';
-import { HistoryDatabase } from './database/history-db.js';
+import { IDatabase } from './database/database-interface.js';
+import { createDatabase } from './database/create-database.js';
 import { PricingClient } from './clients/pricing-client.js';
 import { Logger } from './utils/logger.js';
+import { bootstrapSecrets } from './utils/enterprise-bootstrap.js';
 
 export interface Container {
-  db: HistoryDatabase;
+  db: IDatabase;
   securityScanner: SecurityScanner;
   costAuditor: CostAuditor;
   healthMonitor: HealthMonitor;
@@ -18,9 +20,9 @@ export interface Container {
 
 let startupWarningEmitted = false;
 
-export function createContainer(dbPath?: string): Container {
-  const effectivePath = dbPath ?? (process.env.MCP_GUARDIAN_DB_PATH || undefined);
-  const db = new HistoryDatabase(effectivePath);
+export async function createContainer(dbPath?: string): Promise<Container> {
+  await bootstrapSecrets();
+  const db = await createDatabase(dbPath);
   const cveChecker = new CveChecker();
   const authProber = new AuthProber();
   const typoDetector = new TypoSquatDetector();

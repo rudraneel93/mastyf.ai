@@ -19,6 +19,8 @@ This guide covers deploying MCP Guardian in production Kubernetes environments.
 
 ## Architecture
 
+For **IDE integration** (Cline, Cursor, Claude Code on developer laptops), see [docs/REAL_WORLD_INTEGRATION.md](../docs/REAL_WORLD_INTEGRATION.md) and `mcp-guardian wrap`. Use Helm for shared team infrastructure below.
+
 In production, MCP Guardian runs as a **proxy sidecar** between your AI client and MCP servers:
 
 ```
@@ -382,13 +384,17 @@ Pino logs can be streamed to:
 - **Elasticsearch** — Filebeat → Logstash → Elasticsearch pipeline
 - **Generic** — Pipe stdout to any syslog-compatible collector
 
-### Prometheus Metrics (Future)
+### Prometheus Metrics
 
-In v0.5+, MCP Guardian will expose Prometheus metrics at `/metrics`:
-- `mcp_guardian_tools_calls_total{decision="pass|block|flag"}`
-- `mcp_guardian_policy_evaluation_seconds`
-- `mcp_guardian_db_size_bytes`
-- `mcp_guardian_proxy_latency_seconds`
+Set `METRICS_ENABLED=true` and scrape port `9090` (default):
+
+- `/metrics` — Prometheus exposition format
+- `/healthz` — liveness
+- `/readyz` — readiness (Redis/Postgres checks when configured)
+
+Key series: `mcp_guardian_requests_total`, `mcp_guardian_blocked_total`, `mcp_guardian_proxy_latency_ms`, `mcp_guardian_auth_failures_total`.
+
+Helm: enable `monitoring.serviceMonitor.enabled` for Prometheus Operator.
 
 ---
 

@@ -1,4 +1,4 @@
-import { HistoryDatabase } from '../database/history-db.js';
+import { IDatabase } from '../database/database-interface.js';
 import { McpProxyServer } from './proxy-server.js';
 import { SseProxyServer } from './sse-proxy-server.js';
 import { McpServerConfig } from '../types.js';
@@ -14,7 +14,7 @@ export class ProxyManager {
   private policyEngine: PolicyEngine | undefined;
 
   constructor(
-    private db: HistoryDatabase,
+    private db: IDatabase,
     policyEngineOrWatcher?: PolicyEngine | PolicyWatcher,
     private authValidator?: OAuthValidator,
   ) {

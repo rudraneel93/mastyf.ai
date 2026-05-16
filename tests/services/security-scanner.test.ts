@@ -11,7 +11,10 @@ vi.mock('../../src/scanners/typo-squat-detector.js');
 vi.mock('../../src/scanners/secret-scanner.js');
 
 describe('SecurityScanner', () => {
-  const mockCve = { check: vi.fn().mockResolvedValue([]) };
+  const mockCve = {
+    check: vi.fn().mockResolvedValue({ findings: [], lookupStatus: 'ok' }),
+    checkServerPackages: vi.fn().mockResolvedValue({ findings: [], lookupStatus: 'ok' }),
+  };
   const mockAuth = { probe: vi.fn().mockReturnValue({ hasAuthentication: true, isTransportEncrypted: true }) };
   const mockTypo = { detect: vi.fn().mockReturnValue([]) };
   const mockSecret = { scan: vi.fn().mockReturnValue([]) };
@@ -37,17 +40,23 @@ describe('SecurityScanner', () => {
   });
 
   it('deducts for critical CVEs', async () => {
-    mockCve.check.mockResolvedValueOnce([{ id: 'CVE-1', severity: 'CRITICAL', summary: 'test' }]);
+    mockCve.checkServerPackages.mockResolvedValueOnce({
+      findings: [{ id: 'CVE-1', severity: 'CRITICAL', summary: 'test' }],
+      lookupStatus: 'ok',
+    });
     mockAuth.probe.mockReturnValueOnce({ hasAuthentication: true, isTransportEncrypted: true });
     const report = await scanner.scanServer({ name: 'test', transport: 'stdio' });
     expect(report.score).toBe(90); // 100 + 20(auth bonus) - 30(critical CVE) = 90
   });
 
   it('deducts for all issues combined', async () => {
-    mockCve.check.mockResolvedValueOnce([
-      { id: 'CVE-1', severity: 'CRITICAL', summary: 'critical' },
-      { id: 'CVE-2', severity: 'HIGH', summary: 'high' },
-    ]);
+    mockCve.checkServerPackages.mockResolvedValueOnce({
+      findings: [
+        { id: 'CVE-1', severity: 'CRITICAL', summary: 'critical' },
+        { id: 'CVE-2', severity: 'HIGH', summary: 'high' },
+      ],
+      lookupStatus: 'ok',
+    });
     mockAuth.probe.mockReturnValueOnce({ hasAuthentication: false, isTransportEncrypted: false });
     mockTypo.detect.mockReturnValueOnce([{ suspiciousName: 'bad', similarityTo: 'good', distance: 1 }]);
     mockSecret.scan.mockReturnValueOnce([{ type: 'api_key', location: 'env:', severity: 'MEDIUM' }]);

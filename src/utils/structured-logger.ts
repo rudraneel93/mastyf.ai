@@ -49,6 +49,9 @@ export class StructuredLogger {
    */
   static logPolicyDecision(entry: AuditLogEntry): void {
     logger.info(entry);
+    import('./enterprise-bootstrap.js').then(({ exportSiemEvent }) => {
+      exportSiemEvent('policy_decision', entry as unknown as Record<string, unknown>).catch(() => {});
+    }).catch(() => {});
   }
 
   /**
@@ -56,6 +59,9 @@ export class StructuredLogger {
    */
   static logBlocked(entry: BlockLogEntry): void {
     logger.warn(entry);
+    import('./enterprise-bootstrap.js').then(({ exportSiemEvent }) => {
+      exportSiemEvent('tool_blocked', entry as unknown as Record<string, unknown>).catch(() => {});
+    }).catch(() => {});
   }
 
   /**

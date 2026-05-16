@@ -87,7 +87,33 @@ export class PolicyEngine {
    *
    * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
    */
-  evaluate(context: CallContext): PolicyDecision {
+  async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
+    const { evaluateOpaPolicy } = await import('./opa-policy.js');
+    const opaDecision = await evaluateOpaPolicy(context);
+    if (opaDecision && opaDecision.action === 'block') return opaDecision;
+
+    if (process.env['REDIS_URL']) {
+      const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
+      const rl = getSharedRedisRateLimiter();
+      for (const rule of this.rules) {
+        if (!rule.maxCallsPerMinute) continue;
+        const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+        const key = `${tenant}:${context.serverName}:${context.toolName}:${rule.name}`;
+        const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute);
+        if (!allowed) {
+          return {
+            action: this.resolveAction(rule.action),
+            rule: rule.name,
+            reason: `Rate limit exceeded: ${rule.maxCallsPerMinute} calls per minute (cluster)`,
+          };
+        }
+      }
+      return this.evaluate(context, { skipLocalRateLimit: true });
+    }
+    return this.evaluate(context);
+  }
+
+  evaluate(context: CallContext, options?: { skipLocalRateLimit?: boolean }): PolicyDecision {
     // ── v1.2: Payload normalization (before regex evaluation) ──
     const normalizedArgs = context.arguments
       ? this.normalizer.normalizeJsonValue(context.arguments) as Record<string, unknown>
@@ -103,35 +129,67 @@ export class PolicyEngine {
       ? this.shellTokenizer.analyzeRisk(this.shellTokenizer.tokenize(argsStr).commands)
       : { hasCommandSubstitution: false, hasPipes: false, hasRedirects: false, hasLogicalChains: false, dangerousCommands: [], shellMetacharacters: [] };
 
-    // Check for high-risk semantic patterns regardless of rule match
-    if (shellRisk.hasCommandSubstitution) {
-      Logger.info(`[policy] Semantic: command substitution detected in '${context.toolName}' arguments`);
-    }
-    if (shellRisk.dangerousCommands.length > 0) {
-      Logger.info(`[policy] Semantic: dangerous commands [${shellRisk.dangerousCommands.join(', ')}] in '${context.toolName}' arguments`);
-    }
+    // Semantic shell analysis runs once per request (not per rule)
+    const semanticDecision = this.evaluateSemanticShell(shellRisk, context.toolName);
+    if (semanticDecision) return semanticDecision;
 
     for (const rule of this.rules) {
-      const decision = this.evaluateRule(rule, normalizedContext, { argsStr, shellRisk });
+      const decision = this.evaluateRule(rule, normalizedContext, { argsStr }, options?.skipLocalRateLimit);
       if (decision) return decision;
     }
 
-    // GAP 14: Apply default_action from policy config (fail-closed by default for security)
-    const defaultAction = this.config.policy.default_action || 'block';
+    // GAP 14: default_action when no rule matches — omit for fail-open (rule-only policies);
+    // set explicitly to 'block' in default-policy.yaml for fail-closed production posture.
+    const defaultAction = this.config.policy.default_action ?? 'pass';
     return { action: this.resolveAction(defaultAction), rule: 'default', reason: `No matching rule — applying default_action: ${defaultAction}` };
+  }
+
+  /** Global semantic shell guard — evaluated once before rule iteration */
+  private evaluateSemanticShell(shellRisk: CommandRisk, toolName: string): PolicyDecision | null {
+    if (this.config.policy.semantic_shell === false) return null;
+
+    if (shellRisk.hasCommandSubstitution) {
+      Logger.info(`[policy] Semantic: command substitution detected in '${toolName}' arguments`);
+      return {
+        action: this.resolveAction('block'),
+        rule: 'semantic-shell-guard',
+        reason: 'Semantic: shell command substitution detected in arguments',
+      };
+    }
+
+    if (shellRisk.dangerousCommands.length > 0) {
+      Logger.info(`[policy] Semantic: dangerous commands [${shellRisk.dangerousCommands.join(', ')}] in '${toolName}' arguments`);
+      return {
+        action: this.resolveAction('block'),
+        rule: 'semantic-shell-guard',
+        reason: `Semantic: dangerous shell commands detected: [${shellRisk.dangerousCommands.join(', ')}]`,
+      };
+    }
+
+    if (shellRisk.hasPipes && shellRisk.hasCommandSubstitution) {
+      return {
+        action: this.resolveAction('block'),
+        rule: 'semantic-shell-guard',
+        reason: 'Semantic: pipe chain with command substitution',
+      };
+    }
+
+    return null;
   }
 
   private evaluateRule(
     rule: PolicyConfig['policy']['rules'][number],
     ctx: CallContext,
-    analysis: { argsStr: string; shellRisk: CommandRisk },
+    analysis: { argsStr: string },
+    skipLocalRateLimit = false,
   ): PolicyDecision | null {
     // Tool allowlist/denylist
     if (rule.tools) {
       if (rule.tools.allow && rule.tools.allow.length > 0) {
-        if (!rule.tools.allow.includes(ctx.toolName)) {
-          return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Tool '${ctx.toolName}' not in allowlist: [${rule.tools.allow.join(', ')}]` };
+        if (rule.tools.allow.includes(ctx.toolName)) {
+          return { action: 'pass', rule: rule.name, reason: `Tool '${ctx.toolName}' is in allowlist` };
         }
+        return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Tool '${ctx.toolName}' not in allowlist: [${rule.tools.allow.join(', ')}]` };
       }
       if (rule.tools.deny && rule.tools.deny.length > 0) {
         if (rule.tools.deny.includes(ctx.toolName)) {
@@ -191,28 +249,6 @@ export class PolicyEngine {
       }
     }
 
-    // v1.2: Semantic shell detection — always-on by default
-    {
-      // Command substitution is always high-risk
-      if (analysis.shellRisk.hasCommandSubstitution) {
-        return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: shell command substitution detected in arguments' };
-      }
-
-      // Dangerous commands in any context
-      if (analysis.shellRisk.dangerousCommands.length > 0) {
-        return {
-          action: this.resolveAction('block'),
-          rule: rule.name,
-          reason: `Semantic: dangerous shell commands detected: [${analysis.shellRisk.dangerousCommands.join(', ')}]`,
-        };
-      }
-
-      // Pipe chains with dangerous patterns
-      if (analysis.shellRisk.hasPipes && analysis.shellRisk.hasCommandSubstitution) {
-        return { action: this.resolveAction('block'), rule: rule.name, reason: 'Semantic: pipe chain with command substitution' };
-      } // end semantic shell detection block
-    }
-
     // Max tokens per call
     if (rule.maxTokens && ctx.requestTokens > rule.maxTokens) {
       return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Token count ${ctx.requestTokens} exceeds max ${rule.maxTokens}` };
@@ -247,8 +283,8 @@ export class PolicyEngine {
       }
     }
 
-    // Rate limiting (LRU-backed, prevents memory leaks)
-    if (rule.maxCallsPerMinute) {
+    // Rate limiting (LRU-backed, prevents memory leaks) — skipped when Redis cluster limiter is active
+    if (rule.maxCallsPerMinute && !skipLocalRateLimit) {
       const key = `${ctx.serverName}:${ctx.toolName}`;
       const now = Date.now();
       let counter = this.callCounters.get(key);

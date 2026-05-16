@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import path from 'path';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ConfigParser } from './config-parser.js';
@@ -17,6 +18,9 @@ import { startDashboardServer, setDashboardDataSource } from './utils/dashboard-
 import { DashboardAuth } from './auth/dashboard-auth.js';
 import { initTracing } from './utils/tracing.js';
 import { createContainer } from './container.js';
+import { bootstrapCompliance, shutdownEnterprise } from './utils/enterprise-bootstrap.js';
+import { createDatabase } from './database/create-database.js';
+import { bootstrapSecrets } from './utils/enterprise-bootstrap.js';
 
 // ── Typed option interfaces ──────────────────────────────────────────
 interface ScanOptions {
@@ -116,7 +120,7 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
-    const container = createContainer();
+    const container = await createContainer();
     const reports = await Promise.all(servers.map((s) => container.securityScanner.scanServer(s)));
     await Promise.all(reports.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r)));
     container.db.close();
@@ -137,7 +141,7 @@ program
     const filtered = opts.server ? servers.filter((s) => s.name === opts.server) : servers;
     if (filtered.length === 0) { console.error(chalk.yellow('No servers found.')); process.exit(0); }
 
-    const container = createContainer();
+    const container = await createContainer();
     const results = await Promise.all(filtered.map((s) => container.costAuditor.auditServer(s)));
     container.costAuditor.dispose();
     await Promise.all(results.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)));
@@ -168,7 +172,7 @@ program
     const filtered = opts.server ? servers.filter((s) => s.name === opts.server) : servers;
     if (filtered.length === 0) { console.error(chalk.yellow('No servers found.')); process.exit(0); }
 
-    const container = createContainer();
+    const container = await createContainer();
     const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s)));
     await Promise.all(results.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)));
     container.db.close();
@@ -206,7 +210,7 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
-    const container = createContainer();
+    const container = await createContainer();
     const [security, costs, health] = await Promise.all([
       Promise.all(servers.map((s) => container.securityScanner.scanServer(s))),
       Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
@@ -240,6 +244,59 @@ program
     }
 
     checkAlertThresholds(security, opts);
+  });
+
+program
+  .command('wrap')
+  .description('Wrap Cline/Cursor/Claude MCP servers with Guardian proxy (per-server configs + optional client patch)')
+  .option('--client <name>', 'Client config to wrap: cline, cursor, claude-desktop, windsurf, auto', 'auto')
+  .option('-c, --config <path>', 'Explicit MCP client config path (overrides --client)')
+  .option('--policy <path>', 'Policy YAML for wrapped proxies', 'policy-audit.yaml')
+  .option('--apply', 'Patch live client MCP JSON (creates timestamped .bak backup)', false)
+  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .option('--skip <names>', 'Comma-separated server names to skip (default: mcp-guardian,guardian)', 'mcp-guardian,guardian')
+  .action(async (opts: {
+    client: string;
+    config?: string;
+    policy: string;
+    apply: boolean;
+    projectRoot: string;
+    skip: string;
+  }) => {
+    const { runWrap } = await import('./wrap/client-wrap.js');
+    type WrapClient = import('./wrap/client-wrap.js').WrapClient;
+    const client = opts.client as WrapClient;
+    const valid = ['cline', 'cursor', 'claude-desktop', 'windsurf', 'auto'];
+    if (!valid.includes(client)) {
+      console.error(chalk.red(`Invalid --client "${opts.client}". Use: ${valid.join(', ')}`));
+      process.exit(1);
+    }
+    try {
+      const result = runWrap({
+        client,
+        configPath: opts.config,
+        projectRoot: opts.projectRoot,
+        policyPath: opts.policy,
+        apply: opts.apply,
+        skipNames: opts.skip.split(',').map((s) => s.trim()).filter(Boolean),
+      });
+      console.error(chalk.green(`\nWrapped ${result.wrapped.length} server(s): ${result.wrapped.join(', ') || '(none)'}`));
+      if (result.skipped.length) {
+        console.error(chalk.dim(`Skipped: ${result.skipped.join('; ')}`));
+      }
+      console.error(chalk.dim(`Per-server configs: ${result.configsDir}`));
+      console.error(chalk.dim(`Wrapper script: ${result.wrapperScript}`));
+      console.error(chalk.dim(`Example patched JSON: examples/${path.basename(result.clientConfigPath, '.json')}.wrapped.json`));
+      if (result.backupPath) {
+        console.error(chalk.yellow(`Backup: ${result.backupPath}`));
+        console.error(chalk.green('Applied — reload MCP servers in your IDE (Cline: restart VS Code or reconnect MCP).'));
+      } else if (result.wrapped.length > 0) {
+        console.error(chalk.yellow('\nDry-run only. Re-run with --apply to patch your live client config.'));
+      }
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
   });
 
 program
@@ -397,7 +454,9 @@ program
       console.error(chalk.dim('No policy file specified — running in audit-only mode'));
     }
 
-    const db = new HistoryDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
+    await bootstrapSecrets();
+    const db = await createDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
+    await bootstrapCompliance(db);
     // Pass PolicyWatcher (not just engine) so hot-reload works
     // When mode override is active, pass the engine directly since the watcher was re-seeded
     const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);
@@ -417,16 +476,18 @@ program
     const dashboardPort = parseInt(process.env['DASHBOARD_PORT'] || '4000', 10);
     startDashboardServer(dashboardPort, policyWatcher).catch(() => {});
 
-    // ── Start AI Engine for real-time learning and threat intel ──
-    const { initializeAiEngine } = await import('./ai/suggestion-engine.js');
-    initializeAiEngine(db, servers).catch((err: any) => {
-      console.error(chalk.yellow(`AI Engine start warning: ${err?.message}`));
-    });
+    if (process.env['GUARDIAN_EXPERIMENTAL_AI'] === 'true') {
+      const { initializeAiEngine } = await import('./ai/suggestion-engine.js');
+      initializeAiEngine(db, servers).catch((err: any) => {
+        console.error(chalk.yellow(`AI Engine start warning: ${err?.message}`));
+      });
+    }
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
-    const cleanup = () => {
+    const cleanup = async () => {
       manager.stopAll();
-      db.close(); // Synchronous WAL checkpoint with better-sqlite3
+      await shutdownEnterprise();
+      await db.close();
       process.exit(0);
     };
     process.on('SIGINT', cleanup);

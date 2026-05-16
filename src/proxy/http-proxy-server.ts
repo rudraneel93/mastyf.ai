@@ -10,7 +10,7 @@ import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
-import { SessionCache } from '../auth/session-cache.js';
+import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import { CircuitBreaker } from '../utils/circuit-breaker.js';
 import { MtlsConfig, createMtlsAgent } from '../utils/mtls-config.js';
 import * as Metrics from '../utils/metrics.js';
@@ -25,7 +25,7 @@ export class HttpProxyServer {
   private targetUrl: string;
   private policyEngine: PolicyEngine | null;
   private authValidator: OAuthValidator | null;
-  private sessionCache: SessionCache | null;
+  private sessionCache: GuardianSessionCache | null;
   private circuitBreaker: CircuitBreaker;
   private tokenCounter: TokenCounter;
   private db: HistoryDatabase;
@@ -46,7 +46,7 @@ export class HttpProxyServer {
     this.targetUrl = targetUrl.replace(/\/$/, '');
     this.policyEngine = policyEngine || null;
     this.authValidator = authValidator || null;
-    this.sessionCache = authValidator ? new SessionCache() : null;
+    this.sessionCache = authValidator ? createSessionCache() : null;
     this.circuitBreaker = new CircuitBreaker(this.serverName, { resetTimeoutMs: 15000 });
     this.tokenCounter = new TokenCounter();
     this.db = db || new HistoryDatabase(':memory:');
@@ -89,7 +89,13 @@ export class HttpProxyServer {
       }
 
       if (token) {
-        const result: AuthValidationResult = await this.authValidator.validate(token);
+        let result: AuthValidationResult = await this.authValidator.validate(token);
+        if (!result.valid && this.sessionCache) {
+          const sessionIdentity = await validateSessionToken(this.sessionCache, token);
+          if (sessionIdentity) {
+            result = { valid: true, identity: sessionIdentity };
+          }
+        }
         authnSuccess = result.valid;
         if (result.identity) agentIdentity = result.identity;
 
@@ -139,10 +145,11 @@ export class HttpProxyServer {
             requestId,
             requestTokens: tokens,
             timestamp: new Date().toISOString(),
+            tenantId: process.env['GUARDIAN_TENANT_ID'] || req.headers['x-tenant-id'] as string | undefined,
             agentIdentity,
           };
 
-          const decision = this.policyEngine.evaluate(context);
+          const decision = await this.policyEngine.evaluateAsync(context);
 
           if (decision.action === 'block') {
             Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: `policy:${decision.rule}`, rule: decision.rule });
@@ -224,6 +231,20 @@ export class HttpProxyServer {
         res.end(JSON.stringify({ error: `Proxy error: ${err.message}` }));
       }
     }
+  }
+
+  getPort(): number {
+    const addr = this.server?.address();
+    if (addr && typeof addr === 'object') return addr.port;
+    return this.port;
+  }
+
+  getServerName(): string {
+    return this.serverName;
+  }
+
+  getTargetUrl(): string {
+    return this.targetUrl;
   }
 
   async stop(): Promise<void> {

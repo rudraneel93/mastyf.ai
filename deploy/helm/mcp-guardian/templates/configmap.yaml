@@ -5,6 +5,10 @@ metadata:
   labels:
     {{- include "mcp-guardian.labels" . | nindent 4 }}
 data:
+  mcp.json: |
+    {
+      "mcpServers": {}
+    }
   policy.yaml: |
     ---
     version: "1.0"

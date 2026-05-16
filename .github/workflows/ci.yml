@@ -30,11 +30,10 @@ jobs:
       # turbo builds workspace packages (core → server → cli)
       - run: pnpm run build
 
-      - run: pnpm -r test
+      - run: pnpm test
 
       - name: Run tests with coverage
         run: pnpm vitest run --coverage
-        continue-on-error: true
 
   corpus-eval:
     name: Corpus Precision/Recall
@@ -78,14 +77,12 @@ jobs:
         with:
           node-version: 20
       - run: pnpm install --frozen-lockfile
-      - name: Run pnpm audit (non-blocking)
-        run: pnpm audit --audit-level=high || true
-        continue-on-error: true
+      - name: Run pnpm audit
+        run: pnpm audit --audit-level=high
 
   docker-scan:
     name: Docker Build & Security Scan
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
@@ -95,5 +92,18 @@ jobs:
         with:
           image-ref: mcp-guardian:ci
           severity: 'CRITICAL,HIGH'
-          exit-code: 0
+          exit-code: 1
           format: 'table'
+
+  helm-lint:
+    name: Helm Lint & Template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Helm dependency update
+        run: helm dependency update deploy/helm/mcp-guardian
+      - name: Helm lint
+        run: helm lint deploy/helm/mcp-guardian
+      - name: Helm template smoke
+        run: helm template guardian deploy/helm/mcp-guardian --set redis.enabled=false > /dev/null
