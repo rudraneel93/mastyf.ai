@@ -38,6 +38,7 @@ export const PolicySchema = z.object({
     mode: z.enum(['audit', 'warn', 'block']),
     default_action: z.enum(['pass', 'block', 'flag']).optional(),
     semantic_shell: z.boolean().optional(),
+    unicode_strict: z.boolean().optional(),
     rules: z.array(PolicyRuleSchema),
   }),
 });

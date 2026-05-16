@@ -1,0 +1,475 @@
+{
+  "description": "Validated confusable shell variants (~87)",
+  "variants": [
+    {
+      "input": "ｃ𝐮𝐫׀ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫| http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫∣ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫⏽ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫￨ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫1 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫١ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫۱ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𐌠 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𞣇 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𜳱 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝟏 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝟙 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝟣 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝟭 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝟷 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫🯱 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫I http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫Ｉ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫Ⅰ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫ℐ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫ℑ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𜳞 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝐈 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝐼 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝑰 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝓘 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝕀 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝕴 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝖨 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝗜 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝘐 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝙄 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝙸 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫Ɩ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫ｌ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫ⅼ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫ℓ http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝐥 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝑙 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝒍 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝓁 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝓵 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝔩 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝕝 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝖑 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝗅 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝗹 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝘭 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃ𝐮𝐫𝙡 http://x",
+      "category": "curl",
+      "expectMatch": true
+    },
+    {
+      "input": "ϲurl http://x",
+      "category": "greek",
+      "expectMatch": true
+    },
+    {
+      "input": "ⅽurl http://x",
+      "category": "greek",
+      "expectMatch": true
+    },
+    {
+      "input": "ｃurl http://x",
+      "category": "greek",
+      "expectMatch": true
+    },
+    {
+      "input": "𝚌𝚞𝚛𝚕 http://x",
+      "category": "math",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝐭 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝑡 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝒕 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝓉 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝓽 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝔱 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝕥 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝖙 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝗍 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝘁 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝘵 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝙩 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇ℮𝚝 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝐭 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝑡 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝒕 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝓉 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝓽 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝔱 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝕥 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝖙 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝗍 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝘁 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝘵 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ɯｇｅ𝙩 http://x",
+      "category": "wget",
+      "expectMatch": true
+    },
+    {
+      "input": "ｒｍ -rf /",
+      "category": "rm",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓｈ -˛",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓｈ -⍳",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓｈ -ｉ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓｈ -ⅰ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓｈ -ℹ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓℎ -˛",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓℎ -⍳",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓℎ -ｉ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓℎ -ⅰ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓℎ -ℹ",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓ𝐡 -˛",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "𝐛⍺ｓ𝐡 -⍳",
+      "category": "bash",
+      "expectMatch": true
+    },
+    {
+      "input": "ԝget http://x",
+      "category": "armenian",
+      "expectMatch": true
+    },
+    {
+      "input": "curl",
+      "category": "ascii",
+      "expectMatch": true
+    }
+  ]
+}

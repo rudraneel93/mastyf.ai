@@ -4,6 +4,7 @@ policy:
   # Fail-closed: tools not explicitly allowlisted are blocked (see allowlist-common-tools).
   default_action: block
   semantic_shell: true
+  unicode_strict: true
   rules:
     - name: deny-dangerous-tools
       description: Explicitly deny tools that can execute arbitrary code

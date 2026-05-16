@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.5.6",
+  "version": "2.5.7",
   "description": "Runtime security, cost governance, and health monitoring proxy for MCP infrastructure",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,6 +25,7 @@
   "license": "MIT",
   "files": [
     "dist",
+    "assets",
     "README.md",
     "LICENSE",
     "default-policy.yaml"

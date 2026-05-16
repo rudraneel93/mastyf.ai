@@ -9,6 +9,7 @@ describe('parsePolicyConfig', () => {
         mode: 'block',
         default_action: 'pass',
         semantic_shell: true,
+        unicode_strict: true,
         rules: [
           {
             name: 'deny-shell',
@@ -28,6 +29,7 @@ describe('parsePolicyConfig', () => {
     });
     expect(config.policy.rules[0].argPatterns?.[0].field).toBe('command');
     expect(config.policy.semantic_shell).toBe(true);
+    expect(config.policy.unicode_strict).toBe(true);
   });
 
   it('rejects invalid mode', () => {

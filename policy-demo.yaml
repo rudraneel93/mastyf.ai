@@ -5,6 +5,7 @@ policy:
   mode: audit
   default_action: pass
   semantic_shell: true
+  unicode_strict: false
   rules:
     - name: block-shell-injection
       description: Block tool calls containing shell injection or command chaining

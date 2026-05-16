@@ -22,7 +22,7 @@ export class PolicyEngine {
     ttl: 60000,
     updateAgeOnGet: true,
   });
-  private normalizer = getNormalizer();
+  private normalizer: ReturnType<typeof getNormalizer>;
   private shellTokenizer = new ShellTokenizer();
 
   // Pre-compiled regex patterns (constructed once, not on every tools/call)
@@ -33,6 +33,7 @@ export class PolicyEngine {
     this.rules = config.policy.rules;
     this.mode = config.policy.mode;
     this.config = config;
+    this.normalizer = getNormalizer(config.policy.unicode_strict !== false);
     this.compilePatterns();
   }
 

@@ -2,6 +2,16 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.5.7] - 2026-05-16
+
+### Security
+- **Unicode TR39 confusables** — Full `confusables.txt` (UTS #39) loaded at startup; `normalizeConfusables()` runs before NFKC in payload normalization and recursive de-obfuscation (~96% detection on homoglyph shell bypass suite vs ~71% with NFKC + Cyrillic fold alone).
+- **Policy flag `unicode_strict`** — `policy.unicode_strict` (default `true` in `default-policy.yaml`, `false` in `policy-demo.yaml`). When `false`, skips TR39 confusables pass for international tool arguments.
+
+### Added
+- **`assets/confusables.txt`** — Shipped in npm package (`files` includes `assets/`).
+- **Tests** — `tests/utils/confusables.test.ts`, `tests/fixtures/confusables-suite.json`, `tests/utils/confusables-suite.test.ts`.
+
 ## [2.5.6] - 2026-05-16
 
 ### Added

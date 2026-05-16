@@ -56,6 +56,8 @@ export interface PolicyConfig {
     default_action?: PolicyAction;
     /** Run semantic shell analysis once per request (default: true) */
     semantic_shell?: boolean;
+    /** TR39 confusables + NFKC on tool args (default: true). Set false for international teams. */
+    unicode_strict?: boolean;
     rules: PolicyRule[];
   };
 }

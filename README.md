@@ -308,7 +308,9 @@ Reads **`MCP_GUARDIAN_DB_PATH`** (default `~/.mcp-guardian/history.db`) in **rea
 
 ## Policy Engine & Rollout
 
-Policies are YAML evaluated on every `tools/call`. Pipeline: recursive de-obfuscation → payload normalization → semantic shell analysis → rules (regex, tool deny, rate limits, RBAC).
+Policies are YAML evaluated on every `tools/call`. Pipeline: recursive de-obfuscation → payload normalization (TR39 confusables → NFKC when `unicode_strict: true`) → semantic shell analysis → rules (regex, tool deny, rate limits, RBAC).
+
+**Unicode homoglyphs:** Production policies ship with `unicode_strict: true` and load `assets/confusables.txt` (Unicode TR39) to fold lookalike letters (Greek, Cyrillic, Armenian, mathematical alphanumeric, small caps) before regex matching. Set `unicode_strict: false` in policy YAML for international teams that need literal Unicode in tool arguments. The asset resolves from `dist/` at `../assets/confusables.txt` (~728 KB).
 
 False-positive tuning: reject a block via dashboard `POST /api/policy/fp/reject` with `{ "rule", "pattern" }` (or suggestion reject with `fpReject: true`). After **3** confirmations (`GUARDIAN_FP_WHITELIST_THRESHOLD`), the rule+pattern fingerprint is whitelisted in `~/.mcp-guardian/.fp-whitelist.json`.
 
@@ -318,6 +320,7 @@ policy:
   mode: block
   default_action: block   # tools not on allowlist are blocked
   semantic_shell: true
+  unicode_strict: true   # TR39 confusables before NFKC; false in policy-demo.yaml
   rules:
     - name: block-shell-injection
       action: block

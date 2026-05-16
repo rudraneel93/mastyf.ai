@@ -7,7 +7,7 @@
  * Architecture: normalize → denormalize → sanitize → evaluate
  */
 import { Logger } from './logger.js';
-import { foldHomoglyphs } from './confusables.js';
+import { foldHomoglyphs, normalizeConfusables } from './confusables.js';
 
 export interface NormalizationResult {
   /** The fully normalized string ready for policy evaluation */
@@ -27,10 +27,12 @@ export interface NormalizationResult {
 export class PayloadNormalizer {
   private readonly maxDepth: number;
   private readonly maxLength: number;
+  private readonly unicodeStrict: boolean;
 
-  constructor(maxDepth = 5, maxLength = 1_000_000) {
+  constructor(maxDepth = 5, maxLength = 1_000_000, unicodeStrict = true) {
     this.maxDepth = maxDepth;
     this.maxLength = maxLength;
+    this.unicodeStrict = unicodeStrict;
   }
 
   /**
@@ -47,11 +49,18 @@ export class PayloadNormalizer {
       transformations.push('truncated');
     }
 
-    // ── Step 1: Homoglyph fold (Cyrillic/Greek → ASCII) then NFKC ──
+    // ── Step 1: Homoglyph fold → TR39 confusables (optional) → NFKC ──
     const homoglyphFolded = foldHomoglyphs(current);
     if (homoglyphFolded !== current) {
       transformations.push('homoglyph-fold');
       current = homoglyphFolded;
+    }
+    if (this.unicodeStrict) {
+      const confusableNormalized = normalizeConfusables(current);
+      if (confusableNormalized !== current) {
+        transformations.push('confusables-tr39');
+        current = confusableNormalized;
+      }
     }
     const unicodeNormalized = current.normalize('NFKC');
     if (unicodeNormalized !== current) {
@@ -303,7 +312,12 @@ export class PayloadNormalizer {
       if (current === before) break;
       depth++;
     }
-    return current;
+    // Unicode fold after decode layers (avoid corrupting base64/hex blobs mid-decode)
+    current = foldHomoglyphs(current);
+    if (this.unicodeStrict) {
+      current = normalizeConfusables(current);
+    }
+    return current.normalize('NFKC');
   }
 
   /**
@@ -322,17 +336,19 @@ export class PayloadNormalizer {
   }
 }
 
-/** Standalone recursive de-obfuscation (base64 → URL → hex → unicode → HTML). */
-export function deobfuscateRecursive(input: string, maxDepth = 5): string {
-  return getNormalizer().deobfuscateRecursive(input, maxDepth);
+/** Standalone recursive de-obfuscation (unicode → base64 → URL → hex → HTML). */
+export function deobfuscateRecursive(input: string, maxDepth = 5, unicodeStrict = true): string {
+  return getNormalizer(unicodeStrict).deobfuscateRecursive(input, maxDepth);
 }
 
 /** Singleton instance for policy engine integration */
 let defaultInstance: PayloadNormalizer | null = null;
+let defaultUnicodeStrict = true;
 
-export function getNormalizer(): PayloadNormalizer {
-  if (!defaultInstance) {
-    defaultInstance = new PayloadNormalizer();
+export function getNormalizer(unicodeStrict = true): PayloadNormalizer {
+  if (!defaultInstance || defaultUnicodeStrict !== unicodeStrict) {
+    defaultInstance = new PayloadNormalizer(5, 1_000_000, unicodeStrict);
+    defaultUnicodeStrict = unicodeStrict;
   }
   return defaultInstance;
 }
