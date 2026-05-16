@@ -5,6 +5,7 @@ import { isFpWhitelisted } from '../ai/fp-whitelist.js';
 import { evaluateSemanticGuards } from './semantic-guards.js';
 import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
 import { LRUCache } from 'lru-cache';
+import { resolvePolicyPrecedence } from './policy-precedence.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -88,13 +89,14 @@ export class PolicyEngine {
   /**
    * Evaluate a tools/call request and return a decision.
    *
+   * Order: (1) OPA/Rego block if OPA_URL set, (2) YAML rules + default_action.
    * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
    */
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
     const { evaluateOpaPolicy } = await import('./opa-policy.js');
     const opaDecision = await evaluateOpaPolicy(context);
-    if (opaDecision && opaDecision.action === 'block') return opaDecision;
 
+    let yamlDecision: PolicyDecision;
     if (process.env['REDIS_URL']) {
       const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
       const rl = getSharedRedisRateLimiter();
@@ -104,16 +106,19 @@ export class PolicyEngine {
         const key = `${tenant}:${context.serverName}:${context.toolName}:${rule.name}`;
         const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute);
         if (!allowed) {
-          return {
+          yamlDecision = {
             action: this.resolveAction(rule.action),
             rule: rule.name,
             reason: `Rate limit exceeded: ${rule.maxCallsPerMinute} calls per minute (cluster)`,
           };
+          return resolvePolicyPrecedence(opaDecision, yamlDecision);
         }
       }
-      return this.evaluate(context, { skipLocalRateLimit: true });
+      yamlDecision = this.evaluate(context, { skipLocalRateLimit: true });
+    } else {
+      yamlDecision = this.evaluate(context);
     }
-    return this.evaluate(context);
+    return resolvePolicyPrecedence(opaDecision, yamlDecision);
   }
 
   evaluate(context: CallContext, options?: { skipLocalRateLimit?: boolean }): PolicyDecision {

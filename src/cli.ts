@@ -551,6 +551,8 @@ program
     await bootstrapSecrets();
     const db = await createDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
     await bootstrapCompliance(db);
+    const { loadDetectorPluginsFromPath } = await import('./plugins/detector-plugin.js');
+    await loadDetectorPluginsFromPath();
     // Pass PolicyWatcher (not just engine) so hot-reload works
     // When mode override is active, pass the engine directly since the watcher was re-seeded
     const manager = new ProxyManager(db, useWatcherForManager ? policyWatcher : policyEngine, authValidator);

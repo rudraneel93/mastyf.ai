@@ -14,7 +14,7 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.6.3** adds native Windows PowerShell proxy wrapping and path quoting. **2.5.3** hardens production defaults (CVE gate opt-in, dashboard auth fail-closed, proxy stderr logging). **2.5.0** added one-command IDE wrapping (`mcp-guardian wrap`), Docker Compose, PostgreSQL/Redis HA paths, OPA/Rego hooks, compliance docs, and production Helm hardening.
+**Version 2.6.4** fixes OPA-over-YAML precedence, non-blocking policy hot-reload, and an experimental detector plugin registry ([EXTENSIBILITY.md](docs/EXTENSIBILITY.md)). **2.6.3** adds native Windows PowerShell proxy wrapping and path quoting. **2.5.3** hardens production defaults (CVE gate opt-in, dashboard auth fail-closed, proxy stderr logging). **2.5.0** added one-command IDE wrapping (`mcp-guardian wrap`), Docker Compose, PostgreSQL/Redis HA paths, OPA/Rego hooks, compliance docs, and production Helm hardening.
 
 ---
 
@@ -186,7 +186,8 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **CVE scanning** — OSV.dev + NVD with transitive dependency scanning
 - **Response inspection** — Prompt injection and exfiltration in tool responses
 - **Typo-squatting detection** — Levenshtein distance vs known package names
-- **OPA/Rego** — Optional `OPA_URL` for external policy decisions
+- **OPA/Rego** — Optional `OPA_URL`; OPA **block** wins over YAML ([POLICY.md](docs/POLICY.md))
+- **Experimental detector plugins** — Opt-in registry (`GUARDIAN_PLUGINS_ENABLED`); see [EXTENSIBILITY.md](docs/EXTENSIBILITY.md) (full SDK v3.0 planned)
 
 ### Authentication & Zero Trust
 - **OAuth 2.1 / OIDC** — JWT validation with algorithm pinning, audience/issuer checks
@@ -641,7 +642,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 
 ### v3.0
 - Multi-tenant control plane
-- Plugin scanner architecture
+- Full custom detector SDK (v2.6.4 has experimental registry only)
 - gRPC transport
 
 ---
@@ -652,6 +653,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Windows](docs/WINDOWS.md) · [Production](deploy/PRODUCTION.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Security](SECURITY.md)
+**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy precedence](docs/POLICY.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Windows](docs/WINDOWS.md) · [Production](deploy/PRODUCTION.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3, pino, prom-client, jose, commander, chalk, tiktoken, and the MCP SDK.

@@ -2,6 +2,21 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.4] - 2026-05-16
+
+### Fixed (extensibility / Test 8)
+- **OPA precedence** — OPA/Rego block always wins over YAML pass; both deny → OPA reason; OPA unavailable falls through to YAML (`resolvePolicyPrecedence`, `evaluateAsync`).
+- **Hot reload** — `PolicyWatcher` builds pending engine off the event loop, atomic swap; no evaluate-time lock or "reload in progress" blocks.
+- **Detector plugins (experimental v0.1)** — `DetectorPlugin` registry, `GUARDIAN_PLUGINS_ENABLED`, optional `GUARDIAN_PLUGIN_PATH` dynamic load.
+
+### Docs
+- **[docs/POLICY.md](docs/POLICY.md)** — Evaluation order: OPA block → YAML → `default_action`.
+- **[docs/EXTENSIBILITY.md](docs/EXTENSIBILITY.md)** — Honest status; full SDK v3.0 planned.
+- **Example** — `examples/plugins/custom-secret-pattern.js`.
+
+### Tests
+- `tests/policy/opa-precedence.test.ts`, `tests/policy/policy-watcher-reload.test.ts`, `tests/plugins/detector-plugin.test.ts`.
+
 ## [2.6.3] - 2026-05-16
 
 ### Added (Windows)

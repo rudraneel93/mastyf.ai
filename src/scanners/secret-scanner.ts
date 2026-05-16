@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { isFpWhitelisted } from '../ai/fp-whitelist.js';
+import { runDetectorPlugins } from '../plugins/detector-plugin.js';
 import type { SecretFinding } from '../types.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -118,6 +119,7 @@ function displaySubject(match: RegExpMatchArray): string {
 export function scanForSecrets(target: string, context: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
   const seenSpans = new Set<string>();
+  const pluginCtx = { location: context };
   for (const rule of getRules()) {
     // Use matchAll to find all occurrences, not just the first
     const globalRegex = new RegExp(rule.regex.source, rule.regex.flags + (rule.regex.flags.includes('g') ? '' : 'g'));
@@ -141,6 +143,12 @@ export function scanForSecrets(target: string, context: string): SecretFinding[]
         method: 'regex',
       });
     }
+  }
+  for (const pf of runDetectorPlugins(target, pluginCtx)) {
+    const spanKey = `plugin:${pf.type}:${pf.redacted}`;
+    if (seenSpans.has(spanKey)) continue;
+    seenSpans.add(spanKey);
+    findings.push(pf);
   }
   return findings;
 }

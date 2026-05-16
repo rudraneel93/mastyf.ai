@@ -8,15 +8,19 @@ import { getPolicyAuditor } from '../utils/enterprise-bootstrap.js';
 import { registerReadinessCheck } from '../utils/readiness.js';
 import { Logger } from '../utils/logger.js';
 
+const RELOAD_DEBOUNCE_MS = 50;
+
 /**
  * Hot-reloadable policy engine wrapper.
- * Watches a YAML policy file for changes and atomically swaps the active policy.
- * In-flight requests continue using the old policy; new requests use the updated one.
+ * Builds a new PolicyEngine off the event-loop critical path, then atomically swaps
+ * `current` in one assignment. evaluate() always reads the active engine ref — never
+ * blocks on file I/O and never returns "reload in progress" blocks.
  */
 export class PolicyWatcher {
   private current: PolicyEngine | null = null;
   private watcher: FSWatcher | null = null;
   private policyPath: string;
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
   /** Callback invoked after a successful hot-reload (set by ProxyManager) */
   public onReload: (() => void) | null = null;
 
@@ -26,11 +30,21 @@ export class PolicyWatcher {
       ok: this.current !== null,
       detail: this.current ? 'policy loaded' : 'policy not loaded',
     }));
-    this.loadPolicy();
+    this.loadPolicySync();
     this.startWatching();
   }
 
-  private loadPolicy(): void {
+  /** Synchronous initial load only — subsequent reloads are debounced + async. */
+  private loadPolicySync(): void {
+    const engine = this.buildEngineFromDisk();
+    if (engine) {
+      this.current = engine;
+    } else if (!this.current) {
+      throw new Error(`[policy-watcher] Failed to load initial policy from ${this.policyPath}`);
+    }
+  }
+
+  private buildEngineFromDisk(): PolicyEngine | null {
     try {
       const yaml = readFileSync(this.policyPath, 'utf-8');
       const auditor = getPolicyAuditor();
@@ -45,18 +59,33 @@ export class PolicyWatcher {
       }
       const config = parsePolicyConfig(load(yaml));
       const oldMode = this.current?.getMode();
-        this.current = new PolicyEngine(config);
-        Logger.info(`[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})${oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''}`);
-        // Notify external components of successful reload
-        if (this.onReload) {
-          this.onReload();
-        }
+      const engine = new PolicyEngine(config);
+      Logger.info(
+        `[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})` +
+        (oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''),
+      );
+      return engine;
     } catch (err: any) {
       Logger.error(`[policy-watcher] Failed to load policy: ${err?.message}`);
-      // Don't replace the current policy on parse failure
-      if (!this.current) {
-        throw err; // No existing policy — must fail
-      }
+      return null;
+    }
+  }
+
+  private scheduleReload(): void {
+    if (this.reloadTimer) clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = null;
+      void this.reloadPolicyAsync();
+    }, RELOAD_DEBOUNCE_MS);
+  }
+
+  private async reloadPolicyAsync(): Promise<void> {
+    const pending = await new Promise<PolicyEngine | null>((resolve) => {
+      setImmediate(() => resolve(this.buildEngineFromDisk()));
+    });
+    if (pending) {
+      this.current = pending;
+      if (this.onReload) this.onReload();
     }
   }
 
@@ -68,8 +97,8 @@ export class PolicyWatcher {
     });
 
     this.watcher.on('change', () => {
-      Logger.info(`[policy-watcher] Policy file changed, reloading...`);
-      this.loadPolicy();
+      Logger.info(`[policy-watcher] Policy file changed, scheduling reload...`);
+      this.scheduleReload();
     });
 
     this.watcher.on('error', (err: any) => {
@@ -81,16 +110,22 @@ export class PolicyWatcher {
 
   /**
    * Get the current (active) policy engine.
-   * This is always the latest loaded version.
+   * Always the latest successfully loaded version; never null after initial load.
    */
   get(): PolicyEngine | null {
     return this.current;
   }
 
-  /**
-   * Stop watching and clean up.
-   */
+  /** @internal — deterministic reload for tests (skips chokidar debounce). */
+  async forceReloadForTests(): Promise<void> {
+    await this.reloadPolicyAsync();
+  }
+
   close(): void {
+    if (this.reloadTimer) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = null;
+    }
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
