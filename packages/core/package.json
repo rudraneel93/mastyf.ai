@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/core",
-  "version": "2.0.0",
+  "version": "2.6.7",
   "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,7 +27,7 @@
   "dependencies": {},
   "devDependencies": {
     "typescript": "^5.4.0",
-    "vitest": "^1.6.0",
+    "vitest": "^3.2.4",
     "@types/node": "^20.0.0"
   },
   "keywords": ["mcp", "security", "prompt-injection", "detection"],
