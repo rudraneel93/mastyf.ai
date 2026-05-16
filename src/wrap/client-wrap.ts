@@ -11,6 +11,7 @@ import {
   isGuardianProxyCommand,
   resolveGuardianProxyWrapper,
 } from '../utils/windows-paths.js';
+import { isRemoteSshEnabled } from '../utils/remote-path.js';
 
 export type WrapClient = 'cline' | 'cursor' | 'claude-desktop' | 'windsurf' | 'auto';
 
@@ -134,6 +135,18 @@ export function runWrap(opts: WrapOptions): WrapResult {
 
   fs.mkdirSync(configsDir, { recursive: true });
 
+  const remoteEnv: Record<string, string> | undefined = (() => {
+    if (!isRemoteSshEnabled()) return undefined;
+    const env: Record<string, string> = { GUARDIAN_REMOTE_SSH: 'true' };
+    if (process.env.GUARDIAN_REMOTE_PATH_MAP) {
+      env.GUARDIAN_REMOTE_PATH_MAP = process.env.GUARDIAN_REMOTE_PATH_MAP;
+    }
+    if (process.env.GUARDIAN_WORKSPACE) {
+      env.GUARDIAN_WORKSPACE = process.env.GUARDIAN_WORKSPACE;
+    }
+    return env;
+  })();
+
   const wrapped: string[] = [];
   const skipped: string[] = [];
 
@@ -173,6 +186,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
       projectRoot,
       singleConfigPath,
       policyPath,
+      remoteEnv,
     ) as unknown as Record<string, unknown>;
 
     wrapped.push(server.name);
@@ -197,6 +211,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
       projectRoot,
       singleConfigPath,
       policyPath,
+      remoteEnv,
     ) as unknown as Record<string, unknown>;
   }
   setServers(exampleRaw, exampleMap);

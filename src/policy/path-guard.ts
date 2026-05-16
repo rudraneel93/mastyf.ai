@@ -1,6 +1,8 @@
 /**
  * Filesystem path guard for tool arguments — blocks sensitive paths and optional workspace scoping.
  */
+import { translatePath } from '../utils/remote-path.js';
+
 const PATH_ARG_FIELDS = new Set(['path', 'file', 'filepath', 'file_path', 'directory', 'dir']);
 
 /** Paths that must never be read/list even when tools are allowlisted. */
@@ -35,9 +37,9 @@ export function extractPathArgumentValues(args: Record<string, unknown> | undefi
 function allowedPathPrefixes(): string[] {
   const prefixes: string[] = [];
   const workspace = process.env.GUARDIAN_WORKSPACE?.trim();
-  if (workspace) prefixes.push(workspace);
+  if (workspace) prefixes.push(translatePath(workspace));
   const list = process.env.GUARDIAN_ALLOWED_PATH_PREFIXES?.split(',').map((s) => s.trim()).filter(Boolean);
-  if (list?.length) prefixes.push(...list);
+  if (list?.length) prefixes.push(...list.map(translatePath));
   return prefixes;
 }
 
@@ -55,7 +57,7 @@ export interface PathGuardResult {
 
 export function evaluatePathGuard(paths: string[]): PathGuardResult {
   for (const raw of paths) {
-    const path = raw.replace(/\\/g, '/');
+    const path = translatePath(raw).replace(/\\/g, '/');
 
     for (const pattern of SENSITIVE_PATH_PATTERNS) {
       if (pattern.test(path)) {

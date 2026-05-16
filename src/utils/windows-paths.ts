@@ -18,6 +18,7 @@ export interface WrappedMcpServerEntry {
   command: string;
   args: string[];
   transport: 'stdio';
+  env?: Record<string, string>;
 }
 
 /** MCP client JSON entry for a wrapped upstream server (handles paths with spaces). */
@@ -25,15 +26,18 @@ export function buildWrappedMcpServerEntry(
   projectRoot: string,
   singleConfigPath: string,
   policyPath: string,
+  extraEnv?: Record<string, string>,
 ): WrappedMcpServerEntry {
   const wrapperScript = resolveGuardianProxyWrapper(projectRoot);
   const proxyArgs = ['--config', singleConfigPath, '--policy', policyPath];
+  const env = extraEnv && Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {};
 
   if (process.platform === 'win32') {
     return {
       command: 'powershell.exe',
       args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', wrapperScript, ...proxyArgs],
       transport: 'stdio',
+      ...env,
     };
   }
 
@@ -41,6 +45,7 @@ export function buildWrappedMcpServerEntry(
     command: wrapperScript,
     args: proxyArgs,
     transport: 'stdio',
+    ...env,
   };
 }
 

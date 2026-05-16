@@ -7,6 +7,9 @@
  *
  * Fix 1 from the Production Readiness Audit (Part 7 — Remediation Blueprint).
  * v2.3.24: Replaced proper-lockfile with simple PID-based lock to eliminate stale lock issues.
+ *
+ * Secondary writers: set `MCP_GUARDIAN_DB_PATH` to the same file on the host;
+ * WAL mode + busy_timeout=5000 allow concurrent proxy/TUI access.
  */
 import Database from 'better-sqlite3';
 import { join, dirname } from 'path';

@@ -2,6 +2,20 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.5] - 2026-05-16
+
+### Fixed (IDE long-running / concurrency)
+- **Metrics lifecycle** — `shutdownMetrics()` / `dispose()` closes the Prometheus HTTP server, clears maintenance intervals, and resets the registry; invoked on proxy shutdown, TUI exit, and dashboard close.
+- **SQLite contention** — `persistCallRecord` retries on `SQLITE_BUSY` (3 attempts, exponential backoff); WAL + `busy_timeout=5000` confirmed for all writers sharing `MCP_GUARDIAN_DB_PATH`.
+- **Remote SSH paths** — `src/utils/remote-path.ts` maps local IDE paths to remote workspace paths (`GUARDIAN_REMOTE_SSH`, `GUARDIAN_REMOTE_PATH_MAP`); wired into path-guard and `wrap`.
+
+### Docs
+- **[docs/REMOTE_SSH.md](docs/REMOTE_SSH.md)** — VS Code Remote SSH setup.
+- **[docs/DEVCONTAINERS.md](docs/DEVCONTAINERS.md)** — Dev container bind mount and shared DB path.
+
+### Tests
+- `tests/utils/metrics-dispose.test.ts`, `tests/utils/remote-path.test.ts`, `tests/database/sqlite-busy-retry.test.ts`.
+
 ## [2.6.4] - 2026-05-16
 
 ### Fixed (extensibility / Test 8)

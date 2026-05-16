@@ -13,7 +13,8 @@ import { PolicyWatcher } from './policy/policy-watcher.js';
 import { PolicyConfig } from './policy/policy-types.js';
 import { OAuthValidator } from './auth/oauth.js';
 import { AuthConfig } from './auth/auth-types.js';
-import { startMetricsServer } from './utils/metrics.js';
+import { shutdownMetrics, startMetricsServer } from './utils/metrics.js';
+import { closeDashboardServer } from './utils/dashboard-server.js';
 import { startDashboardServer, setDashboardDataSource } from './utils/dashboard-server.js';
 import { DashboardAuth } from './auth/dashboard-auth.js';
 import { initTracing } from './utils/tracing.js';
@@ -594,6 +595,8 @@ program
     const cleanup = async () => {
       manager.stopAll();
       await shutdownEnterprise();
+      await closeDashboardServer();
+      await shutdownMetrics();
       await db.close();
       process.exit(0);
     };

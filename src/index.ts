@@ -180,8 +180,12 @@ Use the \`scan_security\` tool with the config path to get started.`,
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────
-const shutdown = () => {
+const shutdown = async () => {
   Logger.info('Shutting down gracefully...');
+  const { shutdownMetrics } = await import('./utils/metrics.js');
+  const { closeDashboardServer } = await import('./utils/dashboard-server.js');
+  await closeDashboardServer();
+  await shutdownMetrics();
   container.db.close();
   process.exit(0);
 };

@@ -53,6 +53,14 @@ function applyCors(req: IncomingMessage, res: ServerResponse): void {
 // ── Real data source (set externally before dashboard starts) ─────
 let runtimeHistoryDb: any = null;
 
+type DashboardHandle = {
+  auth: DashboardAuth;
+  server: ReturnType<typeof createServer>;
+  ws: WsBroadcaster | null;
+};
+
+let activeDashboard: DashboardHandle | null = null;
+
 export function setDashboardDataSource(historyDb: any): void {
   runtimeHistoryDb = historyDb;
 }
@@ -647,5 +655,21 @@ export async function startDashboardServer(
   const mode = dashboardEnabled ? 'dashboard + WS' : 'WS only';
   Logger.info(`[dashboard] ${mode} at http://localhost:${listenPort}/ws`);
 
-  return { auth, server, ws };
+  const handle = { auth, server, ws };
+  activeDashboard = handle;
+  return handle;
+}
+
+/** Stop WS push loop and close the dashboard HTTP server (proxy/TUI shutdown). */
+export async function closeDashboardServer(): Promise<void> {
+  const handle = activeDashboard;
+  if (!handle) return;
+  activeDashboard = null;
+  handle.ws?.stopDataPushLoop();
+  handle.auth.dispose();
+  setWsBroadcaster(null);
+  await new Promise<void>((resolve) => {
+    handle.server.close(() => resolve());
+  });
+  handle.server.removeAllListeners();
 }

@@ -499,6 +499,9 @@ docker run -v $(pwd)/mcp.json:/etc/mcp-guardian/mcp.json \
 | `GUARDIAN_SKIP_PREFLIGHT_SCAN` | `false` | Skip background CVE scan on proxy start |
 | `GUARDIAN_WORKSPACE` | — | Restrict filesystem tool paths to this directory (and subpaths) |
 | `GUARDIAN_ALLOWED_PATH_PREFIXES` | — | Comma-separated path prefixes (alternative to `GUARDIAN_WORKSPACE`) |
+| `GUARDIAN_REMOTE_SSH` | `false` | Translate local IDE paths to remote paths for path-guard ([REMOTE_SSH.md](docs/REMOTE_SSH.md)) |
+| `GUARDIAN_REMOTE_PATH_MAP` | — | JSON or `local=/remote` pairs for Remote SSH path mapping |
+| `METRICS_MAINTENANCE_INTERVAL_MS` | `60000` | Registry refresh interval when `METRICS_ENABLED=true` (cleared on shutdown) |
 | `GUARDIAN_GITHUB_ALLOWED_ORGS` | — | Comma-separated GitHub orgs allowed for `repo` arguments |
 | `GUARDIAN_GITHUB_ALLOWED_REPOS` | — | Exact `org/repo` allowlist for GitHub tools |
 | `GUARDIAN_PROXY_ENTROPY` | on in `block` mode | Block high-entropy / base64 blobs in tool arguments |

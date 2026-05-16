@@ -52,6 +52,8 @@ export async function startTui(dashboardUrl?: string): Promise<void> {
   const renderInterval = setInterval(() => {
     if (!state.running) {
       clearInterval(renderInterval); clearInterval(pollInterval); fetcher.stop();
+      void import('../utils/metrics.js').then(({ shutdownMetrics }) => shutdownMetrics());
+      void import('../utils/dashboard-server.js').then(({ closeDashboardServer }) => closeDashboardServer());
       stdout.write('\x1B[?25h'); stdout.write('\x1B[2J\x1B[H'); process.exit(0);
     }
     render(state, fetcher.getData(), fetcher);

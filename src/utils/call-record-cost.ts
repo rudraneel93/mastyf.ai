@@ -3,6 +3,7 @@ import type { ProxyCallRecord } from '../types.js';
 import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
 import * as Metrics from './metrics.js';
 import { broadcastDashboardEvent } from './dashboard-events.js';
+import { withSqliteBusyRetry } from './sqlite-busy-retry.js';
 
 export async function enrichCallRecord(
   record: ProxyCallRecord,
@@ -24,7 +25,7 @@ export async function persistCallRecord(
   msg?: unknown,
 ): Promise<ProxyCallRecord> {
   const enriched = await enrichCallRecord(record, msg);
-  await db.addCallRecord(enriched);
+  await withSqliteBusyRetry(() => db.addCallRecord(enriched));
   broadcastDashboardEvent({
     type: enriched.blocked ? 'policy-block' : 'audit:decision',
     serverName: enriched.serverName,
@@ -39,7 +40,10 @@ export async function persistCallRecord(
     timestamp: Date.now(),
   });
   if (enriched.costUsd && enriched.costUsd > 0) {
-    await db.addCostRecord(enriched.serverName, enriched.totalTokens, enriched.costUsd);
+    const costUsd = enriched.costUsd;
+    await withSqliteBusyRetry(() =>
+      db.addCostRecord(enriched.serverName, enriched.totalTokens, costUsd),
+    );
     Metrics.tokenCostUsd.observe(
       { server_name: enriched.serverName, model: enriched.model || 'unknown' },
       enriched.costUsd,
