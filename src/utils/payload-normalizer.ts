@@ -284,6 +284,47 @@ export class PayloadNormalizer {
 
     return value;
   }
+
+  /**
+   * Iteratively decode layered obfuscation (base64, URL, hex, unicode, HTML)
+   * until stable or maxDepth reached. Used before prompt-injection / semantic regex.
+   */
+  deobfuscateRecursive(input: string, maxDepth = this.maxDepth): string {
+    let current = input;
+    let depth = 0;
+    while (depth < maxDepth) {
+      const before = current;
+      current = this.decodeBase64Blobs(current);
+      current = this.urlDecode(current);
+      current = this.decodeHexEscapes(current);
+      current = this.decodeUnicodeEscapes(current);
+      current = this.decodeHtmlEntities(current);
+      current = this.unwrapDoubleEscapes(current);
+      if (current === before) break;
+      depth++;
+    }
+    return current;
+  }
+
+  /**
+   * Decode inline base64 blobs (16+ chars) when UTF-8 decodes to printable text.
+   */
+  private decodeBase64Blobs(input: string): string {
+    return input.replace(/(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{16,}={0,2})/g, (full, b64: string) => {
+      try {
+        const decoded = Buffer.from(b64, 'base64').toString('utf-8');
+        if (decoded.length < 4 || !/^[\x20-\x7E\u00A0-\uFFFF\s]+$/.test(decoded)) return full;
+        return full.replace(b64, decoded);
+      } catch {
+        return full;
+      }
+    });
+  }
+}
+
+/** Standalone recursive de-obfuscation (base64 → URL → hex → unicode → HTML). */
+export function deobfuscateRecursive(input: string, maxDepth = 5): string {
+  return getNormalizer().deobfuscateRecursive(input, maxDepth);
 }
 
 /** Singleton instance for policy engine integration */

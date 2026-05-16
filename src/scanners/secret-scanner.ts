@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { isFpWhitelisted } from '../ai/fp-whitelist.js';
 import type { SecretFinding } from '../types.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -127,6 +128,7 @@ export function scanForSecrets(target: string, context: string): SecretFinding[]
       const matchedValue = displaySubject(match);
       // Test exclusions against the matched substring, not the entire target
       if (rule.exclusions?.some(fp => fp.test(matchedValue))) continue;
+      if (isFpWhitelisted('secret-scan', rule.id)) continue;
       const spanKey = `${match.index}:${match.index + matchedValue.length}:${rule.id}`;
       if (seenSpans.has(spanKey)) continue;
       seenSpans.add(spanKey);

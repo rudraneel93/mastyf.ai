@@ -12,6 +12,8 @@
  *
  * Wired into proxy-server.ts response handling pipeline.
  */
+import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+
 export interface InjectionFinding {
   severity:    'critical' | 'high' | 'medium';
   patternId:   string;
@@ -172,12 +174,13 @@ export function detectPromptInjection(
 ): InjectionFinding[] {
   const findings: InjectionFinding[] = [];
   const seen = new Set<string>();
+  const decodedBody = deobfuscateRecursive(responseBody);
 
   for (const pattern of getPatterns()) {
     // Reset lastIndex for global regex
     if (pattern.regex.global) pattern.regex.lastIndex = 0;
 
-    const match = pattern.regex.exec(responseBody);
+    const match = pattern.regex.exec(decodedBody);
     if (!match) continue;
 
     // Deduplicate patterns (same category + similar match location)
@@ -186,8 +189,8 @@ export function detectPromptInjection(
     seen.add(dedupKey);
 
     const start   = Math.max(0, match.index - 30);
-    const end     = Math.min(responseBody.length, match.index + match[0].length + 20);
-    const preview = responseBody.slice(start, end).replace(/\n/g, ' ').replace(/\s+/g, ' ');
+    const end     = Math.min(decodedBody.length, match.index + match[0].length + 20);
+    const preview = decodedBody.slice(start, end).replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
     findings.push({
       severity:     pattern.severity,

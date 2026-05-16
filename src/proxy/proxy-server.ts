@@ -21,6 +21,7 @@ import { alertPolicyBlock } from '../alerting/webhook-alerter.js';
 import { evaluateCveGate } from '../utils/cve-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { onPolicyBlock, fingerprintArgs, ingestPolicyDecision } from '../ai/block-learning.js';
+import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
@@ -655,6 +656,8 @@ export class McpProxyServer {
             });
             return;
           }
+
+          enqueueSemanticAudit(buildSemanticAuditJob(context, decision));
 
           // Per-client rate limiting
           if (agentIdentity) {

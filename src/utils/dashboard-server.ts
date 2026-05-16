@@ -507,7 +507,21 @@ export async function startDashboardServer(
           source: (b2.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern') || 'baseline',
           confidence: typeof b2.confidence === 'number' ? b2.confidence : 0.5,
         });
+        if (b2.fpReject && b2.rule && b2.pattern) {
+          const { recordFpRejection } = await import('../ai/fp-whitelist.js');
+          const fp = recordFpRejection(String(b2.rule), String(b2.pattern));
+          writeJson(res, 200, { status: 'rejected', id: b2.suggestionId, fp });
+          return;
+        }
         writeJson(res, 200, { status: 'rejected', id: b2.suggestionId });
+        return;
+      }
+      if (url === '/api/policy/fp/reject' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { recordFpRejection } = await import('../ai/fp-whitelist.js');
+        const fp = recordFpRejection(String(body.rule || ''), String(body.pattern || body.patternId || ''));
+        writeJson(res, 200, { status: 'recorded', ...fp });
         return;
       }
       if (url === '/api/logs' && method === 'GET') { setCors(); writeJson(res, 200, { logs: [], total: 0 }); return; }

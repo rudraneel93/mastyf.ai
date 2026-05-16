@@ -1,6 +1,7 @@
 /**
  * High-entropy / encoded-payload detection for proxy-time DLP (base64 exfil, long secrets in args).
  */
+import { isFpWhitelisted } from '../ai/fp-whitelist.js';
 
 function shannonEntropy(s: string): number {
   if (!s.length) return 0;
@@ -31,8 +32,10 @@ export function scanArgumentEntropy(text: string): EntropyFinding[] {
     const blob = match[0];
     const entropy = shannonEntropy(blob);
     if (entropy >= ENTROPY_THRESHOLD) {
+      const kind = 'base64-blob';
+      if (isFpWhitelisted('arg-entropy', kind)) continue;
       findings.push({
-        kind: 'base64-blob',
+        kind,
         preview: blob.slice(0, 24) + '…',
         entropy,
       });
@@ -42,8 +45,9 @@ export function scanArgumentEntropy(text: string): EntropyFinding[] {
   // DNS exfil: long dotted labels with embedded base64
   if (/(?:[a-z0-9]{20,}\.){3,}[a-z]{2,}/i.test(text) && text.length > 60) {
     const label = text.match(/[a-z0-9]{24,}/i)?.[0];
-    if (label && shannonEntropy(label) >= ENTROPY_THRESHOLD) {
-      findings.push({ kind: 'dns-exfil', preview: text.slice(0, 40) + '…', entropy: shannonEntropy(label) });
+    const dnsKind = 'dns-exfil';
+    if (label && shannonEntropy(label) >= ENTROPY_THRESHOLD && !isFpWhitelisted('arg-entropy', dnsKind)) {
+      findings.push({ kind: dnsKind, preview: text.slice(0, 40) + '…', entropy: shannonEntropy(label) });
     }
   }
 
@@ -52,8 +56,10 @@ export function scanArgumentEntropy(text: string): EntropyFinding[] {
     const token = match[0];
     if (token.length < MIN_BLOB_LEN) continue;
     const entropy = shannonEntropy(token);
+    const kind = 'high-entropy';
+    if (isFpWhitelisted('arg-entropy', kind)) continue;
     if (entropy >= ENTROPY_THRESHOLD && !findings.some((f) => f.preview.startsWith(token.slice(0, 12)))) {
-      findings.push({ kind: 'high-entropy', preview: token.slice(0, 20) + '…', entropy });
+      findings.push({ kind, preview: token.slice(0, 20) + '…', entropy });
     }
   }
 

@@ -1,4 +1,6 @@
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+import { isFpWhitelisted } from '../ai/fp-whitelist.js';
 import { evaluatePathGuard, extractPathArgumentValues } from './path-guard.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 
@@ -69,8 +71,9 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
   }
 
   for (const sql of extractFieldValues(args, SQL_ARG_FIELDS)) {
+    const decodedSql = deobfuscateRecursive(sql);
     for (const pattern of SQL_EXFIL_PATTERNS) {
-      if (pattern.test(sql)) {
+      if (pattern.test(decodedSql)) {
         return {
           action: 'block',
           rule: 'semantic-sql-guard',
@@ -104,7 +107,7 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
     }
   }
 
-  const argsBlob = JSON.stringify(args);
+  const argsBlob = deobfuscateRecursive(JSON.stringify(args));
   for (const pattern of POWERSHELL_PATTERNS) {
     if (pattern.test(argsBlob)) {
       return {
@@ -120,17 +123,21 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
   ]);
   const injectionBlob = Object.entries(args)
     .filter(([k]) => injectionTextFields.has(k.toLowerCase()))
-    .flatMap(([, v]) => extractAllLeafStrings(v))
+    .flatMap(([, v]) => extractAllLeafStrings(v).map((s) => deobfuscateRecursive(s)))
     .join('\n');
   if (injectionBlob.trim()) {
     const criticalInjection = detectPromptInjection(ctx.toolName, injectionBlob)
       .filter((f) => f.severity === 'critical');
     if (criticalInjection.length > 0) {
-      return {
-        action: 'block',
-        rule: 'semantic-prompt-injection',
-        reason: `Prompt injection in arguments: ${criticalInjection[0].patternId}`,
-      };
+      const rule = 'semantic-prompt-injection';
+      const patternId = criticalInjection[0].patternId;
+      if (!isFpWhitelisted(rule, patternId)) {
+        return {
+          action: 'block',
+          rule,
+          reason: `Prompt injection in arguments: ${patternId}`,
+        };
+      }
     }
   }
 

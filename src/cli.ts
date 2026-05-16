@@ -275,6 +275,35 @@ program
     checkAlertThresholds(security, opts);
   });
 
+const policyCmd = program
+  .command('policy')
+  .description('Policy utilities');
+
+policyCmd
+  .command('test')
+  .description('Evaluate a single tools/call against a policy file (policy playground)')
+  .requiredOption('--policy <path>', 'Policy YAML path')
+  .requiredOption('--tool <name>', 'Tool name to evaluate')
+  .option('--args <json>', 'Tool arguments JSON', '{}')
+  .option('--server <name>', 'Server name label', 'policy-test')
+  .option('--blocking-mode <mode>', 'Override policy mode: audit | warn | block')
+  .action(async (opts: { policy: string; tool: string; args?: string; server?: string; blockingMode?: string }) => {
+    try {
+      const { runPolicyTest } = await import('./cli/policy-test.js');
+      const result = runPolicyTest({
+        policy: opts.policy,
+        tool: opts.tool,
+        args: opts.args || '{}',
+        server: opts.server,
+        blockingMode: opts.blockingMode,
+      });
+      console.log(JSON.stringify(result, null, 2));
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
 program
   .command('wrap')
   .description('Wrap Cline/Cursor/Claude MCP servers with Guardian proxy (per-server configs + optional client patch)')

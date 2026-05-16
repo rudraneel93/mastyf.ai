@@ -2,6 +2,18 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.5.6] - 2026-05-16
+
+### Added
+- **Recursive de-obfuscation** — `deobfuscateRecursive()` in payload normalizer (base64, URL, hex, unicode, HTML) before prompt-injection and semantic guards.
+- **Async LLM semantic audit** — Post-hoc `tools/call` queue (`GUARDIAN_SEMANTIC_ASYNC`, default on when LLM enabled); sync path stays regex/semantic only; flags via `async_semantic_flag` structured log.
+- **FP auto-whitelist** — Three dashboard/TUI false-positive confirmations persist to `~/.mcp-guardian/.fp-whitelist.json` (`GUARDIAN_FP_WHITELIST_THRESHOLD`).
+- **Policy playground CLI** — `mcp-guardian policy test --policy … --tool … --args '{…}'` prints decision JSON.
+- **Windows notes** — `docs/WINDOWS.md` (paths, limitations, named-pipes TODO).
+
+### Env
+- `GUARDIAN_SEMANTIC_ASYNC`, `GUARDIAN_SEMANTIC_DEBOUNCE_MS`, `GUARDIAN_FP_WHITELIST_THRESHOLD`, `GUARDIAN_FP_WHITELIST_PATH`
+
 ## [2.5.5] - 2026-05-16
 
 ### Added

@@ -277,6 +277,21 @@ mcp-guardian proxy --auth-issuer https://accounts.google.com --auth-audience my-
 
 Modes: `audit` | `warn` | `block`. Wrapper script: `scripts/guardian-proxy.sh` (sets DB path, dashboard, metrics).
 
+Per-call sync evaluation stays fast (regex + semantic guards). When `GUARDIAN_LLM_ENABLED` is on, optional **async** LLM review runs post-hoc (`GUARDIAN_SEMANTIC_ASYNC=true`, default) and emits `async_semantic_flag` events without blocking JSON-RPC.
+
+### `mcp-guardian policy test`
+
+Policy playground — evaluate one `tools/call` without starting the proxy:
+
+```bash
+mcp-guardian policy test \
+  --policy default-policy.yaml \
+  --tool read_file \
+  --args '{"path":"/etc/passwd"}'
+```
+
+Output is JSON: `{ "action", "rule", "reason", "mode" }`.
+
 ### `mcp-guardian tui`
 
 ```bash
@@ -293,7 +308,9 @@ Reads **`MCP_GUARDIAN_DB_PATH`** (default `~/.mcp-guardian/history.db`) in **rea
 
 ## Policy Engine & Rollout
 
-Policies are YAML evaluated on every `tools/call`. Pipeline: payload normalization → semantic shell analysis → rules (regex, tool deny, rate limits, RBAC).
+Policies are YAML evaluated on every `tools/call`. Pipeline: recursive de-obfuscation → payload normalization → semantic shell analysis → rules (regex, tool deny, rate limits, RBAC).
+
+False-positive tuning: reject a block via dashboard `POST /api/policy/fp/reject` with `{ "rule", "pattern" }` (or suggestion reject with `fpReject: true`). After **3** confirmations (`GUARDIAN_FP_WHITELIST_THRESHOLD`), the rule+pattern fingerprint is whitelisted in `~/.mcp-guardian/.fp-whitelist.json`.
 
 ```yaml
 # default-policy.yaml (production — fail-closed)
@@ -460,6 +477,10 @@ docker run -v $(pwd)/mcp.json:/etc/mcp-guardian/mcp.json \
 | `GUARDIAN_GITHUB_ALLOWED_ORGS` | — | Comma-separated GitHub orgs allowed for `repo` arguments |
 | `GUARDIAN_GITHUB_ALLOWED_REPOS` | — | Exact `org/repo` allowlist for GitHub tools |
 | `GUARDIAN_PROXY_ENTROPY` | on in `block` mode | Block high-entropy / base64 blobs in tool arguments |
+| `GUARDIAN_SEMANTIC_ASYNC` | on when LLM enabled | Post-hoc LLM audit on `tools/call` (non-blocking; sync path &lt;50ms) |
+| `GUARDIAN_SEMANTIC_DEBOUNCE_MS` | `500` | Debounce batch drain for async semantic queue |
+| `GUARDIAN_FP_WHITELIST_THRESHOLD` | `3` | Human FP confirmations before auto-whitelist |
+| `GUARDIAN_FP_WHITELIST_PATH` | `~/.mcp-guardian/.fp-whitelist.json` | FP whitelist persistence |
 | `GUARDIAN_BLOCK_ON_CVE` | `false` | Opt-in: block tools/call on CVEs (default threshold CRITICAL) |
 | `GUARDIAN_CVE_BLOCK_SEVERITY` | `CRITICAL` | When gate on: `HIGH` widens blocking |
 | `DASHBOARD_AUTH_DISABLED` | `false` | Set `true` for local dev only (no API auth) |

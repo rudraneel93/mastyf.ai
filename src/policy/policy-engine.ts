@@ -1,6 +1,7 @@
 import { PolicyConfig, PolicyDecision, CallContext, PolicyAction, PolicyMode } from './policy-types.js';
 import { Logger } from '../utils/logger.js';
 import { getNormalizer } from '../utils/payload-normalizer.js';
+import { isFpWhitelisted } from '../ai/fp-whitelist.js';
 import { evaluateSemanticGuards } from './semantic-guards.js';
 import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
 import { LRUCache } from 'lru-cache';
@@ -244,6 +245,8 @@ export class PolicyEngine {
         for (const value of values) {
           for (const regex of compiled) {
             if (regex.test(value)) {
+              const patternKey = `${field}:${regex.source}`;
+              if (isFpWhitelisted(rule.name, patternKey)) continue;
               return {
                 action: this.resolveAction(rule.action),
                 rule: rule.name,
@@ -262,6 +265,7 @@ export class PolicyEngine {
         if (r.name !== rule.name) continue;
         for (const regex of compiled) {
           if (regex.test(analysis.argsStr)) {
+            if (isFpWhitelisted(rule.name, regex.source)) continue;
             return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern matched in tool call (normalized)` };
           }
         }
