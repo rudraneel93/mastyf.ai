@@ -107,7 +107,10 @@ export class PayloadNormalizer {
    */
   private urlDecode(input: string): string {
     try {
-      return decodeURIComponent(input.replace(/\+/g, ' '));
+      // Only decode percent-encoded sequences; do NOT treat + as space (form-encoding, not applicable to JSON-RPC)
+      return input.replace(/%([0-9A-Fa-f]{2})/g, (_match, hex) => {
+        try { return String.fromCharCode(parseInt(hex, 16)); } catch { return _match; }
+      });
     } catch {
       // Gracefully handle malformed % sequences: replace only valid ones
       return input.replace(/%([0-9A-Fa-f]{2})/g, (_match, hex) => {

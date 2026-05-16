@@ -23,10 +23,63 @@ export class PolicyEngine {
   private normalizer = getNormalizer();
   private shellTokenizer = new ShellTokenizer();
 
+  // Pre-compiled regex patterns (constructed once, not on every tools/call)
+  private compiledPatterns: Map<string, { compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
+  private compiledArgPatterns: Map<string, { field: string; compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
+
   constructor(config: PolicyConfig) {
     this.rules = config.policy.rules;
     this.mode = config.policy.mode;
     this.config = config;
+    this.compilePatterns();
+  }
+
+  /** Pre-compile all regex patterns at construction to avoid re-compilation on every tools/call */
+  private compilePatterns(): void {
+    for (const rule of this.rules) {
+      // Compile rule.patterns
+      if (rule.patterns?.length) {
+        try {
+          const compiled = rule.patterns.map(p => new RegExp(p));
+          this.compiledPatterns.set(rule.name, [
+            ...(this.compiledPatterns.get(rule.name) || []),
+            { compiled, rule },
+          ]);
+        } catch {
+          Logger.warn(`Policy: invalid regex in rule '${rule.name}' patterns — skipping pre-compilation`);
+        }
+      }
+      // Compile rule.argPatterns
+      if (rule.argPatterns?.length) {
+        for (const ap of rule.argPatterns) {
+          try {
+            const compiled = ap.patterns.map(p => new RegExp(p, 'i'));
+            this.compiledArgPatterns.set(rule.name, [
+              ...(this.compiledArgPatterns.get(rule.name) || []),
+              { field: ap.field, compiled, rule },
+            ]);
+          } catch {
+            Logger.warn(`Policy: invalid regex in rule '${rule.name}' argPatterns — skipping pre-compilation`);
+          }
+        }
+      }
+    }
+  }
+
+  /** Recursively extract all leaf string values from a nested argument object */
+  private extractLeafValues(obj: unknown, prefix = ''): string[] {
+    if (typeof obj === 'string') return [obj];
+    if (typeof obj === 'number' || typeof obj === 'boolean') return [String(obj)];
+    if (obj === null || obj === undefined) return [];
+    if (Array.isArray(obj)) {
+      return obj.flatMap((v, i) => this.extractLeafValues(v, `${prefix}[${i}]`));
+    }
+    if (typeof obj === 'object') {
+      return Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) =>
+        this.extractLeafValues(v, prefix ? `${prefix}.${k}` : k)
+      );
+    }
+    return [String(obj)];
   }
 
   /**
