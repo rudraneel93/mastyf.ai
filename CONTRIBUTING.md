@@ -25,7 +25,7 @@ src/
 ├── services/                # Orchestrators
 ├── scanners/                # Security checks
 ├── clients/                 # External API clients
-├── database/                # SQLite via sql.js
+├── database/                # SQLite via better-sqlite3 (WAL + busy_timeout)
 ├── reporter/                # Output formatting
 └── utils/                   # Shared utilities
 tests/                       # Vitest test suite

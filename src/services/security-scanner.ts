@@ -70,10 +70,20 @@ export class SecurityScanner {
     const cmdWarnings: import('../scanners/command-validator.js').CommandWarning[] =
       cmdWarningsResult.status === 'fulfilled' ? cmdWarningsResult.value : [];
 
+    const untrackedSse =
+      server.transport === 'sse' || (!!server.url && !server.command);
     const score = calculateSecurityScore(cves, auth, typos, secrets, cmdWarnings, DEFAULT_SCORING, {
       hasMTLS: auth.method === 'mTLS',
     });
-    const recommendations = generateRecommendations(cves, auth, typos, secrets, cmdWarnings, cveLookupStatus);
+    const recommendations = generateRecommendations(
+      cves,
+      auth,
+      typos,
+      secrets,
+      cmdWarnings,
+      cveLookupStatus,
+      untrackedSse,
+    );
     return {
       serverName: server.name,
       cves,
@@ -83,6 +93,7 @@ export class SecurityScanner {
       secretsFound: secrets,
       score,
       recommendations,
+      untrackedSse: untrackedSse || undefined,
     };
   }
 
@@ -177,6 +188,7 @@ function generateRecommendations(
   secrets: SecretFinding[],
   cmdWarnings: import('../scanners/command-validator.js').CommandWarning[],
   cveLookupStatus?: 'ok' | 'degraded' | 'unavailable',
+  untrackedSse = false,
 ): string[] {
   const recs: string[] = [];
   if (cveLookupStatus === 'unavailable') {
@@ -195,6 +207,11 @@ function generateRecommendations(
   }
   if (!auth.hasAuthentication) recs.push('Add authentication headers or API keys to prevent unauthorized access');
   if (!auth.isTransportEncrypted) recs.push('Use HTTPS or secure transport for remote servers');
+  if (untrackedSse) {
+    recs.push(
+      'SSE/HTTP server: traffic is untracked unless the IDE uses Guardian proxy or `mcp-guardian wrap` — point clients at the guarded endpoint',
+    );
+  }
   if (typos.length > 0) recs.push(`Verify package name against official registry — possible typo-squatting: ${typos.map((t) => t.similarityTo).join(', ')}`);
   if (secrets.length > 0) recs.push(`Remove ${secrets.length} hardcoded secret(s) from tool definitions — use environment variable references instead`);
   for (const w of cmdWarnings) {

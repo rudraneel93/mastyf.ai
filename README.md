@@ -219,7 +219,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Async semantic audit** — Post-hoc LLM queue when `GUARDIAN_LLM_ENABLED` + `GUARDIAN_SEMANTIC_ASYNC` (default on); sync path stays regex + semantic guards (&lt;50ms target)
 
 ### Cost governance
-- **Provider-aware token counting** — OpenAI via `tiktoken`; Anthropic via optional `@anthropic-ai/tokenizer` or chars÷3.5; prefers API `usage` when present (`tokenSource: api | estimated`)
+- **Provider-aware token counting** — OpenAI via `tiktoken`; Anthropic via optional `@anthropic-ai/tokenizer` or chars÷3.5; **counts are approximate unless the upstream response includes API `usage`** (`tokenSource: api | estimated`)
 - **Multimodal** — Image tokens `(width × height) / 750` added to tool-call estimates
 - **Live pricing** — litellm-backed model costs (USD only)
 - **Per-tool breakdown** — Tokens, duration, USD for every intercepted call — see [docs/COST_GOVERNANCE.md](docs/COST_GOVERNANCE.md)

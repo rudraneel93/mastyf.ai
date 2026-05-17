@@ -57,6 +57,13 @@ export const activeProxies = new Gauge({
   registers: [registry],
 });
 
+export const sseUntrackedServers = new Gauge({
+  name: 'mcp_guardian_sse_untracked_servers',
+  help: 'SSE/HTTP MCP servers configured without stdio proxy path (audit/cost may be incomplete)',
+  labelNames: ['server_name'],
+  registers: [registry],
+});
+
 export const proxyLatencyMs = new Histogram({
   name: 'mcp_guardian_proxy_latency_ms',
   help: 'Proxy processing latency in milliseconds',

@@ -2,6 +2,18 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.1] - 2026-05-17
+
+### Fixed (developer deep-dive review)
+- **Secret scanner** — Confirmed 35+ regex rules in source (reviewer tarball was stale); added tests for `postgresql://` URLs and `DATABASE_URL` env values.
+- **Storage docs** — Clarified **better-sqlite3** (WAL + `busy_timeout=5000`), not `sql.js`; [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **SSE coverage** — Structured `sse_untracked` warning, `untrackedSse` on security scan reports, Prometheus `mcp_guardian_sse_untracked_servers`.
+- **SSE response inspection** — `evaluateResponse` + prompt-injection blocking on `SseProxyServer` (parity with stdio proxy).
+- **README** — Token counts documented as approximate unless API `usage` is returned.
+
+### Tests
+- `tests/secret-scanner.test.ts` (postgres URL, rule-count probe), `tests/policy/adversarial-scenarios.test.ts` (malicious response), `tests/services/security-scanner.test.ts` (`untrackedSse`).
+
 ## [2.7.0] - 2026-05-17
 
 ### Added (enterprise readiness)

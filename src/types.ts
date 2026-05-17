@@ -22,6 +22,8 @@ export interface SecurityReport {
   score: number; // 0-100
   recommendations: string[];
   hasMTLS?: boolean;
+  /** SSE/HTTP servers: IDE may connect upstream unless routed through Guardian proxy/wrap */
+  untrackedSse?: boolean;
 }
 
 export interface CveFinding {

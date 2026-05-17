@@ -7,6 +7,7 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+import * as Metrics from '../utils/metrics.js';
 
 export class ProxyManager {
   private stdioProxies: McpProxyServer[] = [];
@@ -95,6 +96,14 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
         });
         this.sseProxies.set(config.name, sseProxy);
         sseStarted++;
+        Metrics.sseUntrackedServers.set({ server_name: config.name }, 1);
+        StructuredLogger.warn({
+          event: 'sse_untracked',
+          serverName: config.name,
+          upstreamUrl: url,
+          message:
+            'SSE/HTTP server registered — tools/call via interceptAndForward only; IDE must use Guardian proxy URL or wrap for full audit',
+        });
         Logger.info(`[proxy] SSE active for "${config.name}" → ${url}`);
       } catch (err: any) {
         Logger.error(`[proxy] FAILED SSE for "${config.name}": ${err?.message}`);
@@ -154,7 +163,8 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
       proxy.kill();
     }
     this.stdioProxies = [];
-    for (const [, sseProxy] of this.sseProxies) {
+    for (const [name, sseProxy] of this.sseProxies) {
+      Metrics.sseUntrackedServers.set({ server_name: name }, 0);
       sseProxy.removeAllListeners();
     }
     this.sseProxies.clear();

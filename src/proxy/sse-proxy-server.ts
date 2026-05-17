@@ -2,9 +2,12 @@ import http from 'http';
 import https from 'https';
 import { EventEmitter } from 'events';
 import { PolicyEngine } from '../policy/policy-engine.js';
+import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
+import { StructuredLogger } from '../utils/structured-logger.js';
+import * as Metrics from '../utils/metrics.js';
 
 interface SseProxyOptions {
   upstreamUrl: string;
@@ -60,8 +63,16 @@ export class SseProxyServer extends EventEmitter {
     }
 
     const startMs = Date.now();
-    const response = await this._forwardToUpstream(jsonRpcRequest);
+    let response = await this._forwardToUpstream(jsonRpcRequest);
     const durationMs = Date.now() - startMs;
+
+    if (isToolCall) {
+      const toolName = (jsonRpcRequest.params as { name?: string } | undefined)?.name ?? 'unknown';
+      const blockedResponse = this.inspectToolResponse(toolName, response, jsonRpcRequest.id);
+      if (blockedResponse) {
+        return blockedResponse;
+      }
+    }
 
     // Token counting for tools/call
     if (isToolCall) {
@@ -99,6 +110,69 @@ export class SseProxyServer extends EventEmitter {
     }
 
     return response;
+  }
+
+  /** Response-side prompt injection / exfiltration (parity with stdio proxy). */
+  private inspectToolResponse(
+    toolName: string,
+    response: Record<string, unknown>,
+    requestId: unknown,
+  ): Record<string, unknown> | null {
+    const result = (response as { result?: unknown }).result;
+    if (result == null) return null;
+
+    const responseText = JSON.stringify(result);
+    const allDetections: string[] = [];
+    if (this.opts.policy) {
+      const { clean, detections } = this.opts.policy.evaluateResponse(
+        toolName,
+        this.opts.serverName,
+        responseText,
+      );
+      if (!clean) allDetections.push(...detections);
+    }
+
+    const injectionFindings = detectPromptInjection(toolName, responseText);
+    const hasCritical = injectionFindings.some((f) => f.severity === 'critical');
+    const hasHigh = injectionFindings.some((f) => f.severity === 'high');
+    const hasDetections = injectionFindings.length > 0 || allDetections.length > 0;
+
+    if (!hasDetections) return null;
+
+    const allMessages = [
+      ...allDetections,
+      ...injectionFindings.map(
+        (f) => `${f.severity.toUpperCase()}: ${f.description} (${f.matchPreview})`,
+      ),
+    ];
+    Logger.warn(
+      `[sse-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
+    );
+    StructuredLogger.info({
+      event: 'response_flagged',
+      serverName: this.opts.serverName,
+      toolName,
+      detections: allMessages,
+      blocked: (hasCritical || hasHigh) && this.opts.policy?.getMode() === 'block',
+    });
+    Metrics.injectionDetectedTotal?.inc({
+      server_name: this.opts.serverName,
+      severity: hasCritical ? 'critical' : 'high',
+    });
+
+    const policyMode = this.opts.policy?.getMode() ?? 'audit';
+    if ((hasCritical || hasHigh) && policyMode === 'block') {
+      return {
+        jsonrpc: '2.0',
+        id: requestId,
+        error: {
+          code: -32002,
+          message:
+            'MCP Guardian: Tool response blocked — prompt injection detected in upstream response',
+        },
+      };
+    }
+    return null;
   }
 
   private _forwardToUpstream(

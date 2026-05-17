@@ -49,6 +49,16 @@ describe('SecurityScanner', () => {
     expect(report.score).toBe(90); // 100 + 20(auth bonus) - 30(critical CVE) = 90
   });
 
+  it('marks SSE servers as untracked and recommends proxy routing', async () => {
+    const report = await scanner.scanServer({
+      name: 'remote-sse',
+      transport: 'sse',
+      url: 'https://example.com/mcp',
+    });
+    expect(report.untrackedSse).toBe(true);
+    expect(report.recommendations.some((r) => r.includes('untracked'))).toBe(true);
+  });
+
   it('deducts for all issues combined', async () => {
     mockCve.checkServerPackages.mockResolvedValueOnce({
       findings: [

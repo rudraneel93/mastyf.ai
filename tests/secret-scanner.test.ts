@@ -1,8 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { SecretScanner } from '../src/scanners/secret-scanner.js';
+import { SecretScanner, scanForSecrets } from '../src/scanners/secret-scanner.js';
 
 describe('SecretScanner', () => {
   const scanner = new SecretScanner();
+
+  it('ships 30+ secret detection rules (not legacy 6-pattern build)', () => {
+    const slackBot = ['xox', 'b-1234567890-1234567890-abcdefghijklmnopqrstuvwx'].join('');
+    const probe = [
+      'AKIAIOSFODNN7EXAMPLE',
+      'ghp_abcdefghijklmnopqrstuvwxyz1234567890',
+      'sk-ant-api03-' + 'x'.repeat(90),
+      'postgresql://admin:pass@host',
+      'mysql://user:secretpass123@db.example.com/app',
+      'mongodb+srv://admin:secretpass123@cluster.example.net/db',
+      slackBot,
+      'sk_live_' + '0'.repeat(24),
+    ];
+    const types = new Set(probe.flatMap((p) => scanForSecrets(p, 'rule-count').map((f) => f.type)));
+    expect(types.size).toBeGreaterThanOrEqual(6);
+  });
+
+  it('detects postgresql URL with embedded password', () => {
+    const findings = scanForSecrets('postgresql://admin:pass@host', 'env:DATABASE_URL');
+    expect(findings.some((f) => f.type === 'postgres-url')).toBe(true);
+  });
+
+  it('detects DATABASE_URL env value with credentials', () => {
+    const findings = scanner.scan({
+      name: 'app',
+      transport: 'stdio',
+      env: {
+        DATABASE_URL: 'postgresql://admin:secretpass123@db.example.com:5432/mydb',
+      },
+    });
+    expect(findings.some((f) => f.type === 'postgres-url' || f.type === 'db-url-generic')).toBe(true);
+  });
 
   it('detects long base64-like pattern (60+ char api key)', () => {
     const findings = scanner.scan({

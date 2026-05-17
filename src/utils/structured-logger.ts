@@ -69,6 +69,10 @@ export class StructuredLogger {
     logger.info(msg);
   }
 
+  static warn(msg: object | string): void {
+    logger.warn(msg);
+  }
+
   static debug(msg: object | string): void {
     logger.debug(msg);
   }
