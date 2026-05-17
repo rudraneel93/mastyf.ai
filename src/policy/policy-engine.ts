@@ -376,9 +376,13 @@ export class PolicyEngine {
   evaluateResponse(
     toolName: string,
     serverName: string,
-    responseBody: string,
+    responseBody: string | null | undefined,
   ): { clean: boolean; detections: string[] } {
     const detections: string[] = [];
+
+    if (responseBody == null || typeof responseBody !== 'string') {
+      return { clean: true, detections };
+    }
 
     for (const pattern of PolicyEngine.RESPONSE_INJECTION_PATTERNS) {
       if (pattern.test(responseBody)) {

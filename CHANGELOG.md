@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.6.8] - 2026-05-17
+
+### Security (58-scenario adversarial report)
+- **URL guard** (`src/policy/url-guard.ts`) — blocks metadata IPs, `file://` / `javascript:` / `data:`, private IPs, decimal IP localhost, `[::1]`, and webhook/callback SSRF; wired into semantic guards for puppeteer and all `url`/`href`/`target`/`webhook`/`callback` fields.
+- **Sensitive paths** — docker.sock, Kubernetes service-account secrets, `terraform.tfstate`, `.npmrc`, `.git-credentials`, `.vault-token`, service-account JSON patterns.
+- **`evaluateResponse`** — null/undefined-safe (no crash on `matchAll`).
+- **SQL / NoSQL / GraphQL / LDAP** — expanded semantic and YAML patterns (`UNION…SELECT`, `LOAD_FILE`, `SLEEP`, `benchmark`, `$where`, `__schema`, LDAP filters).
+- **SSTI & prompt injection** — `{{`, `${`, `<%`, `#{` in arguments; zero-width strip before injection detect; multi-line injection patterns.
+- **`default-policy.yaml`** — `block-dangerous-urls` rule; expanded path/SQL/shell patterns.
+
+### Tests
+- `tests/policy/adversarial-scenarios.test.ts`, `tests/policy/url-guard.test.ts`.
+
 ## [2.6.7] - 2026-05-17
 
 ### Fixed (MASTER test report)

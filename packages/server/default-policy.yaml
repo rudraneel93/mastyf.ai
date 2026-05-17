@@ -55,6 +55,29 @@ policy:
           - echo
           - puppeteer_navigate
           - puppeteer_screenshot
+    - name: block-dangerous-urls
+      description: Block SSRF-prone URLs (metadata, localhost, file/javascript/data schemes, private IPs)
+      action: block
+      argPatterns:
+        - field: url
+          patterns:
+            - '^(?:file|javascript|data|vbscript):'
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.)'
+            - '^https?://\\d{8,10}(?:/|$)'
+            - 'metadata\\.google'
+        - field: href
+          patterns:
+            - '^(?:file|javascript|data):'
+            - '^https?://(?:localhost|127\\.0\\.0\\.1)'
+        - field: webhook
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: callback
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: target
+          patterns:
+            - '^(?:file|javascript|data):'
     - name: block-sensitive-paths
       description: Block reads/lists of credentials, SSH, env files, and filesystem root
       action: block
@@ -68,6 +91,13 @@ policy:
             - '/\\.aws/credentials'
             - '(?:^|/)passwd$'
             - 'id_rsa'
+            - '/var/run/docker\\.sock'
+            - '/var/run/secrets/kubernetes\\.io/'
+            - 'terraform\\.tfstate'
+            - '\\.npmrc'
+            - '\\.git-credentials'
+            - '\\.vault-token'
+            - 'service-account.*\\.json'
         - field: file
           patterns:
             - '^/$'
@@ -75,22 +105,37 @@ policy:
             - '/\\.ssh'
             - '/\\.env'
             - '/\\.aws/credentials'
+            - '/var/run/docker\\.sock'
+            - '/var/run/secrets/kubernetes\\.io/'
+            - 'terraform\\.tfstate'
+            - '\\.npmrc'
+            - '\\.git-credentials'
+            - '\\.vault-token'
+            - 'service-account.*\\.json'
         - field: directory
           patterns:
             - '^/$'
             - '^/etc/'
+            - '/var/run/secrets/kubernetes\\.io/'
     - name: block-sql-exfil
       description: Block obvious bulk data exfiltration SQL in tool arguments
       action: block
       argPatterns:
         - field: sql
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets)\b
-            - \bunion\s+select\b
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
             - \bdrop\s+table\b
+            - \bload_file\s*\(
+            - \bsleep\s*\(
+            - \bbenchmark\s*\(
+            - '\\$where'
+            - __schema
+            - introspection
         - field: query
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets)\b
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|admin_users|passwords)\b
+            - \bunion\b.+\bselect\b
     - name: block-path-traversal
       description: Block tool calls with path traversal attempts
       action: block
@@ -105,6 +150,8 @@ policy:
         - ;\s*\w
         - '&&|\|\|'
         - \$\{
+        - \{\{
+        - <%|#\{
         - \$\([^)]+\)
         - '`[^`]+`'
         - powershell|pwsh|-enc|-EncodedCommand

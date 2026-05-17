@@ -185,7 +185,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 
 ### Security & policy
 - **Fail-closed production default** — `default-policy.yaml` sets `default_action: block` (tools not on the allowlist are blocked). Onboarding uses `policy-demo.yaml` (`default_action: pass`, `mode: audit`) — not for production.
-- **Semantic guards** (sync, before YAML rules) — path guard (`GUARDIAN_WORKSPACE` / prefixes), SQL exfil patterns, GitHub write-tool deny, PowerShell guard, prompt-injection in tool **arguments** (`semantic-guards.ts`)
+- **Semantic guards** (sync, before YAML rules) — path guard, **URL/SSRF guard** (metadata, localhost, dangerous schemes), SQL/NoSQL/GraphQL/LDAP exfil patterns, SSTI markers, GitHub write-tool deny, PowerShell guard, prompt-injection in tool **arguments** (`semantic-guards.ts`, `url-guard.ts`). v2.6.8+ closes gaps from the 58-scenario adversarial report.
 - **Unicode / TR39** — `unicode_strict: true` loads `assets/confusables.txt` and folds confusables before regex (disable for literal Unicode in i18n teams)
 - **Three-layer detection** — Regex → schema/shell tokenizer → optional async LLM semantic audit (not on the hot path)
 - **YAML policy engine** — Allow/deny lists, regex, rate limits, token budgets, RBAC, argument field patterns

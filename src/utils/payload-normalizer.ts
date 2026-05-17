@@ -6,8 +6,14 @@
  *
  * Architecture: normalize → denormalize → sanitize → evaluate
  */
-import { Logger } from './logger.js';
 import { foldHomoglyphs, normalizeConfusables } from './confusables.js';
+
+/** Zero-width / bidi controls stripped before prompt-injection and semantic regex. */
+const ZERO_WIDTH_RE = /[\u200B-\u200F\uFEFF\u00AD\u2060-\u2064\u061C\u180E\u034F\u17B4\u17B5\u202A-\u202E]/g;
+
+export function stripZeroWidthCharacters(input: string): string {
+  return input.replace(ZERO_WIDTH_RE, '');
+}
 
 export interface NormalizationResult {
   /** The fully normalized string ready for policy evaluation */
@@ -299,7 +305,7 @@ export class PayloadNormalizer {
    * until stable or maxDepth reached. Used before prompt-injection / semantic regex.
    */
   deobfuscateRecursive(input: string, maxDepth = this.maxDepth): string {
-    let current = input;
+    let current = stripZeroWidthCharacters(input);
     let depth = 0;
     while (depth < maxDepth) {
       const before = current;
