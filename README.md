@@ -14,10 +14,10 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.7.0** ships enterprise readiness: Plugin SDK v3.0 (`@mcp-guardian/plugin-sdk`), browser dashboard SPA, `mcp-guardian fleet status`, HTTP tools policy template (`GUARDIAN_HTTP_TOOLS_POLICY`), multi-region labels + Redis rate limits ([MULTI_REGION.md](docs/MULTI_REGION.md)), and async semantic audit metrics. **2.6.8** hardens policy from a [58-scenario adversarial report](tests/policy/adversarial-scenarios.test.ts). **2.6.7** fixes cost-pricing recursion and adds GDPR Article 17 erase ([COMPLIANCE.md](docs/COMPLIANCE.md)). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
+**Version 2.7.2** expands proxy-time secret DLP to **150+ detection patterns** (267 rules via `getSecretRuleCount()` — Gitleaks/TruffleHog-class coverage across cloud, VCS/CI, payments, database URLs, AI provider keys, webhooks, and generic high-entropy assignments). **2.7.0** ships enterprise readiness: Plugin SDK v3.0 (`@mcp-guardian/plugin-sdk`), browser dashboard SPA, `mcp-guardian fleet status`, HTTP tools policy template (`GUARDIAN_HTTP_TOOLS_POLICY`), multi-region labels + Redis rate limits ([MULTI_REGION.md](docs/MULTI_REGION.md)), and async semantic audit metrics. **2.6.8** hardens policy from a [58-scenario adversarial report](tests/policy/adversarial-scenarios.test.ts). **2.6.7** fixes cost-pricing recursion and adds GDPR Article 17 erase ([COMPLIANCE.md](docs/COMPLIANCE.md)). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), cost/token accounting, TUI + **Fleet tab**, Redis/Postgres HA, **detector Plugin SDK v3.0**, **fleet CLI**, HTTP tools template merge, **multi-region labeling** (active-passive — not active-active replication), async semantic audit (configurable + Prometheus), AI learning with quorum/drift/rollback ([AI_LEARNING.md](docs/AI_LEARNING.md)), Windows `guardian-proxy.ps1`, Inno Setup script (`installer/windows/`).  
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), cost/token accounting, TUI + **Fleet tab**, Redis/Postgres HA, **detector Plugin SDK v3.0**, **fleet CLI**, HTTP tools template merge, **multi-region labeling** (active-passive — not active-active replication), async semantic audit (configurable + Prometheus), **secret scanner DLP** (150+ patterns; `getSecretRuleCount()`), AI learning with quorum/drift/rollback ([AI_LEARNING.md](docs/AI_LEARNING.md)), Windows `guardian-proxy.ps1`, Inno Setup script (`installer/windows/`).  
 > **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline. AI learning remains batch/block-triggered — not per-attack instant ML.
 
 ---
@@ -195,7 +195,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **OPA/Rego precedence** — OPA **block** > YAML > `default_action`; OPA unavailable falls through to YAML ([POLICY.md](docs/POLICY.md))
 - **`mcp-guardian policy test`** — CLI playground for one `tools/call` without starting the proxy
 - **CVE gate (opt-in)** — `GUARDIAN_BLOCK_ON_CVE=false` by default; when `true`, blocks on scan severity (`GUARDIAN_CVE_BLOCK_SEVERITY`, default `CRITICAL`)
-- **Secret / entropy DLP** — 50+ secret patterns, Shannon entropy in `block` mode (`GUARDIAN_PROXY_ENTROPY`)
+- **Secret / entropy DLP** — Proxy-time scan on every `tools/call` argument tree and tool **responses**; **150+** industry-standard secret patterns (**267** rules; `getSecretRuleCount()` in `src/scanners/secret-scanner.ts`) covering cloud (AWS, GCP, Azure), VCS/CI (GitHub, GitLab, Bitbucket), payments (Stripe, Square, PayPal), database URLs (postgres, mysql, mongodb, redis, amqp), AI provider keys (OpenAI, Anthropic, HuggingFace, Cohere), webhooks (Slack, Discord), crypto/OAuth, and generic high-entropy assignments; Shannon entropy in `block` mode (`GUARDIAN_PROXY_ENTROPY`)
 - **Response inspection** — Prompt injection and exfiltration in tool **responses**
 - **Detector plugins (SDK v3.0)** — `@mcp-guardian/plugin-sdk`, `GUARDIAN_PLUGIN_PATH`; on by default — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
 - **HTTP tools SSRF template** — `GUARDIAN_HTTP_TOOLS_POLICY=true` merges `policy-templates/http-tools-policy.yaml`
@@ -264,7 +264,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **436 tests** — `pnpm vitest run` (72 files; unit, integration, E2E proxy, fleet, policy-merge, plugin-sdk, adversarial scenarios)
+- **463 tests** — `pnpm vitest run` (73 files; unit, integration, E2E proxy, fleet, policy-merge, plugin-sdk, secret-scanner coverage, adversarial scenarios)
 - **Adversarial scenarios** — 34 regression tests mapped to the 58-scenario report ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts))
 - **Red-team corpus** — precision/recall on poisoned payloads
 - **Coverage gates** — 70% lines in CI
@@ -742,6 +742,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ---
 
 ## Roadmap
+
+### Shipped in v2.7.2
+- **Secret scanner** — 150+ patterns (267 rules; `getSecretRuleCount()`), pre-compiled rules in `src/scanners/secret-rules.ts`; proxy-time DLP on arguments and responses; [`tests/secret-scanner-coverage.test.ts`](tests/secret-scanner-coverage.test.ts)
 
 ### Shipped in v2.7.0
 - **Plugin SDK v3.0** — `@mcp-guardian/plugin-sdk`, plugins on by default
