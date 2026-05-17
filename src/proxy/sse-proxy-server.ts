@@ -8,6 +8,7 @@ import { Logger } from '../utils/logger.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
+import { resolveModelId } from '../config/llm-config.js';
 
 interface SseProxyOptions {
   upstreamUrl: string;
@@ -77,11 +78,7 @@ export class SseProxyServer extends EventEmitter {
     // Token counting for tools/call
     if (isToolCall) {
       const params = jsonRpcRequest.params as Record<string, unknown> | undefined;
-      const model =
-        extractModelFromPayload(jsonRpcRequest) ||
-        process.env.GUARDIAN_MODEL ||
-        process.env.ANTHROPIC_MODEL ||
-        process.env.OPENAI_MODEL;
+      const model = resolveModelId(extractModelFromPayload(jsonRpcRequest));
       const requestText = JSON.stringify(jsonRpcRequest);
       const responseText = JSON.stringify(response);
       const counts = this.tokenCounter.countProxyCall({

@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.4] - 2026-05-17
+
+### Added
+- **Redis LLM cache (ARCH-4)** — `src/ai/llm-cache.ts` with Redis-backed responses and in-memory LRU fallback; keys hash `model + system + prompt + temperature`; metrics `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total`.
+- **Centralized LLM config (CQ-3)** — `src/config/llm-config.ts` (`getLlmConfig`, `resolveModelId`) replaces scattered hardcoded models/token limits in semantic scan, `LlmAssistant`, proxy cost path, and suggestion engine.
+
+### Changed
+- Semantic scanner (`packages/core`) and async semantic audit / Ollama assistant use shared cache + config.
+- Env: `GUARDIAN_LLM_CACHE`, `GUARDIAN_LLM_CACHE_TTL_SEC`, `GUARDIAN_LLM_PROVIDER`, `GUARDIAN_LLM_MODEL`, `GUARDIAN_LLM_MAX_TOKENS`, `GUARDIAN_LLM_TEMPERATURE`, `OLLAMA_BASE_URL`.
+
+### Tests
+- `tests/ai/llm-cache.test.ts`, `tests/config/llm-config.test.ts`.
+
 ## [2.7.3] - 2026-05-17
 
 ### Fixed (critical code review + complete analysis reports)

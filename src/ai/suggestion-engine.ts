@@ -22,6 +22,7 @@ import { broadcastDashboardEvent } from '../utils/dashboard-events.js';
 import { isAiAutoApplyEnabled, isAiLearningEnabled, isAiLearningOnCliCommands } from '../utils/ai-enabled.js';
 import { getAllActiveServerNames } from '../utils/db-aggregate.js';
 import { HistoryDatabase } from '../database/history-db.js';
+import { getLlmConfig } from '../config/llm-config.js';
 
 export interface UnifiedSuggestion {
   id: string;
@@ -137,11 +138,12 @@ export class SuggestionEngine {
       const pricingClient = new PricingClient();
       // Sample the first few records to determine dominant model
       const modelCounts = new Map<string, number>();
+      const defaultModel = getLlmConfig().model;
       for (const r of snapshot.callRecords.slice(0, 50)) {
-        const model = (r as any).model || 'gpt-4o';
+        const model = (r as { model?: string }).model || defaultModel;
         modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
       }
-      let dominantModel = 'gpt-4o';
+      let dominantModel = defaultModel;
       let maxCount = 0;
       for (const [model, count] of modelCounts) {
         if (count > maxCount) { maxCount = count; dominantModel = model; }

@@ -27,6 +27,7 @@ import { persistCallRecord } from '../utils/call-record-cost.js';
 import { onPolicyBlock, fingerprintArgs, ingestPolicyDecision } from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
 import type { HistoryDatabase } from '../database/history-db.js';
+import { resolveModelId } from '../config/llm-config.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
@@ -209,11 +210,7 @@ export class McpProxyServer {
           const reqMsg = {
             params: { name: this.requestToolName, arguments: this.requestArguments },
           };
-          const model =
-            this.requestModel ||
-            process.env.GUARDIAN_MODEL ||
-            process.env.ANTHROPIC_MODEL ||
-            process.env.OPENAI_MODEL;
+          const model = resolveModelId(this.requestModel);
           const counts = this.tokenCounter.countProxyCall({
             requestText: this.requestRaw || JSON.stringify(reqMsg),
             responseText: line,
@@ -433,10 +430,7 @@ export class McpProxyServer {
         this.requestToolName = msg.params?.name || 'unknown';
         this.requestRaw = raw;
         this.requestModel =
-          extractModelFromPayload(msg) ||
-          process.env.GUARDIAN_MODEL ||
-          process.env.ANTHROPIC_MODEL ||
-          process.env.OPENAI_MODEL;
+          extractModelFromPayload(msg) || resolveModelId();
         const reqEstimate =
           this.tokenCounter.countWithProvider(raw, this.requestModel)?.tokens ??
           this.tokenCounter.count(raw);

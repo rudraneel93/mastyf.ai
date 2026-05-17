@@ -8,6 +8,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { PricingClient } from '../clients/pricing-client.js';
 import { Logger } from '../utils/logger.js';
+import { resolveModelId } from '../config/llm-config.js';
 
 export type PricingSource = 'cline' | 'cursor' | 'env' | 'message' | 'litellm' | 'unknown';
 
@@ -152,8 +153,7 @@ export class RuntimeModelPricing {
       if (resolved) return resolved;
     }
 
-    const envModel = process.env.GUARDIAN_MODEL || process.env.ANTHROPIC_MODEL
-      || process.env.OPENAI_MODEL || process.env.MCP_PRICING_MODEL;
+    const envModel = resolveModelId();
     if (envModel?.trim()) {
       return this.resolveModelIdDirect(envModel.trim());
     }

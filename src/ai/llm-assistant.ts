@@ -7,6 +7,8 @@
  * No API keys. No cloud costs. No data leaves the machine.
  * All calls are best-effort — graceful fallback if Ollama is unavailable.
  */
+import { getLlmConfig } from '../config/llm-config.js';
+import { getLlmCache } from './llm-cache.js';
 import { Logger } from '../utils/logger.js';
 
 export interface LlmAssistantConfig {
@@ -15,15 +17,22 @@ export interface LlmAssistantConfig {
   timeoutMs: number;
   enabled: boolean;
   maxRetries: number;
+  maxTokens: number;
+  temperature: number;
 }
 
-const DEFAULT_CONFIG: LlmAssistantConfig = {
-  model: process.env['GUARDIAN_LLM_MODEL'] || 'qwen3:8b',
-  ollamaUrl: process.env['OLLAMA_URL'] || 'http://localhost:11434',
-  timeoutMs: parseInt(process.env['GUARDIAN_LLM_TIMEOUT_MS'] || '30000', 10),
-  enabled: process.env['GUARDIAN_LLM_ENABLED'] !== 'false',
-  maxRetries: 2,
-};
+function configFromEnv(): LlmAssistantConfig {
+  const llm = getLlmConfig();
+  return {
+    model: llm.model,
+    ollamaUrl: llm.ollamaBaseUrl,
+    timeoutMs: llm.timeoutMs,
+    enabled: llm.enabled,
+    maxRetries: 2,
+    maxTokens: llm.maxTokens,
+    temperature: llm.temperature,
+  };
+}
 
 export interface LlmResponse {
   text: string;
@@ -36,7 +45,7 @@ export class LlmAssistant {
   private config: LlmAssistantConfig;
 
   constructor(config?: Partial<LlmAssistantConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...configFromEnv(), ...config };
   }
 
   /** Check if Ollama is reachable */
@@ -58,6 +67,23 @@ export class LlmAssistant {
   async generate(systemPrompt: string, userPrompt: string): Promise<LlmResponse | null> {
     if (!this.config.enabled) return null;
 
+    const cache = getLlmCache();
+    const cacheKey = {
+      model: this.config.model,
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: this.config.temperature,
+    };
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return {
+        text: cached,
+        model: this.config.model,
+        tokensUsed: 0,
+        durationMs: 0,
+      };
+    }
+
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       try {
@@ -70,8 +96,8 @@ export class LlmAssistant {
             prompt: `${systemPrompt}\n\n${userPrompt}`,
             stream: false,
             options: {
-              temperature: 0.1,
-              num_predict: 1024,
+              temperature: this.config.temperature,
+              num_predict: this.config.maxTokens,
             },
           }),
           signal: AbortSignal.timeout(this.config.timeoutMs),
@@ -81,17 +107,20 @@ export class LlmAssistant {
           throw new Error(`Ollama returned ${response.status}`);
         }
 
-        const data = await response.json() as any;
+        const data = await response.json() as { response?: string; model?: string; eval_count?: number };
         const durationMs = Date.now() - startTime;
+        const text = (data.response || '').trim();
+
+        await cache.set(cacheKey, text);
 
         return {
-          text: (data.response || '').trim(),
+          text,
           model: data.model || this.config.model,
           tokensUsed: data.eval_count || 0,
           durationMs,
         };
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: unknown) {
+        lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt < this.config.maxRetries) {
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         }

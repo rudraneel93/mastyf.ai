@@ -582,7 +582,16 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_AI_MIN_TOTAL_LABELS` | `10` | Quorum: weighted label total |
 | `GUARDIAN_AI_DRIFT_OVERRIDE` | `false` | Unfreeze tuning after drift detection |
 | `GUARDIAN_TUI_USER` | `$USER` | Label identity for quorum |
-| `ANTHROPIC_API_KEY` | — | LLM semantic layer |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key (semantic layer) |
+| `OPENAI_API_KEY` | — | OpenAI API key (when `GUARDIAN_LLM_PROVIDER=openai`) |
+| `GUARDIAN_LLM_PROVIDER` | auto | `anthropic` \| `openai` \| `ollama` |
+| `GUARDIAN_LLM_MODEL` | provider default | Model for semantic scan + Ollama assistant |
+| `GUARDIAN_LLM_MAX_TOKENS` | `512` | LLM output token cap |
+| `GUARDIAN_LLM_TIMEOUT_MS` | `30000` | LLM request timeout |
+| `GUARDIAN_LLM_TEMPERATURE` | `0.1` | LLM sampling temperature |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL (`OLLAMA_URL` alias) |
+| `GUARDIAN_LLM_CACHE` | on w/ `REDIS_URL` | Redis + LRU LLM response cache |
+| `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | LLM cache entry TTL (seconds) |
 
 ### Cost & observability
 
@@ -602,7 +611,7 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `DB_TYPE` | `sqlite` | `postgres` for shared store |
 | `DATABASE_URL` | — | Postgres URL; **use PgBouncer** for multi-replica |
 | `GUARDIAN_REQUIRE_PGBOUNCER` | `false` | Exit if URL is not pooler-shaped |
-| `REDIS_URL` | — | Multi-replica rate limits (single-region) |
+| `REDIS_URL` | — | Multi-replica rate limits + LLM cache (single-region) |
 | `GUARDIAN_STRICT_MODE` | `false` | Fail startup without Redis in K8s |
 | `GUARDIAN_AUDIT_SYNC_ENABLED` | `false` | Sync SQLite → PostgreSQL |
 

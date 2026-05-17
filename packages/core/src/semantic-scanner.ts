@@ -1,10 +1,13 @@
 import type { Issue, ToolDefinition } from "./types.js";
+import { getLlmConfig } from "./config/llm-config.js";
+import { getLlmCache } from "./ai/llm-cache.js";
 
 export interface SemanticScanOptions {
   apiKey?: string;               // Falls back to ANTHROPIC_API_KEY env var
-  model?: string;                // Default: claude-haiku-4-5 (fast, cheap)
+  model?: string;                // Default from getLlmConfig()
   alwaysRun?: boolean;           // Run even when regex is clean (thorough mode)
-  timeoutMs?: number;            // Default: 10000
+  timeoutMs?: number;            // Default from getLlmConfig()
+  temperature?: number;
 }
 
 interface SemanticVerdict {
@@ -62,14 +65,35 @@ ${tool.description}
 Analyze this tool for prompt injection attacks.`;
 }
 
+function verdictToIssues(verdict: SemanticVerdict): Issue[] {
+  if (!verdict.is_injection || verdict.severity === "none") {
+    return [];
+  }
+
+  return [{
+    id: "MCPG-LLM-001",
+    layer: "semantic",
+    severity: verdict.severity === "critical" ? "critical" : "warning",
+    category: verdict.categories.join(", ") || "unknown",
+    message: verdict.reasoning,
+    evidence: verdict.specific_phrases.join("; "),
+    confidence: verdict.confidence,
+  }];
+}
+
+function parseVerdictFromText(rawText: string): SemanticVerdict {
+  const cleanJson = rawText.replace(/```(?:json)?\n?/g, "").trim();
+  return JSON.parse(cleanJson) as SemanticVerdict;
+}
+
 export async function runSemanticScan(
   tool: ToolDefinition,
   priorIssues: Issue[],
   options: SemanticScanOptions = {}
 ): Promise<Issue[]> {
-  const apiKey = options.apiKey ?? process.env.ANTHROPIC_API_KEY;
+  const llmConfig = getLlmConfig();
+  const apiKey = options.apiKey ?? llmConfig.anthropicApiKey;
   if (!apiKey) {
-    // Semantic scan is optional — degrade gracefully
     return [{
       id: "MCPG-META-001",
       layer: "semantic",
@@ -81,8 +105,21 @@ export async function runSemanticScan(
     }];
   }
 
-  const model = options.model ?? "claude-haiku-4-5-20251001";
-  const timeoutMs = options.timeoutMs ?? 10_000;
+  const model = options.model ?? llmConfig.model;
+  const timeoutMs = options.timeoutMs ?? llmConfig.timeoutMs;
+  const temperature = options.temperature ?? llmConfig.temperature;
+  const userPrompt = buildUserPrompt(tool, priorIssues);
+  const cache = getLlmCache();
+  const cacheKey = { model, prompt: userPrompt, system: SYSTEM_PROMPT, temperature };
+
+  const cachedResponse = await cache.get(cacheKey);
+  if (cachedResponse) {
+    try {
+      return verdictToIssues(parseVerdictFromText(cachedResponse));
+    } catch {
+      /* stale cache — refetch below */
+    }
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -97,10 +134,11 @@ export async function runSemanticScan(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 512,
+        max_tokens: llmConfig.maxTokens,
+        temperature,
         system: SYSTEM_PROMPT,
         messages: [
-          { role: "user", content: buildUserPrompt(tool, priorIssues) },
+          { role: "user", content: userPrompt },
         ],
       }),
       signal: controller.signal,
@@ -120,23 +158,10 @@ export async function runSemanticScan(
       .map(b => b.text ?? "")
       .join("");
 
-    // Strip any accidental markdown fences
-    const cleanJson = rawText.replace(/```(?:json)?\n?/g, "").trim();
-    const verdict: SemanticVerdict = JSON.parse(cleanJson);
+    await cache.set(cacheKey, rawText);
 
-    if (!verdict.is_injection || verdict.severity === "none") {
-      return [];
-    }
-
-    return [{
-      id: "MCPG-LLM-001",
-      layer: "semantic",
-      severity: verdict.severity === "critical" ? "critical" : "warning",
-      category: verdict.categories.join(", ") || "unknown",
-      message: verdict.reasoning,
-      evidence: verdict.specific_phrases.join("; "),
-      confidence: verdict.confidence,
-    }];
+    const verdict = parseVerdictFromText(rawText);
+    return verdictToIssues(verdict);
 
   } catch (err) {
     if ((err as Error).name === "AbortError") {
@@ -150,7 +175,6 @@ export async function runSemanticScan(
         confidence: 1.0,
       }];
     }
-    // Don't throw — degrade gracefully
     return [{
       id: "MCPG-META-003",
       layer: "semantic",

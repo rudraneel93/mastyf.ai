@@ -33,6 +33,33 @@ Non-blocking queue after sync policy passes:
 
 Observability: Prometheus `mcp_guardian_semantic_audit_*` metrics; structured log event `async_semantic_flag`.
 
+## LLM response cache (enterprise)
+
+Deduplicates identical LLM prompts across replicas (semantic scan + Ollama assistant):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_LLM_CACHE` | on when `REDIS_URL` set | `true` / `false` to force enable/disable |
+| `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | Redis + LRU entry TTL (seconds) |
+| `REDIS_URL` | — | Shared cache backend for multi-replica HA |
+
+Cache key: SHA-256 of `model`, `system`, `prompt`, and `temperature`. Metrics: `mcp_guardian_llm_cache_hits_total`, `mcp_guardian_llm_cache_misses_total` (label `backend`: `redis` | `lru`).
+
+Without Redis, cache runs in-process LRU only (single replica).
+
+## Centralized LLM config
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_LLM_PROVIDER` | auto from API keys | `anthropic` \| `openai` \| `ollama` |
+| `GUARDIAN_LLM_MODEL` | provider default | Model id for semantic + assistant |
+| `GUARDIAN_LLM_MAX_TOKENS` | `512` | `max_tokens` / `num_predict` cap |
+| `GUARDIAN_LLM_TIMEOUT_MS` | `30000` | LLM HTTP timeout |
+| `GUARDIAN_LLM_TEMPERATURE` | `0.1` | Sampling temperature |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API base (`OLLAMA_URL` alias) |
+
+Implementation: `src/config/llm-config.ts`, `src/ai/llm-cache.ts`.
+
 ## Operations
 
 ```bash

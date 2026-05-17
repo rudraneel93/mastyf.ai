@@ -3,6 +3,7 @@ import { TokenCounter } from '../utils/token-counter.js';
 import { IDatabase } from '../database/database-interface.js';
 import { Logger } from '../utils/logger.js';
 import { getRuntimeModelPricing } from './runtime-model-pricing.js';
+import { resolveModelId } from '../config/llm-config.js';
 
 export class CostAuditor {
   private tokenCounter: TokenCounter;
@@ -16,7 +17,7 @@ export class CostAuditor {
   async getPricingModel(): Promise<string> {
     const active = await getRuntimeModelPricing().getActivePricing();
     if (active) return `${active.displayName} (${active.source})`;
-    return process.env.GUARDIAN_MODEL || process.env.ANTHROPIC_MODEL || 'no model detected';
+    return resolveModelId() || 'no model detected';
   }
 
   async auditServer(server: McpServerConfig): Promise<CostReport> {
