@@ -14,10 +14,10 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.7.2** expands proxy-time secret DLP to **150+ detection patterns** (267 rules via `getSecretRuleCount()` — Gitleaks/TruffleHog-class coverage across cloud, VCS/CI, payments, database URLs, AI provider keys, webhooks, and generic high-entropy assignments). **2.7.0** ships enterprise readiness: Plugin SDK v3.0 (`@mcp-guardian/plugin-sdk`), browser dashboard SPA, `mcp-guardian fleet status`, HTTP tools policy template (`GUARDIAN_HTTP_TOOLS_POLICY`), multi-region labels + Redis rate limits ([MULTI_REGION.md](docs/MULTI_REGION.md)), and async semantic audit metrics. **2.6.8** hardens policy from a [58-scenario adversarial report](tests/policy/adversarial-scenarios.test.ts). **2.6.7** fixes cost-pricing recursion and adds GDPR Article 17 erase ([COMPLIANCE.md](docs/COMPLIANCE.md)). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
+**Version 2.7.4** adds a **Redis-backed LLM response cache** with in-memory LRU fallback ([`src/ai/llm-cache.ts`](src/ai/llm-cache.ts)) and **centralized `getLlmConfig()`** ([`src/config/llm-config.ts`](src/config/llm-config.ts)) for semantic scan, Ollama assistant, proxy cost path, and suggestion engine — see [AI_LEARNING.md](docs/AI_LEARNING.md). **2.7.2** expands proxy-time secret DLP to **150+ detection patterns** (267 rules via `getSecretRuleCount()` — Gitleaks/TruffleHog-class coverage across cloud, VCS/CI, payments, database URLs, AI provider keys, webhooks, and generic high-entropy assignments). **2.7.0** ships enterprise readiness: Plugin SDK v3.0 (`@mcp-guardian/plugin-sdk`), browser dashboard SPA, `mcp-guardian fleet status`, HTTP tools policy template (`GUARDIAN_HTTP_TOOLS_POLICY`), multi-region labels + Redis rate limits ([MULTI_REGION.md](docs/MULTI_REGION.md)), and async semantic audit metrics. **2.6.8** hardens policy from a [58-scenario adversarial report](tests/policy/adversarial-scenarios.test.ts). **2.6.7** fixes cost-pricing recursion and adds GDPR Article 17 erase ([COMPLIANCE.md](docs/COMPLIANCE.md)). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), cost/token accounting, TUI + **Fleet tab**, Redis/Postgres HA, **detector Plugin SDK v3.0**, **fleet CLI**, HTTP tools template merge, **multi-region labeling** (active-passive — not active-active replication), async semantic audit (configurable + Prometheus), **secret scanner DLP** (150+ patterns; `getSecretRuleCount()`), AI learning with quorum/drift/rollback ([AI_LEARNING.md](docs/AI_LEARNING.md)), Windows `guardian-proxy.ps1`, Inno Setup script (`installer/windows/`).  
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), cost/token accounting, TUI + **Fleet tab**, Redis/Postgres HA, **detector Plugin SDK v3.0**, **fleet CLI**, HTTP tools template merge, **multi-region labeling** (active-passive — not active-active replication), async semantic audit (configurable + Prometheus), **Redis LLM response cache** + centralized LLM config (`getLlmConfig()`), **secret scanner DLP** (150+ patterns; `getSecretRuleCount()`), AI learning with quorum/drift/rollback ([AI_LEARNING.md](docs/AI_LEARNING.md)), Windows `guardian-proxy.ps1`, Inno Setup script (`installer/windows/`).  
 > **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline. AI learning remains batch/block-triggered — not per-attack instant ML.
 
 ---
@@ -216,6 +216,8 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Anti-poisoning** — Label quorum: `GUARDIAN_AI_MIN_DISTINCT_LABELERS` (default 2) or `GUARDIAN_AI_MIN_TOTAL_LABELS` (default 10); admin label weights; drift detection freezes auto threshold tuning until `GUARDIAN_AI_DRIFT_OVERRIDE=true`
 - **Rollback** — `mcp-guardian ai rollback` and `POST /api/ai/rollback` restore the last learning snapshot; auto-rollback if precision proxy drops >10%
 - **Human accept → policy** — TUI (`a` accept) or dashboard accept writes suggested rules to policy YAML (auto-apply off unless `GUARDIAN_AI_AUTO_APPLY=true`)
+- **Centralized LLM config** — `getLlmConfig()` / `resolveModelId()` in [`src/config/llm-config.ts`](src/config/llm-config.ts) unify provider, model, token cap, timeout, and temperature for semantic scan, Ollama assistant, proxy cost path, and suggestion engine ([AI_LEARNING.md](docs/AI_LEARNING.md))
+- **LLM response cache** — Deduplicates identical prompts across replicas (semantic scan + Ollama assistant). Enabled when `REDIS_URL` is set or `GUARDIAN_LLM_CACHE=true`; disable with `GUARDIAN_LLM_CACHE=false`. **Redis** backend when `REDIS_URL` is set (region-prefixed keys, configurable TTL); **in-memory LRU** fallback (500 entries) for single-replica or Redis outages. Cache key: SHA-256 of `model`, `system`, `prompt`, and `temperature`. Metrics: `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total` (label `backend`: `redis` | `lru`). Implementation: [`src/ai/llm-cache.ts`](src/ai/llm-cache.ts)
 - **Async semantic audit** — Post-hoc LLM queue when `GUARDIAN_LLM_ENABLED` + `GUARDIAN_SEMANTIC_ASYNC` (default on); sync path stays regex + semantic guards (&lt;50ms target)
 
 ### Cost governance
@@ -264,7 +266,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **463 tests** — `pnpm vitest run` (73 files; unit, integration, E2E proxy, fleet, policy-merge, plugin-sdk, secret-scanner coverage, adversarial scenarios)
+- **483+ tests** — `pnpm vitest run` (77 files; unit, integration, E2E proxy, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, secret-scanner coverage, adversarial scenarios)
 - **Adversarial scenarios** — 34 regression tests mapped to the 58-scenario report ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts))
 - **Red-team corpus** — precision/recall on poisoned payloads
 - **Coverage gates** — 70% lines in CI
@@ -327,7 +329,7 @@ mcp-guardian proxy --auth-issuer https://accounts.google.com --auth-audience my-
 
 Modes: `audit` | `warn` | `block`. Wrapper script: `scripts/guardian-proxy.sh` (sets DB path, dashboard, metrics).
 
-Per-call sync evaluation stays fast (regex + semantic guards). When `GUARDIAN_LLM_ENABLED` is on, optional **async** LLM review runs post-hoc (`GUARDIAN_SEMANTIC_ASYNC=true`, default) and emits `async_semantic_flag` events without blocking JSON-RPC.
+Per-call sync evaluation stays fast (regex + semantic guards). When `GUARDIAN_LLM_ENABLED` is on, optional **async** LLM review runs post-hoc (`GUARDIAN_SEMANTIC_ASYNC=true`, default) and emits `async_semantic_flag` events without blocking JSON-RPC. Identical LLM prompts are deduplicated via the Redis + LRU cache ([AI_LEARNING.md](docs/AI_LEARNING.md#llm-response-cache-enterprise)).
 
 ### `mcp-guardian policy test`
 
@@ -571,6 +573,8 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 
 ### AI learning
 
+Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · implementation in [`src/config/llm-config.ts`](src/config/llm-config.ts) and [`src/ai/llm-cache.ts`](src/ai/llm-cache.ts).
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GUARDIAN_AI_ENABLED` | `true` | Learning in proxy/TUI (`false` to disable) |
@@ -584,14 +588,14 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_TUI_USER` | `$USER` | Label identity for quorum |
 | `ANTHROPIC_API_KEY` | — | Anthropic API key (semantic layer) |
 | `OPENAI_API_KEY` | — | OpenAI API key (when `GUARDIAN_LLM_PROVIDER=openai`) |
-| `GUARDIAN_LLM_PROVIDER` | auto | `anthropic` \| `openai` \| `ollama` |
-| `GUARDIAN_LLM_MODEL` | provider default | Model for semantic scan + Ollama assistant |
-| `GUARDIAN_LLM_MAX_TOKENS` | `512` | LLM output token cap |
-| `GUARDIAN_LLM_TIMEOUT_MS` | `30000` | LLM request timeout |
-| `GUARDIAN_LLM_TEMPERATURE` | `0.1` | LLM sampling temperature |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama URL (`OLLAMA_URL` alias) |
-| `GUARDIAN_LLM_CACHE` | on w/ `REDIS_URL` | Redis + LRU LLM response cache |
-| `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | LLM cache entry TTL (seconds) |
+| `GUARDIAN_LLM_PROVIDER` | auto from keys | `anthropic` \| `openai` \| `ollama` (explicit override) |
+| `GUARDIAN_LLM_MODEL` | provider default | Model id for semantic scan + Ollama assistant |
+| `GUARDIAN_LLM_MAX_TOKENS` | `512` | `max_tokens` / `num_predict` cap |
+| `GUARDIAN_LLM_TIMEOUT_MS` | `30000` | LLM HTTP timeout (ms) |
+| `GUARDIAN_LLM_TEMPERATURE` | `0.1` | Sampling temperature (included in cache key) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API base (`OLLAMA_URL` alias) |
+| `GUARDIAN_LLM_CACHE` | on w/ `REDIS_URL` | `true` / `false` to force; otherwise on when `REDIS_URL` set. Redis + in-process LRU (500 entries); metrics `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total` |
+| `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | Redis + LRU entry TTL (seconds) |
 
 ### Cost & observability
 
@@ -751,6 +755,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ---
 
 ## Roadmap
+
+### Shipped in v2.7.4
+- **Redis LLM cache** — [`src/ai/llm-cache.ts`](src/ai/llm-cache.ts): Redis-backed responses with in-memory LRU fallback; SHA-256 keys over `model + system + prompt + temperature`; Prometheus `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total`
+- **Centralized LLM config** — [`src/config/llm-config.ts`](src/config/llm-config.ts): `getLlmConfig()`, `resolveModelId()`; env `GUARDIAN_LLM_PROVIDER`, `GUARDIAN_LLM_MODEL`, `GUARDIAN_LLM_MAX_TOKENS`, `GUARDIAN_LLM_TIMEOUT_MS`, `GUARDIAN_LLM_TEMPERATURE`, `OLLAMA_BASE_URL` ([AI_LEARNING.md](docs/AI_LEARNING.md))
 
 ### Shipped in v2.7.2
 - **Secret scanner** — 150+ patterns (267 rules; `getSecretRuleCount()`), pre-compiled rules in `src/scanners/secret-rules.ts`; proxy-time DLP on arguments and responses; [`tests/secret-scanner-coverage.test.ts`](tests/secret-scanner-coverage.test.ts)
