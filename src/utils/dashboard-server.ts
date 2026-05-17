@@ -36,9 +36,16 @@ function deployDir(): string | null {
   return null;
 }
 
+/** Next static export (`out/`) when built; else legacy static files in `dashboard-spa/`. */
+function dashboardSpaDir(deployRoot: string): string {
+  const outDir = join(deployRoot, 'dashboard-spa', 'out');
+  if (existsSync(join(outDir, 'index.html'))) return outDir;
+  return join(deployRoot, 'dashboard-spa');
+}
+
 function loadDashboardHtml(): string {
   const dir = deployDir();
-  const spaIndex = dir ? join(dir, 'dashboard-spa', 'index.html') : '';
+  const spaIndex = dir ? join(dashboardSpaDir(dir), 'index.html') : '';
   const useSpa = process.env['GUARDIAN_DASHBOARD_SPA'] !== 'false';
   if (useSpa && spaIndex && existsSync(spaIndex)) {
     return readFileSync(spaIndex, 'utf-8');
@@ -55,18 +62,37 @@ const SPA_MIME: Record<string, string> = {
   '.json': 'application/json',
 };
 
-function tryServeDashboardSpa(url: string, res: ServerResponse): boolean {
-  if (!url.startsWith('/dashboard-spa/')) return false;
-  const dir = deployDir();
-  if (!dir) return false;
-  const rel = url.replace(/^\/dashboard-spa\//, '');
-  if (rel.includes('..')) return false;
-  const filePath = join(dir, 'dashboard-spa', rel);
+function serveDashboardAsset(
+  spaRoot: string,
+  relPath: string,
+  res: ServerResponse,
+): boolean {
+  if (!relPath || relPath.includes('..')) return false;
+  const filePath = join(spaRoot, relPath);
   if (!existsSync(filePath)) return false;
   const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': mime });
   res.end(readFileSync(filePath));
   return true;
+}
+
+function tryServeDashboardSpa(url: string, res: ServerResponse): boolean {
+  const dir = deployDir();
+  if (!dir) return false;
+  const spaRoot = dashboardSpaDir(dir);
+  const legacyRoot = join(dir, 'dashboard-spa');
+
+  if (url.startsWith('/_next/')) {
+    return serveDashboardAsset(spaRoot, url.slice(1), res);
+  }
+
+  if (!url.startsWith('/dashboard-spa/')) return false;
+  const rel = url.replace(/^\/dashboard-spa\//, '');
+  if (serveDashboardAsset(spaRoot, rel, res)) return true;
+  if (spaRoot !== legacyRoot) {
+    return serveDashboardAsset(legacyRoot, rel, res);
+  }
+  return false;
 }
 
 function getCorsOrigin(req: IncomingMessage): string {
@@ -189,14 +215,16 @@ export async function startDashboardServer(
   const loginRateLimiter: LRUCache<string, number> = new LRUCache({ max: 500, ttl: 60000 });
 
   const server = createServer(async (req, res) => {
-    const url = req.url || '/';
+    const url = (req.url || '/').split('?')[0] || '/';
     const method = req.method || 'GET';
 
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", "data:"], connectSrc: ["'self'", "http://localhost:9090"], frameAncestors: ["'none'"],
+          imgSrc: ["'self'", "data:"],
+          connectSrc: ["'self'", "ws:", "wss:", "http://localhost:4000", "http://127.0.0.1:4000", "http://localhost:9090"],
+          frameAncestors: ["'none'"],
         },
       },
       hsts: { maxAge: 63072000, includeSubDomains: true },

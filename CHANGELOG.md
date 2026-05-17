@@ -2,6 +2,15 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.7] - 2026-05-17
+
+### Fixed
+- **Dashboard SPA hydration** — Replaced preview-only static stub with a Next.js App Router client (`deploy/dashboard-spa/`) using client-only mount, error boundary, and graceful handling when the Guardian API on port 4000 is unavailable. Static export served from `out/` (legacy HTML/JS fallback when not built).
+
+### Added
+- `pnpm dashboard:build` / `pnpm dashboard:dev` — build or develop the browser dashboard.
+- `tests/dashboard/dashboard-spa.test.ts` — structure smoke tests for the dashboard app.
+
 ## [2.7.6] - 2026-05-17
 
 ### Added

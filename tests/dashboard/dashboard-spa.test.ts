@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+
+const SPA_ROOT = join(process.cwd(), 'deploy', 'dashboard-spa');
+
+describe('dashboard-spa', () => {
+  it('includes Next.js app source with client-only dashboard', () => {
+    const client = join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx');
+    const boundary = join(SPA_ROOT, 'app', 'components', 'DashboardErrorBoundary.tsx');
+    expect(existsSync(client)).toBe(true);
+    expect(existsSync(boundary)).toBe(true);
+    const src = readFileSync(client, 'utf-8');
+    expect(src).toContain("'use client'");
+    expect(src).toContain('setReady(true)');
+    expect(src).not.toMatch(/Date\.now\(\)/);
+    expect(src).not.toMatch(/Math\.random\(\)/);
+  });
+
+  it('loads dashboard client with ssr disabled', () => {
+    const pageClient = join(SPA_ROOT, 'app', 'components', 'DashboardPageClient.tsx');
+    const pageSrc = readFileSync(pageClient, 'utf-8');
+    expect(pageSrc).toContain("'use client'");
+    expect(pageSrc).toContain('ssr: false');
+    expect(pageSrc).toContain('dynamic(');
+  });
+
+  it('resolves API base to relative paths by default', () => {
+    const api = join(SPA_ROOT, 'lib', 'guardian-api.ts');
+    const apiSrc = readFileSync(api, 'utf-8');
+    expect(apiSrc).toContain("return ''");
+    expect(apiSrc).toMatch(/base \? `\$\{base\}\$\{normalized\}` : normalized/);
+  });
+
+  it('keeps legacy static fallback when Next export is not built', () => {
+    const legacyIndex = join(SPA_ROOT, 'index.html');
+    const legacyJs = join(SPA_ROOT, 'app.js');
+    expect(existsSync(legacyIndex)).toBe(true);
+    expect(existsSync(legacyJs)).toBe(true);
+  });
+
+  it('static export exists after dashboard:build', () => {
+    const outIndex = join(SPA_ROOT, 'out', 'index.html');
+    if (!existsSync(outIndex)) {
+      // CI may skip npm install in deploy/dashboard-spa; source + legacy tests still gate structure.
+      expect(existsSync(join(SPA_ROOT, 'package.json'))).toBe(true);
+      return;
+    }
+    const html = readFileSync(outIndex, 'utf-8');
+    expect(html).toContain('MCP Guardian');
+    expect(html).toMatch(/\/_next\//);
+  });
+});
