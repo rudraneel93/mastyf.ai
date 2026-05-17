@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT * FROM passwords"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "passwords-table"
+}

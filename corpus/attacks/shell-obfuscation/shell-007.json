@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "${7*7}"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "el-expression"
+}

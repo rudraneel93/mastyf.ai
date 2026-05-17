@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "http://metadata.google.internal/computeMetadata/v1/"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "gcp-metadata"
+}

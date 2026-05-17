@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "webhook": "http://127.0.0.1:9999/exfil"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "webhook-localhost"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/app/.env.production"
+  },
+  "expected": "block",
+  "category": "credential-exfil",
+  "ruleHint": "block-sensitive-paths"
+}

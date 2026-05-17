@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "{{config.items()}}"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "jinja-ssti"
+}

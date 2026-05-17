@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "{\"$where\": \"this.password == 'x'\"}"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "nosql-where"
+}

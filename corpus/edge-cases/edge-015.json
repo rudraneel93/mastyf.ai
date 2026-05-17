@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "Line1\nLine2\nLine3"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "multiline-benign"
+}

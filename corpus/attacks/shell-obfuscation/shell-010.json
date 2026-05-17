@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "powershell -enc SQBFAFg="
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "powershell-enc"
+}

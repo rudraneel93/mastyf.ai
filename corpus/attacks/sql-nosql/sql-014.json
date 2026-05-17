@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT * FROM accounts UNION SELECT ccn FROM payments"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "union-payments"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "ruby -rsocket -e'exit if fork;c=TCPSocket.new'"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "ruby-reverse-shell"
+}

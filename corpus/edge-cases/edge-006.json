@@ -1,0 +1,9 @@
+{
+  "toolName": "list_directory",
+  "arguments": {
+    "directory": "/workspace"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "workspace-list"
+}

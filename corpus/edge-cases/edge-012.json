@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "path: ../../../etc/hosts"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "nested-traversal"
+}

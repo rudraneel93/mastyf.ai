@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "{\"$gt\": \"\"}"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "nosql-gt"
+}

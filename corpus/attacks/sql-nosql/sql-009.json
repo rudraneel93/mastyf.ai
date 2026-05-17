@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "DELETE FROM customers WHERE 1=1"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "delete-all"
+}

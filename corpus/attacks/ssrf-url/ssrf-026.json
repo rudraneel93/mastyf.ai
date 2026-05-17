@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "https://docs.example.com/api"
+  },
+  "expected": "benign-docs",
+  "category": "ssrf-url",
+  "ruleHint": "pass"
+}

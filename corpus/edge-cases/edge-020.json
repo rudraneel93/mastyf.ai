@@ -1,0 +1,9 @@
+{
+  "toolName": "create_issue",
+  "arguments": {
+    "title": "test"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "deny-github-write"
+}

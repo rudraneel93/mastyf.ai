@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "http://[::1]:8080/"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "ipv6-localhost"
+}

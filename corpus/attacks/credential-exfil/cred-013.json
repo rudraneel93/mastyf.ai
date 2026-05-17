@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "file": "/.env"
+  },
+  "expected": "block",
+  "category": "credential-exfil",
+  "ruleHint": "block-sensitive-paths"
+}

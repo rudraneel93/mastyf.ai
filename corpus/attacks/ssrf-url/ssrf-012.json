@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "callback": "http://172.16.0.1/api"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "rfc1918-172"
+}

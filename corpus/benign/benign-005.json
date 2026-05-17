@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "Benign echo 4: kubernetes pod status"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

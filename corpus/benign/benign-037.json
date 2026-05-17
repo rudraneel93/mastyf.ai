@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "typescript interface definition (case 36)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

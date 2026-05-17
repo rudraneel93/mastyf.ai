@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "file": "/etc/passwd"
+  },
+  "expected": "block",
+  "category": "credential-exfil",
+  "ruleHint": "block-sensitive-paths"
+}

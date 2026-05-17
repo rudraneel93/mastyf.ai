@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.5] - 2026-05-17
+
+### Added
+- **Enterprise LLM/MCP corpus** — 226 real attack fixtures under `corpus/` (benign, prompt-injection, credential-exfil, sql-nosql, ssrf-url, shell-obfuscation, cross-tool-chain, edge-cases); `corpus/manifest.yaml`, `corpus/README.md`.
+- **Corpus eval** — `corpus/run-eval.ts` runs each entry through `PolicyEngine` + `default-policy.yaml`; per-category precision/recall; writes `corpus-eval-report.json`; fails CI on missed attacks.
+- **Benchmarks in CI** — `benchmarks` job in `.github/workflows/ci.yml`; p95 gate via `BENCH_P95_THRESHOLD_MS`; `benchmarks/README.md`.
+- **E2E adversarial proxy** — `tests/e2e/adversarial-proxy.e2e.test.ts` (10 corpus attacks through live proxy).
+- **Pen-test artifacts** — `docs/PEN_TEST_REPORT.md`, `security/ATTACK_MATRIX.md`, `scripts/generate-pen-test-report.cjs`.
+
+### Changed
+- Corpus eval workflow (PR + nightly) uploads `corpus-eval-report.json`.
+- `pnpm eval` uses PolicyEngine (replaces legacy `scanTool` poisoned/benign layout).
+
 ## [2.7.4] - 2026-05-17
 
 ### Added

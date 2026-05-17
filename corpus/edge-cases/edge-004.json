@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": ""
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "empty-query"
+}

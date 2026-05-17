@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT id, name FROM products WHERE active = true LIMIT 10"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

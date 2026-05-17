@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "callback": "http://localhost:4567/hook"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "callback-localhost"
+}

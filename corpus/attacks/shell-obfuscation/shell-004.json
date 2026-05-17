@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "ls; cat /etc/passwd"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "semicolon-chain"
+}

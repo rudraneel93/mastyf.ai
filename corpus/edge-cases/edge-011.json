@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "../../workspace/docs/guide.md"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "path-traversal"
+}

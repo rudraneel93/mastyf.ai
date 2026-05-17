@@ -1,0 +1,45 @@
+# Enterprise LLM/MCP attack corpus manifest
+version: '2.0'
+policy: default-policy.yaml
+evaluator: corpus/run-eval.ts
+minimum_entries: 200
+
+categories:
+  benign:
+    description: Safe tool calls on allowlisted tools
+    expected: pass
+    count: 55
+  prompt-injection:
+    description: Jailbreak, ignore-instructions, DAN, multiline, zero-width evasion
+    expected: block
+    count: 32
+  credential-exfil:
+    description: Sensitive paths, credential files, env leaks in arguments
+    expected: block
+    count: 23
+  sql-nosql:
+    description: SQL union, bulk exfil, NoSQL $where, GraphQL introspection, LDAP
+    expected: block
+    count: 26
+  ssrf-url:
+    description: Metadata IPs, localhost, private RFC1918, dangerous URL schemes
+    expected: block
+    count: 24
+  ssrf-url-benign:
+    description: Public URLs that must pass (subset of ssrf-url folder)
+    expected: pass
+    count: 2
+  shell-obfuscation:
+    description: Shell injection, encoding, homoglyphs, SSTI, PowerShell
+    expected: block
+    count: 26
+  cross-tool-chain:
+    description: Multi-step read-then-exfil patterns in argument text
+    expected: block
+    count: 16
+  edge-cases:
+    description: Unicode boundaries, large payloads, denied tools, traversal
+    expected: mixed
+    count: 22
+
+total: 226

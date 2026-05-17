@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "https://www.npmjs.com/package/express"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "public-url"
+}

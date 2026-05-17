@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "SELECT 1"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "minimal-sql-safe"
+}

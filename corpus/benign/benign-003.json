@@ -1,0 +1,9 @@
+{
+  "toolName": "list_directory",
+  "arguments": {
+    "directory": "/workspace/src"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

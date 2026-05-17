@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "npm audit --audit-level=high"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "audit-command-text"
+}

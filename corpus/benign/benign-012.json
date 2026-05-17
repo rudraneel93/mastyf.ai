@@ -1,0 +1,9 @@
+{
+  "toolName": "list_files",
+  "arguments": {
+    "query": "list open pull requests (case 11)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

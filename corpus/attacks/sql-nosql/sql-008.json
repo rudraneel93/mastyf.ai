@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "DROP TABLE users"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "drop-table"
+}

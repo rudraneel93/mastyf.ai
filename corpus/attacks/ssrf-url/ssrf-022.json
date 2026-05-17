@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "http://192.168.0.1/dashboard"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "private-ip-navigate"
+}

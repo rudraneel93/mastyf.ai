@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "{\"$regex\": \".*\"}"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "nosql-regex"
+}

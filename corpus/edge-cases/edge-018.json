@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "tab\tseparated\tvalues"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "tabs"
+}

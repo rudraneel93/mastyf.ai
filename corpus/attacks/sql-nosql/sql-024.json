@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "SELECT name FROM users UNION SELECT password FROM admin_users"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "union-in-query-field"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "bash",
+  "arguments": {
+    "script": "ls"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "deny-bash"
+}

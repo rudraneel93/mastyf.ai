@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "<% system(\"id\") %>"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "erb-ssti"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/var/secrets/service-account-key.json"
+  },
+  "expected": "block",
+  "category": "credential-exfil",
+  "ruleHint": "block-sensitive-paths"
+}

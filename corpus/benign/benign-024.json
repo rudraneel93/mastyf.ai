@@ -1,0 +1,9 @@
+{
+  "toolName": "list_files",
+  "arguments": {
+    "query": "unit test coverage report (case 23)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

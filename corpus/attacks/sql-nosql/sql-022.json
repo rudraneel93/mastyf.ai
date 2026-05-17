@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT * FROM admin_users"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "admin-users-select"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "body": "fetch http://127.0.0.1:6379/CONFIG SET"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "redis-ssrf-body"
+}

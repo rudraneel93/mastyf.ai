@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "pwsh -EncodedCommand YwBhdA=="
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "pwsh-encoded"
+}

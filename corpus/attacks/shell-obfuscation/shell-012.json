@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "$(cat /etc/passwd)"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "command-substitution"
+}

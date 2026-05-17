@@ -690,7 +690,22 @@ pnpm install && pnpm build && pnpm test
 ./scripts/verify-live-integration.sh
 pnpm run dogfood          # sandboxed multi-server scenario (CI)
 pnpm run live:tui-demo    # write shared ~/.mcp-guardian/history.db for TUI smoke test
-pnpm eval                 # red-team corpus
+pnpm eval                 # enterprise corpus (226 entries, PolicyEngine + default-policy)
+pnpm exec tsx benchmarks/run.ts   # proxy latency benchmarks
+node scripts/generate-pen-test-report.cjs   # docs/PEN_TEST_REPORT.md from eval output
+```
+
+### Test & evidence depth (v2.7.5)
+
+| Asset | Count / scope |
+|-------|----------------|
+| Enterprise corpus | **226** JSON fixtures (`corpus/`) |
+| Corpus categories | benign (55), prompt-injection (32), credential-exfil (23), sql-nosql (26), ssrf-url (26), shell-obfuscation (26), cross-tool-chain (16), edge-cases (22) |
+| CI corpus eval | `pnpm eval` on every PR; artifact `corpus-eval-report.json` |
+| CI benchmarks | p95 policy-eval gate (150ms, 100 iterations) |
+| E2E proxy tests | `proxy-with-policy.e2e` + `adversarial-proxy.e2e` (10 attacks) |
+| Pen-test docs | [docs/PEN_TEST_REPORT.md](docs/PEN_TEST_REPORT.md), [security/ATTACK_MATRIX.md](security/ATTACK_MATRIX.md) |
+
 ```
 
 Monorepo layout: [packages/PACKAGING.md](packages/PACKAGING.md)

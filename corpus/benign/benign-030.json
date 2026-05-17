@@ -1,0 +1,9 @@
+{
+  "toolName": "list_files",
+  "arguments": {
+    "query": "react hook useEffect cleanup (case 29)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

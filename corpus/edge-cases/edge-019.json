@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "CRLF\r\ninjection attempt without system override"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "crlf-benign"
+}

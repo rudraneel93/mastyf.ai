@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "TRUNCATE TABLE audit_log"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "truncate-table"
+}

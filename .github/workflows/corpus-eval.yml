@@ -1,31 +1,37 @@
 name: Corpus Evaluation
 
 on:
+  pull_request:
+    branches: [main, master]
   schedule:
-    - cron: "0 2 * * *"   # Nightly precision/recall measurement
+    - cron: "0 2 * * *"
   workflow_dispatch:
 
 jobs:
   eval:
-    name: Precision/Recall Measurement
+    name: Enterprise corpus eval
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
         with:
-          version: 9
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Run corpus evaluation with semantic layer
-        run: pnpm tsx corpus/run-eval.ts
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      - name: Upload evaluation results
+      - run: npx tsc --project tsconfig.json
+      - name: Run corpus evaluation (PolicyEngine + default-policy.yaml)
+        run: pnpm eval
+      - name: Generate pen-test report
+        if: always()
+        run: node scripts/generate-pen-test-report.cjs
+      - name: Upload corpus-eval-report.json
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: corpus-eval-results
-          path: corpus-eval-output.txt
+          name: corpus-eval-report
+          path: |
+            corpus-eval-report.json
+            docs/PEN_TEST_REPORT.md

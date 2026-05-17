@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "path": "/infra/terraform.tfstate"
+  },
+  "expected": "block",
+  "category": "credential-exfil",
+  "ruleHint": "block-sensitive-paths"
+}

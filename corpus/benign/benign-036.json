@@ -1,0 +1,9 @@
+{
+  "toolName": "list_files",
+  "arguments": {
+    "query": "npm package semver compare (case 35)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

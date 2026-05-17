@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "redirect to http://169.254.169.254/"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "metadata-in-query"
+}

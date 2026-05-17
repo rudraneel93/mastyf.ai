@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "`whoami`"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "backtick-exec"
+}

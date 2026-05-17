@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "url": "data:text/html,<script>alert(1)</script>"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "data-scheme"
+}

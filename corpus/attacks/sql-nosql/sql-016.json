@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT api_key FROM secrets"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "secrets-api-key"
+}

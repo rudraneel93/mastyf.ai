@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "日本語テスト unicode 测试 🔒"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "unicode-benign"
+}

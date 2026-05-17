@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT token FROM secrets LIMIT 1000"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "secrets-table"
+}

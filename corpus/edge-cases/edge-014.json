@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "𝕳𝖊𝖑𝖑𝖔"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "math-unicode"
+}

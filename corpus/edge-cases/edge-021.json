@@ -1,0 +1,9 @@
+{
+  "toolName": "execute_command",
+  "arguments": {
+    "command": "echo hi"
+  },
+  "expected": "block",
+  "category": "edge-cases",
+  "ruleHint": "deny-dangerous-tools"
+}

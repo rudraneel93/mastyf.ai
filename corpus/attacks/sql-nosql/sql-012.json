@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "introspection query on __schema"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "introspection-keyword"
+}

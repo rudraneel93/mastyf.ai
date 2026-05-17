@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "null byte \u0000 test"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "null-in-string"
+}

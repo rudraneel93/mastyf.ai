@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "callback": "http://192.168.1.50/collect"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "rfc1918-callback"
+}

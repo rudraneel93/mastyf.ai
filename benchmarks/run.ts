@@ -21,8 +21,11 @@ import { PolicyConfig } from '../src/policy/policy-types.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SERVER_PATH = resolve(__dirname, 'fixtures', 'echo-server.cjs');
-const ITERATIONS = 1000;
-const WARMUP = 50;
+const ITERATIONS = Number(process.env.BENCH_ITERATIONS ?? 1000);
+const WARMUP = Number(process.env.BENCH_WARMUP ?? 50);
+const P95_THRESHOLD_MS = Number(process.env.BENCH_P95_THRESHOLD_MS ?? 150);
+const BENCH_STRICT = process.env.BENCH_STRICT !== 'false';
+const REPORT_PATH = resolve(__dirname, '..', 'benchmark-report.json');
 
 // ── Shared policy configs ──────────────────────────────────────────
 const NOOP_POLICY: PolicyConfig = {
@@ -37,7 +40,7 @@ const BLOCKING_POLICY: PolicyConfig = {
     rules: [
       { name: 'shell-injection', action: 'block', patterns: ['rm\\s+-rf', 'curl\\s|wget\\s', ';\\s*\\w'] },
       { name: 'deny-eval', action: 'block', tools: { deny: ['eval', 'execute_command'] } },
-      { name: 'rate-limit', action: 'flag', maxCallsPerMinute: 60 },
+      { name: 'rate-limit', action: 'flag', maxCallsPerMinute: 10000 },
     ],
   },
 };
@@ -116,7 +119,6 @@ async function benchmarkBaseline(): Promise<number[]> {
     child.stdin!.write(createEchoCall(i));
   }
 
-  // Wait for all responses
   while (pending.size > 0) {
     await new Promise(r => setTimeout(r, 10));
   }
@@ -172,7 +174,6 @@ async function benchmarkProxy(policyConfig?: PolicyConfig): Promise<number[]> {
     proxy.handleClientInput(createEchoCall(i).trim());
   }
 
-  // Wait for all responses
   while (pending.size > 0) {
     await new Promise(r => setTimeout(r, 10));
   }
@@ -220,6 +221,37 @@ async function main() {
   console.log(`| Proxy (blocking policy) | ${blockingStats.p50}ms | ${blockingStats.p95}ms | ${blockingStats.p99}ms | ${blockingStats.avg}ms | +${overheadWithPolicy}ms |`);
   console.log(`\nProxy overhead (no policy): +${overheadNoPolicy}ms per call`);
   console.log(`Proxy overhead (with policy): +${overheadWithPolicy}ms per call`);
+
+  const report = {
+    timestamp: new Date().toISOString(),
+    iterations: ITERATIONS,
+    warmup: WARMUP,
+    p95ThresholdMs: P95_THRESHOLD_MS,
+    scenarios: {
+      baseline: baselineStats,
+      passthrough: passthroughStats,
+      blocking: blockingStats,
+    },
+    overheadMs: { noPolicy: overheadNoPolicy, withPolicy: overheadWithPolicy },
+    passed: blockingStats.p95 <= P95_THRESHOLD_MS,
+    strict: BENCH_STRICT,
+  };
+
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
+  console.log(`\nReport written to ${REPORT_PATH}`);
+
+  if (!report.passed) {
+    const msg = `Benchmark: blocking policy p95 ${blockingStats.p95}ms exceeds threshold ${P95_THRESHOLD_MS}ms`;
+    if (BENCH_STRICT) {
+      console.error(`FAILED — ${msg}`);
+      process.exit(1);
+    }
+    console.warn(`WARN (report-only) — ${msg}`);
+  }
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

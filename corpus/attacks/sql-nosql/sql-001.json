@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "1 UNION SELECT password FROM admin_users--"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "union-select"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "list_files",
+  "arguments": {
+    "query": "redis cache TTL best practices (case 17)"
+  },
+  "expected": "pass",
+  "category": "benign",
+  "ruleHint": "allowlist-common-tools"
+}

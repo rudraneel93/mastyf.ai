@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "query": "query { __schema { types { name } } }"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "graphql-introspection"
+}

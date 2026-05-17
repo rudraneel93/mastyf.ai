@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "href": "file:///etc/shadow"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "file-href"
+}

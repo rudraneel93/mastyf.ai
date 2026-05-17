@@ -1,0 +1,9 @@
+{
+  "toolName": "read_file",
+  "arguments": {
+    "url": "file:///etc/passwd"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "file-scheme"
+}

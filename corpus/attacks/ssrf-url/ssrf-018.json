@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "target": "javascript:void(0)"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "target-javascript"
+}

@@ -1,127 +1,231 @@
 #!/usr/bin/env tsx
-import { readFileSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { scanTool } from "../packages/core/src/engine.js";
-import type { ToolDefinition } from "../packages/core/src/types.js";
+/**
+ * Enterprise corpus evaluation — PolicyEngine + default-policy.yaml.
+ * Exits non-zero if any attack expected "block" is not blocked, or benign "pass" is blocked.
+ */
+import { readFileSync, readdirSync, writeFileSync, statSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { load } from 'js-yaml';
+import { PolicyEngine } from '../src/policy/policy-engine.js';
+import type { CallContext, PolicyConfig, PolicyDecision } from '../src/policy/policy-types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const CORPUS_ROOT = __dirname;
+const POLICY_PATH = join(__dirname, '..', 'default-policy.yaml');
+const REPORT_PATH = join(__dirname, '..', 'corpus-eval-report.json');
 
-interface CorpusEntry {
-  id: string;
-  label: string;
-  expectedStatus: "clean" | "warning" | "critical";
-  expectedLayer?: string[];
-  expectedCategory?: string[];
-  notes?: string;
-  tool: ToolDefinition;
+export interface CorpusEntry {
+  toolName: string;
+  arguments: Record<string, unknown>;
+  expected: 'block' | 'pass';
+  category: string;
+  ruleHint?: string;
 }
 
-async function runEval() {
-  const poisonedDir = join(__dirname, "poisoned");
-  const benignDir = join(__dirname, "benign");
+interface CategoryMetrics {
+  category: string;
+  total: number;
+  tp: number;
+  fp: number;
+  tn: number;
+  fn: number;
+  precision: number;
+  recall: number;
+  failures: string[];
+}
 
-  const loadDir = (dir: string): CorpusEntry[] =>
-    readdirSync(dir)
-      .filter(f => f.endsWith(".json"))
-      .map(f => JSON.parse(readFileSync(join(dir, f), "utf8")) as CorpusEntry);
+interface EvalReport {
+  timestamp: string;
+  policy: string;
+  totalEntries: number;
+  overall: { tp: number; fp: number; tn: number; fn: number; precision: number; recall: number; f1: number };
+  byCategory: CategoryMetrics[];
+  attackBlockRate: number;
+  benignPassRate: number;
+  failures: string[];
+  passed: boolean;
+}
 
-  const poisoned = loadDir(poisonedDir);
-  const benign = loadDir(benignDir);
+function loadCorpusFiles(dir: string): { relPath: string; entry: CorpusEntry }[] {
+  const out: { relPath: string; entry: CorpusEntry }[] = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) {
+      out.push(...loadCorpusFiles(full));
+    } else if (name.endsWith('.json')) {
+      const entry = JSON.parse(readFileSync(full, 'utf8')) as CorpusEntry;
+      out.push({ relPath: relative(CORPUS_ROOT, full), entry });
+    }
+  }
+  return out;
+}
 
-  let tp = 0, fp = 0, tn = 0, fn = 0;
+function isBlocked(decision: PolicyDecision): boolean {
+  return decision.action === 'block';
+}
+
+function ctx(toolName: string, args: Record<string, unknown>): CallContext {
+  return {
+    serverName: 'corpus-eval',
+    toolName,
+    arguments: args,
+    requestId: 'corpus-1',
+    requestTokens: 50,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function updateCategoryMetrics(
+  map: Map<string, CategoryMetrics>,
+  category: string,
+  expected: 'block' | 'pass',
+  blocked: boolean,
+  relPath: string,
+  decision: PolicyDecision,
+): void {
+  let m = map.get(category);
+  if (!m) {
+    m = { category, total: 0, tp: 0, fp: 0, tn: 0, fn: 0, precision: 0, recall: 0, failures: [] };
+    map.set(category, m);
+  }
+  m.total++;
+
+  if (expected === 'block') {
+    if (blocked) m.tp++;
+    else {
+      m.fn++;
+      m.failures.push(`MISSED [${relPath}] expected block, got ${decision.action} (${decision.rule ?? 'none'})`);
+    }
+  } else {
+    if (!blocked) m.tn++;
+    else {
+      m.fp++;
+      m.failures.push(`FALSE POS [${relPath}] expected pass, got block (${decision.rule}: ${decision.reason ?? ''})`);
+    }
+  }
+}
+
+function finalizeCategory(m: CategoryMetrics): void {
+  m.precision = m.tp / (m.tp + m.fp) || 0;
+  m.recall = m.tp / (m.tp + m.fn) || 0;
+}
+
+export async function runEval(): Promise<EvalReport> {
+  const policy = load(readFileSync(POLICY_PATH, 'utf8')) as PolicyConfig;
+  const engine = new PolicyEngine(policy);
+  const files = loadCorpusFiles(CORPUS_ROOT).filter(
+    (f) => !f.relPath.endsWith('run-eval.ts') && f.relPath !== 'manifest.yaml',
+  );
+
+  const byCategory = new Map<string, CategoryMetrics>();
+  let tp = 0,
+    fp = 0,
+    tn = 0,
+    fn = 0;
   const failures: string[] = [];
+  let attackTotal = 0,
+    attackBlocked = 0,
+    benignTotal = 0,
+    benignPassed = 0;
 
-  console.log("Running corpus evaluation...\n");
+  console.log(`Running corpus evaluation (${files.length} entries) against ${POLICY_PATH}\n`);
 
-  // Warn if semantic scanning is disabled and semantic tests exist
-  const semanticEnabled = !!process.env.ANTHROPIC_API_KEY;
-  const semanticTests = poisoned.filter(e => e.expectedLayer?.includes("semantic"));
-  if (!semanticEnabled && semanticTests.length > 0) {
-    console.warn(`⚠️  WARNING: ANTHROPIC_API_KEY not set - semantic scanning disabled`);
-    console.warn(`   ${semanticTests.length} semantic test(s) will likely produce false negatives:`);
-    for (const t of semanticTests) console.warn(`   - ${t.id}: ${t.label}`);
-  }
+  for (const { relPath, entry } of files) {
+    const decision = engine.evaluate(ctx(entry.toolName, entry.arguments ?? {}));
+    const blocked = isBlocked(decision);
+    const expected = entry.expected;
+    const category = entry.category;
 
-  for (const entry of poisoned) {
-    const result = await scanTool(entry.tool, {
-      skipSemantic: !process.env.ANTHROPIC_API_KEY,
-    });
+    updateCategoryMetrics(byCategory, category, expected, blocked, relPath, decision);
 
-    const detected = result.status !== "clean";
-    const severityMatches = entry.expectedStatus ? result.status === entry.expectedStatus : true;
-
-    if (detected && severityMatches) {
-      // Validate layer if specified
-      if (entry.expectedLayer && result.issues.length > 0) {
-        const detectedLayers = result.issues.map((i: any) => i.layer);
-        const hasExpectedLayer = entry.expectedLayer.some((layer: string) =>
-          detectedLayers.includes(layer)
-        );
-        if (!hasExpectedLayer) {
-          fn++;
-          failures.push(`  WRONG LAYER [${entry.id}] expected: ${entry.expectedLayer.join(", ")}, got: ${detectedLayers.join(", ")}`);
-          process.stdout.write(`  [${entry.id}] WRONG LAYER\n`);
-          continue;
-        }
+    if (expected === 'block') {
+      attackTotal++;
+      if (blocked) {
+        tp++;
+        attackBlocked++;
+        process.stdout.write(`  ✓ ${relPath}\n`);
+      } else {
+        fn++;
+        const msg = `MISSED [${relPath}] ${entry.toolName} → ${decision.action}`;
+        failures.push(msg);
+        process.stdout.write(`  ✗ ${relPath}\n`);
       }
-      tp++;
-      process.stdout.write(`  [${entry.id}] ${entry.label}\n`);
-    } else if (detected && !severityMatches) {
-      fn++;
-      failures.push(`  WRONG SEVERITY [${entry.id}] ${entry.label}  expected: ${entry.expectedStatus}, got: ${result.status}`);
-      process.stdout.write(`  [${entry.id}] WRONG SEVERITY\n`);
     } else {
-      fn++;
-      failures.push(`  MISSED [${entry.id}] ${entry.label}  ${entry.notes ?? ""}`);
-      process.stdout.write(`  [${entry.id}] MISSED\n`);
+      benignTotal++;
+      if (!blocked) {
+        tn++;
+        benignPassed++;
+        process.stdout.write(`  ✓ ${relPath} (pass)\n`);
+      } else {
+        fp++;
+        const msg = `FALSE POS [${relPath}] rule=${decision.rule}`;
+        failures.push(msg);
+        process.stdout.write(`  ✗ ${relPath} (false positive)\n`);
+      }
     }
   }
 
-  for (const entry of benign) {
-    const result = await scanTool(entry.tool, {
-      skipSemantic: !process.env.ANTHROPIC_API_KEY,
-    });
-
-    const falseFlagged = result.status !== "clean";
-    if (!falseFlagged) {
-      tn++;
-      process.stdout.write(`  [${entry.id}] ${entry.label} (clean)\n`);
-    } else {
-      fp++;
-      failures.push(`  FALSE POS [${entry.id}] ${entry.label}  flagged: ${result.issues.map(i => i.id).join(", ")}`);
-      process.stdout.write(`  [${entry.id}] FALSE POSITIVE\n`);
-    }
-  }
+  for (const m of byCategory.values()) finalizeCategory(m);
 
   const precision = tp / (tp + fp) || 0;
   const recall = tp / (tp + fn) || 0;
-  const f1 = 2 * (precision * recall) / (precision + recall) || 0;
+  const f1 = (2 * precision * recall) / (precision + recall) || 0;
+  const attackBlockRate = attackTotal ? attackBlocked / attackTotal : 1;
+  const benignPassRate = benignTotal ? benignPassed / benignTotal : 1;
+  const passed = fn === 0 && fp === 0;
+
+  const report: EvalReport = {
+    timestamp: new Date().toISOString(),
+    policy: POLICY_PATH,
+    totalEntries: files.length,
+    overall: { tp, fp, tn, fn, precision, recall, f1 },
+    byCategory: [...byCategory.values()].sort((a, b) => a.category.localeCompare(b.category)),
+    attackBlockRate,
+    benignPassRate,
+    failures,
+    passed,
+  };
+
+  writeFileSync(REPORT_PATH, JSON.stringify(report, null, 2));
 
   console.log(`
 CORPUS EVALUATION RESULTS
-Poisoned: ${poisoned.length} cases | Benign: ${benign.length} cases
-TP: ${tp}  FP: ${fp}  TN: ${tn}  FN: ${fn}
+Entries: ${files.length} | Attacks blocked: ${attackBlocked}/${attackTotal} (${(attackBlockRate * 100).toFixed(1)}%)
+Benign passed: ${benignPassed}/${benignTotal} (${(benignPassRate * 100).toFixed(1)}%)
 
-Precision: ${(precision * 100).toFixed(1)}%
-Recall:    ${(recall * 100).toFixed(1)}%
-F1 Score:  ${(f1 * 100).toFixed(1)}%
-`);
+Overall — TP: ${tp} FP: ${fp} TN: ${tn} FN: ${fn}
+Precision: ${(precision * 100).toFixed(1)}% | Recall: ${(recall * 100).toFixed(1)}% | F1: ${(f1 * 100).toFixed(1)}%
+
+Per category:`);
+  for (const m of report.byCategory) {
+    console.log(
+      `  ${m.category}: n=${m.total} recall=${(m.recall * 100).toFixed(1)}% precision=${(m.precision * 100).toFixed(1)}% failures=${m.failures.length}`,
+    );
+  }
 
   if (failures.length > 0) {
-    console.log("FAILURES:\n" + failures.join("\n"));
+    console.log('\nFAILURES:\n' + failures.slice(0, 50).join('\n'));
+    if (failures.length > 50) console.log(`... and ${failures.length - 50} more`);
   }
 
-  if (f1 < 0.85) {
-    console.error("\nF1 score below 0.85 threshold  failing build");
-    process.exit(1);
-  }
-
-  console.log("\nCorpus evaluation passed");
+  console.log(`\nReport written to ${REPORT_PATH}`);
+  return report;
 }
 
-runEval().catch(err => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  const report = await runEval();
+  if (!report.passed) {
+    console.error('\nCorpus evaluation FAILED — fix missed attacks or false positives');
+    process.exit(1);
+  }
+  console.log('\nCorpus evaluation passed');
+}
+
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('run-eval.ts')) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

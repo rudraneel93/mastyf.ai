@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "url": "http://127.0.0.1:8443/internal"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "loopback-echo"
+}

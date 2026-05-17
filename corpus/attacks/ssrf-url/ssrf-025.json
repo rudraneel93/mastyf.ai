@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "https://example.com/"
+  },
+  "expected": "benign-url",
+  "category": "ssrf-url",
+  "ruleHint": "pass"
+}

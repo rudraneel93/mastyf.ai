@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "text": "Normal punctuation: hello, world! (v2.0)"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "punctuation-benign"
+}

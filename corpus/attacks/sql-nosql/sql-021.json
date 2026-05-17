@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT * FROM transactions WHERE amount > 0"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "transactions-select"
+}

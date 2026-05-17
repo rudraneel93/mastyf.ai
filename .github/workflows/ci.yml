@@ -82,14 +82,46 @@ jobs:
       - run: npx tsc --project tsconfig.json
       - run: pnpm run build
 
-      - name: Run corpus evaluation (regex + schema only)
-        run: pnpm tsx corpus/run-eval.ts
+      - name: Run enterprise corpus evaluation
+        run: pnpm eval
 
-      - name: Run corpus with semantic layer
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        run: pnpm tsx corpus/run-eval.ts
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Upload corpus eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-eval-report
+          path: corpus-eval-report.json
+
+  benchmarks:
+    name: Proxy performance benchmarks
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: npx tsc --project tsconfig.json
+      - run: pnpm run build
+
+      - name: Run benchmarks (report artifact; BENCH_STRICT=false)
+        run: BENCH_ITERATIONS=50 BENCH_WARMUP=5 BENCH_STRICT=false pnpm exec tsx benchmarks/run.ts
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-report
+          path: benchmark-report.json
 
   audit:
     name: Dependency Audit

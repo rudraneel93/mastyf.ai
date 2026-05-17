@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "café résumé naïve"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "latin-unicode"
+}

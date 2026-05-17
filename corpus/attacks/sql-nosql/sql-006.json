@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT * FROM credentials WHERE 1=1"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "credentials-table"
+}

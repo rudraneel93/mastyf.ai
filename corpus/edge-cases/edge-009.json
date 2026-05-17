@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "README before migration first step"
+  },
+  "expected": "pass",
+  "category": "edge-cases",
+  "ruleHint": "before-first-words"
+}

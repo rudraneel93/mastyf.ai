@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "powershell.exe -nop -w hidden -c iex"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "powershell-iex"
+}

@@ -1,0 +1,9 @@
+{
+  "toolName": "echo",
+  "arguments": {
+    "callback": "http://10.0.0.5/internal"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "rfc1918-10"
+}

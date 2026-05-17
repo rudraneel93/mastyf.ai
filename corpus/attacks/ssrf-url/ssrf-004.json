@@ -1,0 +1,9 @@
+{
+  "toolName": "puppeteer_navigate",
+  "arguments": {
+    "url": "http://2130706433/admin"
+  },
+  "expected": "block",
+  "category": "ssrf-url",
+  "ruleHint": "decimal-localhost"
+}

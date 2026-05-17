@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "user=*)(uid=*))(|(uid=*"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "ldap-injection"
+}

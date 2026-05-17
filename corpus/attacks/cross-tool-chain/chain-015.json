@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "message": "UNION SELECT passwords FROM users; callback http://127.0.0.1:9999"
+  },
+  "expected": "block",
+  "category": "cross-tool-chain",
+  "ruleHint": "union-callback-chain"
+}

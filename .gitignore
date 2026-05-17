@@ -15,3 +15,5 @@ scenarios/dogfood/sandbox/
 :memory:
 test-report.html
 test-report*.html
+corpus-eval-report.json
+benchmark-report.json

@@ -1,0 +1,9 @@
+{
+  "toolName": "query",
+  "arguments": {
+    "sql": "SELECT LOAD_FILE('/etc/passwd')"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "load-file"
+}
