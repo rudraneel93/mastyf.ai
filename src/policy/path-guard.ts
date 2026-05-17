@@ -2,6 +2,7 @@
  * Filesystem path guard for tool arguments — blocks sensitive paths and optional workspace scoping.
  */
 import { translatePath } from '../utils/remote-path.js';
+import { translateWslPath } from '../utils/wsl-path.js';
 
 const PATH_ARG_FIELDS = new Set(['path', 'file', 'filepath', 'file_path', 'directory', 'dir']);
 
@@ -68,7 +69,7 @@ export interface PathGuardResult {
 
 export function evaluatePathGuard(paths: string[]): PathGuardResult {
   for (const raw of paths) {
-    const path = translatePath(raw).replace(/\\/g, '/');
+    const path = translatePath(translateWslPath(raw)).replace(/\\/g, '/');
 
     for (const pattern of SENSITIVE_PATH_PATTERNS) {
       if (pattern.test(path)) {

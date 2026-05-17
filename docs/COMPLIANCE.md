@@ -34,6 +34,7 @@ db.close();
 
 3. Purge replicated logs (CloudWatch, Datadog, Splunk) per your DPA.
 4. For Postgres HA (`DB_TYPE=postgres`), run equivalent `DELETE` on all audit tables in your schema.
+5. Run `VACUUM` on SQLite after erasure; **WAL/previous backups may still retain deleted pages** until rotated — purge backup snapshots and SIEM copies per your DPA. Guardian does not certify forensic non-recovery without your backup/WAL controls.
 
 ## HIPAA §164.312(a)(2)(i) — encryption at rest
 

@@ -2,6 +2,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 const DEFAULT_DB_PATH = join(homedir(), '.mcp-guardian', 'history.db');
+const MCP_SERVER_DB_PATH = join(homedir(), '.mcp-guardian', 'mcp-server.db');
 
 /** Canonical SQLite path for all Guardian processes (proxy, TUI, scan, audit). */
 export function resolveGuardianDbPath(explicit?: string): string {
@@ -11,4 +12,11 @@ export function resolveGuardianDbPath(explicit?: string): string {
 
 export function getDefaultGuardianDbPath(): string {
   return DEFAULT_DB_PATH;
+}
+
+/**
+ * MCP stdio server DB (Cline cannot pass env) — separate file from proxy history to avoid locks.
+ */
+export function resolveMcpServerDbPath(): string {
+  return process.env['MCP_GUARDIAN_DB_PATH'] ?? MCP_SERVER_DB_PATH;
 }

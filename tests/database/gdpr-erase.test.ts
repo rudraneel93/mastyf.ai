@@ -25,6 +25,13 @@ describe('HistoryDatabase GDPR erasure', () => {
 
     const records = await db.getCallRecordsForServer('srv');
     expect(records).toHaveLength(0);
+
+    const raw = db as unknown as { db: { prepare: (sql: string) => { get: () => { n: number } } } };
+    const remaining = raw.db.prepare('SELECT COUNT(*) AS n FROM call_records').get().n
+      + raw.db.prepare('SELECT COUNT(*) AS n FROM cost_records').get().n
+      + raw.db.prepare('SELECT COUNT(*) AS n FROM security_scans').get().n
+      + raw.db.prepare('SELECT COUNT(*) AS n FROM health_checks').get().n;
+    expect(remaining).toBe(0);
     db.close();
   });
 });

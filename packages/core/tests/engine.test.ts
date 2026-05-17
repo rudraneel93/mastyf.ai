@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { scanTool } from "../src/engine.js";
+import { runRegexScan } from "../src/regex-scanner.js";
+import { runSchemaScan } from "../src/schema-scanner.js";
 import type { ToolDefinition } from "../src/types.js";
 
 const SAFE_TOOL: ToolDefinition = {
@@ -149,6 +151,15 @@ describe("scanTool — engine orchestration", () => {
     expect(result.layers.regex.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.layers.schema.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.layers.semantic.skipped).toBeDefined();
+  });
+
+  it("runs regex and schema in parallel (shared elapsed timing)", async () => {
+    const result = await scanTool(CHAIN_TOOL, { skipSemantic: true });
+    expect(result.layers.regex.ran).toBe(true);
+    expect(result.layers.schema.ran).toBe(true);
+    expect(result.layers.regex.durationMs).toBe(result.layers.schema.durationMs);
+    expect(runRegexScan(CHAIN_TOOL).length).toBeGreaterThan(0);
+    expect(runSchemaScan(CHAIN_TOOL).length).toBeGreaterThanOrEqual(0);
   });
 });
 

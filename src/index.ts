@@ -16,48 +16,14 @@ import { FullReport, McpServerConfig } from './types.js';
 import { calculateOverallScore } from './utils/scoring.js';
 import { Logger } from './utils/logger.js';
 import { createContainer } from './container.js';
-import { homedir } from 'os';
-import { resolve as pathResolve, isAbsolute } from 'path';
+import { sanitizeConfigPath } from './utils/sanitize-config-path.js';
+import { resolveMcpServerDbPath } from './utils/guardian-db-path.js';
+import { readPackageVersion } from './utils/package-version.js';
 
-/**
- * Sanitise user-supplied configPath to prevent path-traversal attacks.
- * Rejects paths containing '..', and paths outside the home directory
- * unless they match an explicit allowlist (common MCP config locations).
- */
-function sanitizeConfigPath(input: string): string | null {
-  if (!input || typeof input !== 'string') return null;
-  // Block path-traversal sequences
-  if (input.includes('..')) {
-    Logger.warn(`[guardian] Path-traversal attempt blocked: ${input}`);
-    return null;
-  }
-  const resolved = pathResolve(input);
-  const home = pathResolve(homedir());
-
-  // Allow paths under home directory
-  if (resolved.startsWith(home)) return resolved;
-
-  // Allow common absolute MCP config locations
-  const allowedPrefixes = [
-    '/tmp/', '/var/', '/etc/', '/opt/', '/home/', '/Users/',
-    // CI environments
-    '/github/workspace/', '/runner/',
-  ];
-  if (allowedPrefixes.some((prefix) => resolved.startsWith(prefix))) {
-    return resolved;
-  }
-
-  // Allow CWD-relative paths that resolve to safe locations
-  const cwd = pathResolve('.');
-  if (resolved.startsWith(cwd)) return resolved;
-
-  Logger.warn(`[guardian] Config path rejected (outside allowed directories): ${input}`);
-  return null;
+// ── DB path: separate from proxy history.db (Cline cannot set env in MCP JSON)
+if (!process.env['MCP_GUARDIAN_DB_PATH']) {
+  process.env['MCP_GUARDIAN_DB_PATH'] = resolveMcpServerDbPath();
 }
-
-// ── DB path override: Cline does not support env vars in MCP config,
-//     so fall back to a separate path to avoid lock conflicts with proxy instances
-process.env['MCP_GUARDIAN_DB_PATH'] = process.env['MCP_GUARDIAN_DB_PATH'] || '/private/tmp/mcp-guardian-server.db';
 
 import type { Container } from './container.js';
 
@@ -65,7 +31,7 @@ let container: Container;
 const reporter = new ReportGenerator();
 
 const server = new Server(
-  { name: 'mcp-guardian', version: process.env.npm_package_version || '2.3.4' },
+  { name: 'mcp-guardian', version: readPackageVersion() },
   { capabilities: { tools: {}, resources: {}, prompts: {}, logging: {} } }
 );
 

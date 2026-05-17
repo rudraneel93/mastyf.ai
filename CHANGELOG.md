@@ -2,6 +2,28 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.3] - 2026-05-17
+
+### Fixed (critical code review + complete analysis reports)
+- **Config path security** — `sanitizeConfigPath` uses `realpath`, `/root/`/`/srv/`/`/data/` allowlist, Windows drive prefixes; blocks symlink escape (`src/utils/sanitize-config-path.ts`).
+- **MCP server DB default** — `~/.mcp-guardian/mcp-server.db` instead of macOS-only `/private/tmp` (still separate from proxy `history.db` for Cline lock isolation).
+- **Package version** — MCP server advertises `readPackageVersion()` from `package.json` (no stale `2.3.4` fallback).
+- **Scan engine** — Regex + schema layers run in parallel via `Promise.all` (`packages/core/src/engine.ts`).
+- **WSL2 paths** — `/mnt/c/...` and `\\wsl$\...` normalization in path guard (`src/utils/wsl-path.ts`).
+
+### Security / compliance
+- **DPoP** — Concurrent replay regression test for in-memory nonce store (Redis path already uses `SET NX`).
+- **GDPR erase** — Post-erasure row-count assertion; COMPLIANCE.md documents WAL/backup forensic limits.
+
+### CI
+- **Supply chain** — `osv-scanner` on `pnpm-lock.yaml` in `.github/workflows/supply-chain.yml`.
+
+### Docs
+- [docs/WINDOWS.md](docs/WINDOWS.md) — WSL2 path mapping section.
+
+### Tests
+- `tests/utils/sanitize-config-path.test.ts`, `tests/utils/wsl-path.test.ts`, `tests/utils/guardian-db-path.test.ts` (mcp-server.db), `tests/auth/dpop-nonce-store.test.ts`, `tests/database/gdpr-erase.test.ts`, `packages/core/tests/engine.test.ts`.
+
 ## [2.7.2] - 2026-05-17
 
 ### Added

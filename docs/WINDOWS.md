@@ -90,6 +90,17 @@ mcp-guardian policy test --policy default-policy.yaml --tool read_file --args "{
 
 `path-guard.ts` converts backslashes to forward slashes before regex evaluation, so `C:\Users\foo\.ssh\id_rsa` is treated the same as a Unix-style path for blocking rules.
 
+## WSL2 path mapping
+
+When the IDE runs on Windows and tools receive WSL paths, Guardian normalizes:
+
+| Input | Normalized for policy |
+|-------|------------------------|
+| `/mnt/c/Users/you/project/file.txt` | `C:/Users/you/project/file.txt` |
+| `\\wsl$\Ubuntu\home\user\file.txt` | `/home/user/file.txt` |
+
+Set `GUARDIAN_WSL_PATH_MAP=false` to disable. See `src/utils/wsl-path.ts` and `tests/utils/wsl-path.test.ts`.
+
 ## MSI installer
 
 **Planned v2.7** — see [installer/README.md](../installer/README.md). No MSI is shipped in v2.6.x; use npm global install or a git clone.

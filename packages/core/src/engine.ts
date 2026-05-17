@@ -61,18 +61,32 @@ export async function scanTool(
     semantic: { ran: false, durationMs: 0, skipped: undefined as string | undefined },
   };
 
-  // ── LAYER 1: REGEX ──────────────────────────────────────────────────────────
-  if (!options.skipRegex) {
-    const t0 = performance.now();
-    regexIssues = runRegexScan(tool);
-    timings.regex = { ran: true, durationMs: Math.round(performance.now() - t0) };
-  }
+  // ── LAYERS 1+2: REGEX + SCHEMA (parallel when both run) ─────────────────────
+  const runRegex = !options.skipRegex;
+  const runSchema = !options.skipSchema && Boolean(tool.inputSchema);
 
-  // ── LAYER 2: SCHEMA ─────────────────────────────────────────────────────────
-  if (!options.skipSchema && tool.inputSchema) {
+  if (runRegex && runSchema) {
     const t0 = performance.now();
-    schemaIssues = runSchemaScan(tool);
-    timings.schema = { ran: true, durationMs: Math.round(performance.now() - t0) };
+    const [regex, schema] = await Promise.all([
+      Promise.resolve(runRegexScan(tool)),
+      Promise.resolve(runSchemaScan(tool)),
+    ]);
+    regexIssues = regex;
+    schemaIssues = schema;
+    const elapsed = Math.round(performance.now() - t0);
+    timings.regex = { ran: true, durationMs: elapsed };
+    timings.schema = { ran: true, durationMs: elapsed };
+  } else {
+    if (runRegex) {
+      const t0 = performance.now();
+      regexIssues = runRegexScan(tool);
+      timings.regex = { ran: true, durationMs: Math.round(performance.now() - t0) };
+    }
+    if (runSchema) {
+      const t0 = performance.now();
+      schemaIssues = runSchemaScan(tool);
+      timings.schema = { ran: true, durationMs: Math.round(performance.now() - t0) };
+    }
   }
 
   // ── LAYER 3: SEMANTIC ───────────────────────────────────────────────────────
