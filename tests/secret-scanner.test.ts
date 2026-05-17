@@ -4,7 +4,7 @@ import { SecretScanner, scanForSecrets } from '../src/scanners/secret-scanner.js
 describe('SecretScanner', () => {
   const scanner = new SecretScanner();
 
-  it('ships 30+ secret detection rules (not legacy 6-pattern build)', () => {
+  it('ships 150+ secret detection rules (not legacy 6-pattern build)', () => {
     const slackBot = ['xox', 'b-1234567890-1234567890-abcdefghijklmnopqrstuvwx'].join('');
     const probe = [
       'AKIAIOSFODNN7EXAMPLE',

@@ -2,6 +2,15 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.2] - 2026-05-17
+
+### Added
+- **Secret scanner** — Expanded from ~35 to **267** industry-standard detection patterns (Gitleaks/TruffleHog-class coverage): cloud (AWS, GCP, Azure, DigitalOcean, Cloudflare, Heroku), VCS/CI (GitHub, GitLab, Bitbucket, CircleCI, Travis, Jenkins), chat webhooks (Slack, Discord, Telegram, Teams), payments (Stripe, Square, PayPal, Braintree), email/SMS (SendGrid, Mailgun, Twilio, Postmark), AI providers (OpenAI, Anthropic, HuggingFace, Cohere, Replicate, Groq), databases (postgres, mysql, mongodb, redis, amqp, jdbc), crypto keys, OAuth/JWT/session tokens, package registries (npm, PyPI, RubyGems, NuGet), and generic high-entropy assignments.
+- `getSecretRuleCount()` export for transparency; rules live in `src/scanners/secret-rules.ts` with pre-compiled regex at module load.
+
+### Tests
+- `tests/secret-scanner-coverage.test.ts` — asserts ≥150 rules and spot-checks 20 provider categories.
+
 ## [2.7.1] - 2026-05-17
 
 ### Fixed (developer deep-dive review)
