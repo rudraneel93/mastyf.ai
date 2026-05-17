@@ -19,8 +19,8 @@ describe('DetectorPlugin registry', () => {
     else process.env['GUARDIAN_PLUGINS_ENABLED'] = prevEnabled;
   });
 
-  it('does not run plugins when GUARDIAN_PLUGINS_ENABLED is not true', () => {
-    delete process.env['GUARDIAN_PLUGINS_ENABLED'];
+  it('does not run plugins when GUARDIAN_PLUGINS_ENABLED is false', () => {
+    process.env['GUARDIAN_PLUGINS_ENABLED'] = 'false';
     registerDetectorPlugin({
       name: 'test-plugin',
       scanArguments: () => [{ type: 'x', location: 'l', severity: 'HIGH' }],

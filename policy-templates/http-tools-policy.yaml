@@ -1,0 +1,35 @@
+# HTTP outbound tools — deny private/metadata URLs (SSRF)
+# Merge with base policy: GUARDIAN_HTTP_TOOLS_POLICY=true
+# Tools matching http_request|fetch|request get URL arg guards.
+version: '1.0'
+policy:
+  mode: block
+  rules:
+    - name: http-tools-deny-private-urls
+      description: Block SSRF to localhost, metadata, and RFC1918 for HTTP tool args
+      action: block
+      tools:
+        allow:
+          - http_request
+          - fetch
+          - request
+          - api_call
+          - curl
+          - wget
+      argPatterns:
+        - field: url
+          patterns:
+            - '^(?:file|javascript|data|vbscript):'
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.)'
+            - '^https?://(?:10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+            - '^https?://\\d{8,10}(?:/|$)'
+            - 'metadata\\.google'
+        - field: uri
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: endpoint
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'
+        - field: webhook
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.)'

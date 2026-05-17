@@ -4,6 +4,7 @@ import { load } from 'js-yaml';
 import { PolicyConfig } from './policy-types.js';
 import { PolicyEngine } from './policy-engine.js';
 import { parsePolicyConfig } from './policy-schema.js';
+import { applyPolicyMerges } from './policy-merge.js';
 import { getPolicyAuditor } from '../utils/enterprise-bootstrap.js';
 import { registerReadinessCheck } from '../utils/readiness.js';
 import { Logger } from '../utils/logger.js';
@@ -57,7 +58,7 @@ export class PolicyWatcher {
           sourceHash: auditor.computeHash(yaml),
         });
       }
-      const config = parsePolicyConfig(load(yaml));
+      const config = applyPolicyMerges(parsePolicyConfig(load(yaml)));
       const oldMode = this.current?.getMode();
       const engine = new PolicyEngine(config);
       Logger.info(

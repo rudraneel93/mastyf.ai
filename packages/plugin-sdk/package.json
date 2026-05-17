@@ -1,0 +1,26 @@
+{
+  "name": "@mcp-guardian/plugin-sdk",
+  "version": "3.0.0",
+  "description": "Stable detector plugin SDK for MCP Guardian",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudraneel93/mcp-guardian.git",
+    "directory": "packages/plugin-sdk"
+  }
+}

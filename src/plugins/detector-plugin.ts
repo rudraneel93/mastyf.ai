@@ -3,29 +3,23 @@ import { join, extname } from 'path';
 import { pathToFileURL } from 'url';
 import type { SecretFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
+import {
+  PLUGIN_SDK_VERSION,
+  type DetectorFinding,
+  type DetectorPlugin,
+  type DetectorScanContext,
+} from './sdk.js';
 
-export interface DetectorScanContext {
-  serverName?: string;
-  toolName?: string;
-  location?: string;
-}
+export type {
+  DetectorFinding,
+  DetectorPlugin,
+  DetectorScanContext,
+} from './sdk.js';
 
-export interface DetectorFinding {
-  type: string;
-  location: string;
-  severity: 'HIGH' | 'MEDIUM' | 'high' | 'medium';
-  redacted?: string;
-  context?: string;
-  method?: string;
-}
-
-/** Experimental v0.1 plugin hook — full SDK planned for v3.0. */
-export interface DetectorPlugin {
-  name: string;
-  scanArguments(text: string, ctx: DetectorScanContext): DetectorFinding[];
-}
+export { createDetectorPlugin, PLUGIN_SDK_VERSION } from './sdk.js';
 
 const registry: DetectorPlugin[] = [];
+const loadedLifecycle = new Set<string>();
 
 export function registerDetectorPlugin(plugin: DetectorPlugin): void {
   if (registry.some((p) => p.name === plugin.name)) {
@@ -33,7 +27,13 @@ export function registerDetectorPlugin(plugin: DetectorPlugin): void {
     return;
   }
   registry.push(plugin);
-  Logger.info(`[plugins] registered detector '${plugin.name}'`);
+  if (plugin.onLoad && !loadedLifecycle.has(plugin.name)) {
+    loadedLifecycle.add(plugin.name);
+    Promise.resolve(plugin.onLoad()).catch((err: Error) => {
+      Logger.warn(`[plugins] '${plugin.name}' onLoad failed: ${err.message}`);
+    });
+  }
+  Logger.info(`[plugins] registered detector '${plugin.name}' (sdk ${PLUGIN_SDK_VERSION})`);
 }
 
 export function getRegisteredDetectorPlugins(): readonly DetectorPlugin[] {
@@ -41,7 +41,13 @@ export function getRegisteredDetectorPlugins(): readonly DetectorPlugin[] {
 }
 
 export function clearDetectorPluginsForTests(): void {
+  for (const plugin of registry) {
+    if (plugin.onUnload) {
+      Promise.resolve(plugin.onUnload()).catch(() => {});
+    }
+  }
   registry.length = 0;
+  loadedLifecycle.clear();
 }
 
 function toSecretFinding(f: DetectorFinding, ctx: DetectorScanContext): SecretFinding {
@@ -55,13 +61,24 @@ function toSecretFinding(f: DetectorFinding, ctx: DetectorScanContext): SecretFi
   };
 }
 
-/** Run registered plugins when GUARDIAN_PLUGINS_ENABLED=true. */
+/** Plugins on by default in v2.7; set GUARDIAN_PLUGINS_ENABLED=false to disable. */
+export function areDetectorPluginsEnabled(): boolean {
+  return process.env['GUARDIAN_PLUGINS_ENABLED'] !== 'false';
+}
+
+/** Run registered plugins when enabled. */
 export function runDetectorPlugins(text: string, ctx: DetectorScanContext): SecretFinding[] {
-  if (process.env['GUARDIAN_PLUGINS_ENABLED'] !== 'true') return [];
+  if (!areDetectorPluginsEnabled()) return [];
   const findings: SecretFinding[] = [];
   for (const plugin of registry) {
     try {
-      for (const f of plugin.scanArguments(text, ctx)) {
+      const raw = plugin.scanArguments(text, ctx);
+      const list = raw instanceof Promise ? [] : raw;
+      if (raw instanceof Promise) {
+        Logger.warn(`[plugins] '${plugin.name}' returned Promise — use sync scanArguments only`);
+        continue;
+      }
+      for (const f of list) {
         findings.push(toSecretFinding(f, ctx));
       }
     } catch (err: any) {
@@ -74,7 +91,7 @@ export function runDetectorPlugins(text: string, ctx: DetectorScanContext): Secr
 /** Load *.js plugins from GUARDIAN_PLUGIN_PATH (optional). */
 export async function loadDetectorPluginsFromPath(): Promise<void> {
   const dir = process.env['GUARDIAN_PLUGIN_PATH'];
-  if (!dir || process.env['GUARDIAN_PLUGINS_ENABLED'] !== 'true') return;
+  if (!dir || !areDetectorPluginsEnabled()) return;
 
   let entries: string[];
   try {

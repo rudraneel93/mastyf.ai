@@ -13,6 +13,9 @@ importers:
 
   .:
     dependencies:
+      '@mcp-guardian/plugin-sdk':
+        specifier: workspace:*
+        version: link:packages/plugin-sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
         version: 1.29.0(zod@3.25.76)
@@ -140,7 +143,7 @@ importers:
         version: link:../core
       '@mcp-guardian/server':
         specifier: workspace:*
-        version: link:../server
+        version: link:../..
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
@@ -163,6 +166,8 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@20.19.40)(esbuild@0.27.7)(tsx@4.21.0)(yaml@2.8.4)
+
+  packages/plugin-sdk: {}
 
   packages/server:
     dependencies:

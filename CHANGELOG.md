@@ -2,6 +2,20 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.0] - 2026-05-17
+
+### Added (enterprise readiness)
+- **Detector Plugin SDK v3.0** — `@mcp-guardian/plugin-sdk` with `createDetectorPlugin`, lifecycle hooks (`onLoad`/`onUnload`); plugins on by default (`GUARDIAN_PLUGINS_ENABLED=false` to disable). See [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md).
+- **HTTP tools policy template** — `policy-templates/http-tools-policy.yaml`; merge with `GUARDIAN_HTTP_TOOLS_POLICY=true`.
+- **Browser dashboard SPA** — `deploy/dashboard-spa/` (REST + WebSocket); served at `/` when present (`GUARDIAN_DASHBOARD_SPA=false` for legacy page).
+- **Fleet CLI** — `mcp-guardian fleet status` (Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`); TUI **Fleet** tab (key 9).
+- **Multi-region** — `GUARDIAN_REGION` labels; Redis rate-limit keys per region; optional `GUARDIAN_RATE_LIMIT_DISTRIBUTED_LOCK`. [docs/MULTI_REGION.md](docs/MULTI_REGION.md) (active-passive, not active-active).
+- **Async semantic audit** — queue cap, min confidence, Prometheus metrics (`mcp_guardian_semantic_audit_*`). [docs/AI_LEARNING.md](docs/AI_LEARNING.md).
+- **Windows installer** — Inno Setup script `installer/windows/mcp-guardian.iss` + build docs.
+
+### Tests
+- `tests/policy/policy-merge.test.ts`, `tests/plugins/plugin-sdk.test.ts`, `tests/fleet/fleet-status.test.ts`, `tests/utils/region.test.ts`.
+
 ## [2.6.8] - 2026-05-17
 
 ### Security (58-scenario adversarial report)

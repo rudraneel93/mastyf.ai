@@ -388,6 +388,17 @@ program
     });
   });
 
+const fleetCmd = program.command('fleet').description('Fleet-wide observability across replicas');
+
+fleetCmd
+  .command('status')
+  .description('Aggregate status from Postgres (DATABASE_URL) or GUARDIAN_FLEET_DB_PATHS')
+  .option('--json', 'Output JSON')
+  .action(async (opts: { json?: boolean }) => {
+    const { runFleetStatus } = await import('./cli/fleet-status.js');
+    process.exit(await runFleetStatus(opts));
+  });
+
 program
   .command('tui')
   .description('Launch interactive terminal dashboard with real-time metrics, AI insights, and audit trails')

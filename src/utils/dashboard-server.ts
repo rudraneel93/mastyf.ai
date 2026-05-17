@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { resolve, dirname, join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import { LRUCache } from 'lru-cache';
@@ -24,16 +24,49 @@ import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-function loadDashboardHtml(): string {
+function deployDir(): string | null {
   const candidates = [
-    resolve(__dirname, '..', '..', 'deploy', 'dashboard.html'),
-    resolve(__dirname, '..', 'deploy', 'dashboard.html'),
-    resolve(process.cwd(), 'deploy', 'dashboard.html'),
+    resolve(__dirname, '..', '..', 'deploy'),
+    resolve(__dirname, '..', 'deploy'),
+    resolve(process.cwd(), 'deploy'),
   ];
   for (const p of candidates) {
-    if (existsSync(p)) return readFileSync(p, 'utf-8');
+    if (existsSync(p)) return p;
   }
+  return null;
+}
+
+function loadDashboardHtml(): string {
+  const dir = deployDir();
+  const spaIndex = dir ? join(dir, 'dashboard-spa', 'index.html') : '';
+  const useSpa = process.env['GUARDIAN_DASHBOARD_SPA'] !== 'false';
+  if (useSpa && spaIndex && existsSync(spaIndex)) {
+    return readFileSync(spaIndex, 'utf-8');
+  }
+  const legacy = dir ? join(dir, 'dashboard.html') : '';
+  if (legacy && existsSync(legacy)) return readFileSync(legacy, 'utf-8');
   return '<!DOCTYPE html><html><body><h1>MCP Guardian API</h1><p>See README for REST and WebSocket endpoints.</p></body></html>';
+}
+
+const SPA_MIME: Record<string, string> = {
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+};
+
+function tryServeDashboardSpa(url: string, res: ServerResponse): boolean {
+  if (!url.startsWith('/dashboard-spa/')) return false;
+  const dir = deployDir();
+  if (!dir) return false;
+  const rel = url.replace(/^\/dashboard-spa\//, '');
+  if (rel.includes('..')) return false;
+  const filePath = join(dir, 'dashboard-spa', rel);
+  if (!existsSync(filePath)) return false;
+  const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime });
+  res.end(readFileSync(filePath));
+  return true;
 }
 
 function getCorsOrigin(req: IncomingMessage): string {
@@ -262,6 +295,8 @@ export async function startDashboardServer(
         return;
       }
 
+      if (tryServeDashboardSpa(url, res)) return;
+
       if (!dashboardEnabled) {
         setCors();
         if (url === '/' || url === '/dashboard.html') {
@@ -281,6 +316,8 @@ export async function startDashboardServer(
         } else { writeJson(res, 401, { error: 'Authentication required', reason: authResult.reason }); }
         return;
       }
+
+      if (tryServeDashboardSpa(url, res)) return;
 
       if (url === '/' || url === '/dashboard.html') { setCors(); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(dashboardHtml); return; }
 

@@ -16,7 +16,7 @@ const C = {
 
 interface AppState { activeTab: number; running: boolean; frameCount: number; selectedSuggestion: number; }
 
-const TABS = ['Overview','Security','Cost','Health','AI Engine','Audit Trail','Policy','Instances'];
+const TABS = ['Overview','Security','Cost','Health','AI Engine','Audit Trail','Policy','Instances','Fleet'];
 
 export async function startTui(dashboardUrl?: string): Promise<void> {
   const fetcher = new DataFetcher(dashboardUrl);
@@ -29,8 +29,8 @@ export async function startTui(dashboardUrl?: string): Promise<void> {
   stdin.on('data', (key: string) => {
     const code = key.charCodeAt(0);
     if (code === 3 || code === 27) state.running = false;
-    else if (code === 9) state.activeTab = (state.activeTab + 1) % 8;
-    else if (key >= '1' && key <= '8') state.activeTab = parseInt(key) - 1;
+    else if (code === 9) state.activeTab = (state.activeTab + 1) % TABS.length;
+    else if (key >= '1' && key <= '9') state.activeTab = parseInt(key) - 1;
     else if (key === 'r') fetcher.fetchAll().catch(() => {});
     else if (state.activeTab === 4 && key === 'n') {
       const max = (fetcher.getData()?.ai.suggestions.length || 1) - 1;
@@ -106,12 +106,13 @@ function render(state: AppState, data: TuiData | null, fetcher?: DataFetcher): v
       case 5: renderAudit(data); break;
       case 6: renderPolicy(data); break;
       case 7: renderInstances(data); break;
+      case 8: renderFleet(data); break;
     }
   }
 
   stdout.write('\n' + C.dim('\u2500'.repeat(tw - 1)) + '\n');
   const aiHint = state.activeTab === 4 ? '  n:Next  a:Accept  x:Reject  ' : '';
-  stdout.write(C.dim('  1-8:Tabs  Tab:Next  r:Refresh' + aiHint + ' Esc:Quit  Frame: ' + state.frameCount + '\n'));
+  stdout.write(C.dim('  1-9:Tabs  Tab:Next  r:Refresh' + aiHint + ' Esc:Quit  Frame: ' + state.frameCount + '\n'));
 }
 
 function renderPlainTextBlock(
@@ -364,4 +365,28 @@ function renderInstances(data: TuiData): void {
     stdout.write(`  \u2502 ${C.white((i.instanceName || i.instanceId).slice(0,20).padEnd(20))}\u2502 ${st}    \u2502 ${C.cyan(String(i.totalRequests.toLocaleString()).padEnd(9))}\u2502 ${i.blockedRequests > 0 ? C.red(String(i.blockedRequests).padEnd(8)) : C.dim('0'.padEnd(8))}\u2502 ${C.dim((i.avgLatencyMs ? `${i.avgLatencyMs.toFixed(0)}ms` : 'N/A').padEnd(9))}\u2502\n`);
   }
   stdout.write(C.dim('  \u2514'+'\u2500'.repeat(22)+'\u2534'+'\u2500'.repeat(10)+'\u2534'+'\u2500'.repeat(11)+'\u2534'+'\u2500'.repeat(10)+'\u2534'+'\u2500'.repeat(11)+'\u2518\n'));
+}
+
+function renderFleet(data: TuiData): void {
+  const stdout = process.stdout;
+  const f = data.fleet;
+  stdout.write(C.bold.white(`  FLEET (${f.source}) — region ${f.region}\n\n`));
+  stdout.write(
+    `  Instances: ${C.white(String(f.totalInstances))} (${C.green(String(f.activeInstances))} active)  |  ` +
+      `Requests: ${C.cyan(String(f.totalRequests))}  |  Blocked: ${C.red(String(f.totalBlocked))}  |  ` +
+      `Cost: ${C.yellow('$' + f.totalCostUsd.toFixed(4))}\n\n`,
+  );
+  if (f.rows.length === 0) {
+    stdout.write(C.dim('  No fleet rows. Use DATABASE_URL + DB_TYPE=postgres or GUARDIAN_FLEET_DB_PATHS.\n'));
+    return;
+  }
+  for (const row of f.rows.slice(0, 20)) {
+    const st = row.status === 'active' ? C.green(row.status) : row.status === 'degraded' ? C.yellow(row.status) : C.red(row.status);
+    stdout.write(
+      `  ${st.padEnd(14)} ${C.white(row.instanceName.slice(0, 28).padEnd(28))}  ` +
+        `req=${row.totalRequests}  blocked=${row.blockedRequests}  $${row.totalCostUsd.toFixed(4)}` +
+        (row.region ? C.dim(`  ${row.region}`) : '') + '\n',
+    );
+  }
+  if (f.rows.length > 20) stdout.write(C.dim(`\n  ... +${f.rows.length - 20} more (mcp-guardian fleet status)\n`));
 }

@@ -14,12 +14,11 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.6.6** hardens integration tests and DPoP replay across replicas (`REDIS_URL`). **2.6.5** improves long-running IDE setups: metrics dispose on shutdown, SQLite `SQLITE_BUSY` retry + WAL, and Remote SSH path mapping ([REMOTE_SSH.md](docs/REMOTE_SSH.md), [DEVCONTAINERS.md](docs/DEVCONTAINERS.md)). **2.6.4** fixes OPA-over-YAML precedence, non-blocking policy hot-reload, and an experimental detector plugin registry ([EXTENSIBILITY.md](docs/EXTENSIBILITY.md)). **2.6.3** adds native Windows PowerShell proxy wrapping. **2.5.3** hardens production defaults (CVE gate opt-in, dashboard auth fail-closed). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
+**Version 2.7.0** ships enterprise readiness: Plugin SDK v3.0 (`@mcp-guardian/plugin-sdk`), browser dashboard SPA, `mcp-guardian fleet status`, HTTP tools policy template (`GUARDIAN_HTTP_TOOLS_POLICY`), multi-region labels + Redis rate limits ([MULTI_REGION.md](docs/MULTI_REGION.md)), and async semantic audit metrics. **2.6.8** hardens policy from a [58-scenario adversarial report](tests/policy/adversarial-scenarios.test.ts). **2.6.7** fixes cost-pricing recursion and adds GDPR Article 17 erase ([COMPLIANCE.md](docs/COMPLIANCE.md)). **2.5.0** added `mcp-guardian wrap`, Docker Compose, PostgreSQL/Redis HA paths, and Helm hardening.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), cost/token accounting, TUI, Redis/Postgres HA (single-region), Windows `guardian-proxy.ps1`, CVE scan (block is opt-in).  
-> **Experimental / partial:** detector plugins (`GUARDIAN_PLUGINS_ENABLED`), AI learning (batch + block-triggered — not per-attack instant ML), async LLM semantic audit, browser SPA (API + WebSocket only; use TUI for live ops).  
-> **Not yet:** multi-region active-active, fleet-wide TUI aggregation, full detector SDK (v3.0), MSI installer (v2.7 roadmap).
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), cost/token accounting, TUI + **Fleet tab**, Redis/Postgres HA, **detector Plugin SDK v3.0**, **fleet CLI**, HTTP tools template merge, **multi-region labeling** (active-passive — not active-active replication), async semantic audit (configurable + Prometheus), AI learning with quorum/drift/rollback ([AI_LEARNING.md](docs/AI_LEARNING.md)), Windows `guardian-proxy.ps1`, Inno Setup script (`installer/windows/`).  
+> **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline. AI learning remains batch/block-triggered — not per-attack instant ML.
 
 ---
 
@@ -185,7 +184,10 @@ Verify integration: `./scripts/verify-live-integration.sh`
 
 ### Security & policy
 - **Fail-closed production default** — `default-policy.yaml` sets `default_action: block` (tools not on the allowlist are blocked). Onboarding uses `policy-demo.yaml` (`default_action: pass`, `mode: audit`) — not for production.
-- **Semantic guards** (sync, before YAML rules) — path guard, **URL/SSRF guard** (metadata, localhost, dangerous schemes), SQL/NoSQL/GraphQL/LDAP exfil patterns, SSTI markers, GitHub write-tool deny, PowerShell guard, prompt-injection in tool **arguments** (`semantic-guards.ts`, `url-guard.ts`). v2.6.8+ closes gaps from the 58-scenario adversarial report.
+- **Semantic guards** (sync, before YAML rules) — path guard (expanded credential paths: docker.sock, k8s service-account tokens, `terraform.tfstate`, `.npmrc`, `.git-credentials`, `.vault-token`, service-account JSON), **URL/SSRF guard** (`url-guard.ts`: metadata IPs `169.254.*`, `file://` / `javascript:` / `data:`, private RFC1918, decimal-IP localhost, `[::1]`, webhook/callback fields), SQL/NoSQL/GraphQL/LDAP exfil patterns, SSTI markers (`{{`, `${`, `<%`), GitHub write-tool deny, PowerShell guard, zero-width–stripped prompt-injection in tool **arguments** (`semantic-guards.ts`). See evaluation order in [POLICY.md](docs/POLICY.md).
+- **Puppeteer / browser tools** — `puppeteer_navigate` and `puppeteer_screenshot` scan **all string leaves** for URLs, not only allowlisted tool names; blocks localhost/metadata/private targets while allowing benign public URLs (e.g. `https://example.com/`).
+- **Adversarial regression** — 34 tests in [`tests/policy/adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts) exercise the 58-scenario report against `default-policy.yaml` (no mocks); `tests/policy/url-guard.test.ts` covers URL parsing edge cases.
+- **Honest limits (v2.6.8)** — Security depth improved, but orgs that add custom outbound tools (e.g. `http_request`) must add YAML URL/host rules or keep them off the allowlist. Built-in URL guard keys on `url` / `href` / `target` / `webhook` / `callback` plus full puppeteer argument trees — not every possible argument name.
 - **Unicode / TR39** — `unicode_strict: true` loads `assets/confusables.txt` and folds confusables before regex (disable for literal Unicode in i18n teams)
 - **Three-layer detection** — Regex → schema/shell tokenizer → optional async LLM semantic audit (not on the hot path)
 - **YAML policy engine** — Allow/deny lists, regex, rate limits, token budgets, RBAC, argument field patterns
@@ -195,7 +197,10 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **CVE gate (opt-in)** — `GUARDIAN_BLOCK_ON_CVE=false` by default; when `true`, blocks on scan severity (`GUARDIAN_CVE_BLOCK_SEVERITY`, default `CRITICAL`)
 - **Secret / entropy DLP** — 50+ secret patterns, Shannon entropy in `block` mode (`GUARDIAN_PROXY_ENTROPY`)
 - **Response inspection** — Prompt injection and exfiltration in tool **responses**
-- **Experimental detector plugins** — `GUARDIAN_PLUGINS_ENABLED=true`, optional `GUARDIAN_PLUGIN_PATH`; see [EXTENSIBILITY.md](docs/EXTENSIBILITY.md) (full SDK v3.0 planned)
+- **Detector plugins (SDK v3.0)** — `@mcp-guardian/plugin-sdk`, `GUARDIAN_PLUGIN_PATH`; on by default — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md)
+- **HTTP tools SSRF template** — `GUARDIAN_HTTP_TOOLS_POLICY=true` merges `policy-templates/http-tools-policy.yaml`
+- **Fleet** — `mcp-guardian fleet status`; TUI Fleet tab; Postgres or `GUARDIAN_FLEET_DB_PATHS`
+- **Dashboard SPA** — `http://localhost:4000/` when proxy runs (`DASHBOARD_ENABLED=true` for REST)
 
 ### Authentication & dashboard
 - **Dashboard auth fail-closed** — When `DASHBOARD_ENABLED=true`, API requests are rejected unless `DASHBOARD_API_KEY` or `DASHBOARD_JWT_SECRET` is set. `DASHBOARD_AUTH_DISABLED=true` is for **local dev only** — do not expose to a network.
@@ -256,7 +261,8 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **386+ tests** — unit, integration, E2E proxy, fuzz, RBAC/OAuth/DPoP, policy precedence, plugins
+- **435+ tests** — `pnpm vitest run`; unit, integration, E2E proxy, fleet, policy-merge, plugin-sdk, adversarial scenarios
+- **Adversarial scenarios** — 34 regression tests mapped to the 58-scenario report ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts))
 - **Red-team corpus** — precision/recall on poisoned payloads
 - **Coverage gates** — 70% lines in CI
 
@@ -332,6 +338,16 @@ mcp-guardian policy test \
 ```
 
 Output is JSON: `{ "action", "rule", "reason", "mode" }`.
+
+### `mcp-guardian fleet status`
+
+Aggregate replicas from Postgres (`DATABASE_URL` + `DB_TYPE=postgres`) or multiple SQLite files:
+
+```bash
+export GUARDIAN_FLEET_DB_PATHS="$HOME/.mcp-guardian/history.db,/data/replica-b/history.db"
+mcp-guardian fleet status
+mcp-guardian fleet status --json
+```
 
 ### `mcp-guardian ai rollback`
 
@@ -452,7 +468,7 @@ pnpm run dogfood    # sandboxed CI scenario (separate DB under scenarios/dogfood
 
 ### Limitations (read this before demoing to leadership)
 
-- **Not a multi-proxy control plane.** One TUI process observes one SQLite file (or Postgres if configured). It does not discover other hosts or aggregate fleet-wide instances yet.
+- **Fleet view is aggregate-only.** `mcp-guardian fleet status` and the TUI Fleet tab read Postgres `guardian_instances` or comma-separated SQLite paths — not live discovery of remote hosts.
 - **“6 inst” ≠ 6 live proxies.** The status bar counts **server names** known to the DB (calls + scans). Only **Servers w/ traffic** reflects tool calls.
 - **WS off** is common if nothing listens on `:4000` or an old process holds the port — fix by stopping stray `node dist/cli.js proxy` processes, not by assuming the TUI is broken.
 - **Learning while TUI is open** does not write to the DB (read-only). Run learning on the proxy process or restart TUI after `GUARDIAN_TUI_SKIP_LEARNING=true` if you only want display.
@@ -518,14 +534,24 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_PROXY_ENTROPY` | on in `block` | Block high-entropy / base64 in arguments |
 | `GUARDIAN_BLOCK_ON_CVE` | `false` | Opt-in CVE gate on `tools/call` |
 | `GUARDIAN_CVE_BLOCK_SEVERITY` | `CRITICAL` | `HIGH` widens blocking when gate on |
-| `GUARDIAN_PLUGINS_ENABLED` | off | Experimental detector plugins |
+| `GUARDIAN_PLUGINS_ENABLED` | on | Detector plugins (`false` to disable) |
 | `GUARDIAN_PLUGIN_PATH` | — | Directory of `*.js` plugins |
+| `GUARDIAN_HTTP_TOOLS_POLICY` | `false` | Merge `policy-templates/http-tools-policy.yaml` |
+| `GUARDIAN_HTTP_TOOLS_POLICY_PATH` | — | Override template path |
 | `GUARDIAN_SEMANTIC_ASYNC` | on w/ LLM | Post-hoc LLM audit (non-blocking) |
 | `GUARDIAN_SEMANTIC_DEBOUNCE_MS` | `500` | Async semantic queue debounce |
+| `GUARDIAN_SEMANTIC_ASYNC_MAX_QUEUE` | `200` | Max queued async audits |
+| `GUARDIAN_SEMANTIC_MIN_CONFIDENCE` | `0.6` | Flag threshold for async semantic |
+| `GUARDIAN_REGION` | `default` | Region label for metrics/Redis keys |
+| `GUARDIAN_RATE_LIMIT_DISTRIBUTED_LOCK` | `false` | Redis NX window lock (active-passive) |
+| `GUARDIAN_FLEET_DB_PATHS` | — | Comma-separated SQLite paths for fleet CLI/TUI |
+| `GUARDIAN_DASHBOARD_SPA` | on | Serve `deploy/dashboard-spa/` at `/` |
 | `GUARDIAN_FP_WHITELIST_THRESHOLD` | `3` | FP confirmations before auto-whitelist |
 | `GUARDIAN_FP_WHITELIST_PATH` | `~/.mcp-guardian/.fp-whitelist.json` | FP whitelist file |
 | `POLICY_AUDIT_ENABLED` | `false` | Policy change JSONL audit |
 | `GUARDIAN_DISALLOW_MODE_OVERRIDE` | `false` | Ignore CLI `--blocking-mode` when `true` |
+
+**URL guard (v2.6.8):** No dedicated env vars — runs inside semantic guards on every `tools/call`. Restrict filesystem access with `GUARDIAN_WORKSPACE` / `GUARDIAN_ALLOWED_PATH_PREFIXES` above.
 
 ### Auth & dashboard
 
@@ -599,12 +625,14 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 
 Short list before `default-policy.yaml` + block mode in production:
 
-1. **Policy** — Roll out `policy-audit.yaml` → `policy-warn.yaml` → `default-policy.yaml`; run `mcp-guardian policy test` on risky tools; set `GUARDIAN_WORKSPACE` or path prefixes.
-2. **Auth** — `DASHBOARD_AUTH_DISABLED` must be **false** on any exposed dashboard; set `DASHBOARD_API_KEY` or JWT secret + credentials.
-3. **HA** — `REDIS_URL` + `GUARDIAN_STRICT_MODE=true` for multi-replica; `DATABASE_URL` through **PgBouncer**; `GUARDIAN_REQUIRE_PGBOUNCER=true` optional guardrail; single-region Redis only.
-4. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
-5. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
-6. **Verify** — `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`, shared `MCP_GUARDIAN_DB_PATH` for proxy + TUI.
+1. **Policy** — Roll out `policy-audit.yaml` → `policy-warn.yaml` → `default-policy.yaml`; run `mcp-guardian policy test` on risky tools; set `GUARDIAN_WORKSPACE` or path prefixes ([POLICY.md](docs/POLICY.md)).
+2. **SSRF / browser tools** — Default policy blocks metadata IPs, dangerous schemes, and private/localhost URLs in `url`/`href`/`webhook`/`callback`; puppeteer tools get full-argument URL scan. If you add `http_request` or similar, add explicit YAML host/URL rules — allowlist alone is not enough.
+3. **Credential paths** — Semantic path guard blocks docker.sock, k8s tokens, terraform state, `.npmrc`, `.git-credentials`, `.vault-token`, and service-account JSON patterns; scope writes with `GUARDIAN_WORKSPACE`.
+4. **Auth** — `DASHBOARD_AUTH_DISABLED` must be **false** on any exposed dashboard; set `DASHBOARD_API_KEY` or JWT secret + credentials.
+5. **HA** — `REDIS_URL` + `GUARDIAN_STRICT_MODE=true` for multi-replica; `DATABASE_URL` through **PgBouncer**; `GUARDIAN_REQUIRE_PGBOUNCER=true` optional guardrail; single-region Redis only.
+6. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
+7. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
+8. **Verify** — `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`, shared `MCP_GUARDIAN_DB_PATH` for proxy + TUI; run `pnpm vitest run tests/policy/adversarial-scenarios.test.ts` after policy changes.
 
 ---
 
@@ -708,12 +736,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ## Roadmap
 
 ### Shipped in v2.6.x
+- **2.6.8** — URL/SSRF guard, expanded path/credential patterns, SQL/NoSQL/LDAP/GraphQL/SSTI hardening, puppeteer URL validation, 58-scenario adversarial regression tests
+- **2.6.7** — GDPR Article 17 `eraseAllAuditData`, cost-pricing recursion fix
 - OPA block precedence, non-blocking policy hot-reload
 - Windows `guardian-proxy.ps1` + `wrap` on win32
 - PgBouncer mandatory guidance (>50 replicas / multi-replica Postgres)
 - AI quorum, drift detection, `mcp-guardian ai rollback`
 - Dashboard CSRF, session regeneration, fail-closed auth
-- DPoP `jti` replay protection
+- DPoP `jti` replay protection (Redis `jti` dedup when `REDIS_URL` set)
 - Metrics dispose, SQLite busy retry, Remote SSH path map
 - Experimental detector plugins (`GUARDIAN_PLUGINS_ENABLED`)
 
@@ -731,6 +761,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.

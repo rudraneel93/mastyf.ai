@@ -1,5 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { isSemanticAsyncEnabled, buildSemanticAuditJob } from '../../src/ai/async-semantic-audit.js';
+import {
+  isSemanticAsyncEnabled,
+  buildSemanticAuditJob,
+  getSemanticAuditStats,
+} from '../../src/ai/async-semantic-audit.js';
 
 describe('async-semantic-audit', () => {
   const prevAsync = process.env.GUARDIAN_SEMANTIC_ASYNC;
@@ -21,6 +25,11 @@ describe('async-semantic-audit', () => {
   it('respects GUARDIAN_SEMANTIC_ASYNC=false', () => {
     process.env.GUARDIAN_SEMANTIC_ASYNC = 'false';
     expect(isSemanticAsyncEnabled()).toBe(false);
+  });
+
+  it('exposes semantic audit stats', () => {
+    const stats = getSemanticAuditStats();
+    expect(stats).toMatchObject({ queued: expect.any(Number), enabled: expect.any(Boolean) });
   });
 
   it('builds audit job from call context', () => {

@@ -1,15 +1,17 @@
-# MCP Guardian Windows MSI installer
+# MCP Guardian installers
 
-**Status: planned for v2.7** — not shipped in this release.
+## Windows (Inno Setup)
 
-A future MSI will bundle:
+Shipped in v2.7: `installer/windows/mcp-guardian.iss` + [build instructions](windows/README.md).
 
-- Node.js runtime or documented prerequisite check
-- `guardian-proxy.ps1` and `dist/` payload
-- Start-menu shortcuts for `mcp-guardian doctor` and dashboard
-- Per-user `%USERPROFILE%\.mcp-guardian` data directory
+Produces a per-user setup executable (Node 18+ prerequisite check, `guardian-proxy.ps1`, PATH append).
 
-WiX source and signing pipeline will live under `installer/` when development starts.
-Track progress via the v2.7 roadmap in the root README.
+Code signing is your org's responsibility before enterprise rollout.
 
-For now, install from npm or clone the repo and use [docs/WINDOWS.md](../docs/WINDOWS.md).
+## npm (recommended)
+
+```bash
+npm install -g @mcp-guardian/server
+```
+
+See [docs/WINDOWS.md](../docs/WINDOWS.md) for PowerShell wrap.
