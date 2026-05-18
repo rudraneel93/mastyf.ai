@@ -47,8 +47,11 @@ export class ReportGenerator {
   formatCostReports(reports: CostReport[]): string {
     let out = chalk.bold.underline('\n💰 Cost Audit\n');
     for (const r of reports) {
-      out += `\n${chalk.bold(r.serverName)}: ${chalk.yellow(String(r.tokensUsed))} tokens, ${chalk.green(`$${r.estimatedCostUSD.toFixed(4)}`)} (${r.pricingModel})\n`;
-      out += `  Input: ${r.inputTokens} tokens, Output: ${r.outputTokens} tokens\n`;
+      const sourceLabel = r.costSource === 'estimated' ? 'estimated' : r.costSource === 'proxy-records' ? 'proxy' : 'n/a';
+      out += `\n${chalk.bold(r.serverName)}: ${chalk.yellow(String(r.tokensUsed))} tokens, ${chalk.green(`$${r.estimatedCostUSD.toFixed(4)}`)} (${r.pricingModel}, ${sourceLabel})\n`;
+      out += `  Input: ${r.inputTokens} tokens, Output: ${r.outputTokens} tokens`;
+      if (r.modelId) out += ` | Model: ${r.modelId}`;
+      out += '\n';
       for (const t of r.toolBreakdown) {
         out += `  ${chalk.dim(t.toolName)}: ${t.tokens} tokens, ${t.calls} calls, $${t.cost.toFixed(4)}\n`;
       }

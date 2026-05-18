@@ -6,10 +6,18 @@ import https from 'https';
 import { McpServerConfig } from '../types.js';
 import { Logger } from './logger.js';
 
+export interface McpToolDefinition {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
 export interface McpProbeResult {
   success: boolean;
   toolCount?: number;
   toolNames?: string[];
+  /** Full tool definitions from tools/list (for audit cost estimation). */
+  tools?: McpToolDefinition[];
   authRequired: boolean;
   latencyMs: number;
   serverVersion?: string;
@@ -49,7 +57,7 @@ export class McpClient {
       let handled = false;
       const done = (r: McpProbeResult) => { if (handled) return; handled = true; clearTimeout(timeout); try { child.kill(); } catch {} resolve(r); };
       const rl = createInterface({ input: child.stdout! });
-      let authRequired = false, toolCount: number | undefined, toolNames: string[] | undefined, serverVersion: string | undefined;
+      let authRequired = false, toolCount: number | undefined, toolNames: string[] | undefined, tools: McpToolDefinition[] | undefined, serverVersion: string | undefined;
       let initId: string, listId: string;
 
       initId = randomUUID();
@@ -74,10 +82,15 @@ export class McpClient {
             return;
           }
           if (msg.id === listId && msg.result?.tools) {
-            const tools = Array.isArray(msg.result.tools) ? msg.result.tools : [];
-            toolCount = tools.length;
-            toolNames = tools.map((t: any) => t.name || 'unnamed');
-            done({ success: true, toolCount, toolNames, authRequired, latencyMs: Date.now() - start, serverVersion });
+            const listed = Array.isArray(msg.result.tools) ? msg.result.tools : [];
+            toolCount = listed.length;
+            toolNames = listed.map((t: { name?: string }) => t.name || 'unnamed');
+            tools = listed.map((t: { name?: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
+              name: t.name || 'unnamed',
+              description: t.description,
+              inputSchema: t.inputSchema,
+            }));
+            done({ success: true, toolCount, toolNames, tools, authRequired, latencyMs: Date.now() - start, serverVersion });
           }
         } catch {}
       });
@@ -85,7 +98,7 @@ export class McpClient {
       child.stderr?.on('data', (data: Buffer) => Logger.debug(`[${server.name} stderr] ${data.toString().trim().substring(0, 200)}`));
       child.on('error', (err) => done({ success: false, authRequired, latencyMs: Date.now() - start, error: err.message }));
       child.on('close', (code) => {
-        if (!handled) done(toolCount !== undefined ? { success: true, toolCount, toolNames, authRequired, latencyMs: Date.now() - start, serverVersion } : { success: false, authRequired, latencyMs: Date.now() - start, error: `Process exited with code ${code}` });
+        if (!handled) done(toolCount !== undefined ? { success: true, toolCount, toolNames, tools, authRequired, latencyMs: Date.now() - start, serverVersion } : { success: false, authRequired, latencyMs: Date.now() - start, error: `Process exited with code ${code}` });
       });
     });
   }
@@ -134,8 +147,19 @@ export class McpClient {
     const listId = randomUUID();
     const listResp = await McpClient.postJson(messageBase, { jsonrpc: '2.0', id: listId, method: 'tools/list' }, httpModule, overallTimeout);
     if (listResp?.result?.tools) {
-      const tools = Array.isArray(listResp.result.tools) ? listResp.result.tools : [];
-      return { success: true, toolCount: tools.length, toolNames: tools.map((t: any) => t.name || 'unnamed'), authRequired: false, latencyMs: Date.now() - start };
+      const listed = Array.isArray(listResp.result.tools) ? listResp.result.tools : [];
+      return {
+        success: true,
+        toolCount: listed.length,
+        toolNames: listed.map((t: { name?: string }) => t.name || 'unnamed'),
+        tools: listed.map((t: { name?: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
+          name: t.name || 'unnamed',
+          description: t.description,
+          inputSchema: t.inputSchema,
+        })),
+        authRequired: false,
+        latencyMs: Date.now() - start,
+      };
     }
     return { success: false, authRequired: false, latencyMs: Date.now() - start, error: listResp?.error?.message || 'tools/list did not return tools' };
   }

@@ -71,6 +71,14 @@ export interface CostReport {
   toolBreakdown: ToolCost[];
   unpricedCalls?: number;
   note?: string;
+  /** Resolved LLM model id used for pricing/counting */
+  modelId?: string;
+  /** Provider inferred from model id (openai, anthropic, google, unknown) */
+  provider?: string;
+  /** proxy-records = history DB; estimated = tools/list simulation; none = empty */
+  costSource?: 'proxy-records' | 'estimated' | 'none';
+  /** False when model rates could not be resolved */
+  priced?: boolean;
 }
 
 export interface ToolCost {

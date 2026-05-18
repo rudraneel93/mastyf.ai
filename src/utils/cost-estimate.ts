@@ -1,0 +1,157 @@
+import type { McpToolDefinition } from './mcp-client.js';
+import { TokenCounter, detectProvider } from './token-counter.js';
+import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
+import type { ToolCost } from '../types.js';
+
+/** Default simulated tool result size when no live tools/call is made. */
+const DEFAULT_RESPONSE_CHARS = 512;
+
+/** Agent context overhead (system + tool-selection framing) added once per server audit. */
+const CONTEXT_OVERHEAD_CHARS = 800;
+
+export interface ToolCostEstimate {
+  toolName: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface ServerCostEstimate {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  toolBreakdown: ToolCost[];
+  priced: boolean;
+  pricingSources: string[];
+  pricingModel: string;
+  modelId: string;
+  provider: string;
+  unpricedTools: number;
+}
+
+/** Build minimal JSON arguments from JSON Schema (required fields only). */
+export function minimalArgsFromSchema(schema?: Record<string, unknown>): Record<string, unknown> {
+  if (!schema || typeof schema !== 'object') return {};
+  const props = schema.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props || typeof props !== 'object') return {};
+
+  const required = Array.isArray(schema.required)
+    ? (schema.required as string[])
+    : Object.keys(props);
+
+  const args: Record<string, unknown> = {};
+  for (const key of required) {
+    const prop = props[key];
+    if (!prop) continue;
+    const t = prop.type;
+    if (t === 'string') args[key] = '';
+    else if (t === 'number' || t === 'integer') args[key] = 0;
+    else if (t === 'boolean') args[key] = false;
+    else if (t === 'array') args[key] = [];
+    else if (t === 'object') args[key] = {};
+    else args[key] = null;
+  }
+  return args;
+}
+
+function toolsListContextText(tools: McpToolDefinition[]): string {
+  return JSON.stringify(
+    tools.map((t) => ({
+      name: t.name,
+      description: t.description ?? '',
+      inputSchema: t.inputSchema ?? {},
+    })),
+  );
+}
+
+function simulatedCallTexts(
+  tool: McpToolDefinition,
+  toolsContext: string,
+): { requestText: string; responseText: string } {
+  const args = minimalArgsFromSchema(tool.inputSchema);
+  const callPayload = {
+    jsonrpc: '2.0',
+    method: 'tools/call',
+    params: { name: tool.name, arguments: args },
+  };
+  const requestText = toolsContext + '\n' + JSON.stringify(callPayload);
+  const responseText = JSON.stringify({
+    content: [{ type: 'text', text: 'x'.repeat(DEFAULT_RESPONSE_CHARS) }],
+  });
+  return { requestText, responseText };
+}
+
+/**
+ * Estimate per-tool MCP cost from tool definitions (audit/scan modes without proxy history).
+ */
+export async function estimateServerCostFromTools(
+  tools: McpToolDefinition[],
+  modelId: string,
+  tokenCounter?: TokenCounter,
+): Promise<ServerCostEstimate> {
+  const counter = tokenCounter ?? new TokenCounter();
+  const pricing = getRuntimeModelPricing();
+  const resolved = await pricing.resolveModelId(modelId);
+  const provider = detectProvider(modelId);
+  const pricingModel = resolved?.displayName || resolved?.modelId || modelId;
+  const sources = new Set<string>();
+  if (resolved) sources.add(resolved.source);
+
+  const toolsContext =
+    CONTEXT_OVERHEAD_CHARS > 0
+      ? ' '.repeat(CONTEXT_OVERHEAD_CHARS) + toolsListContextText(tools)
+      : toolsListContextText(tools);
+
+  let totalInput = 0;
+  let totalOutput = 0;
+  let totalCost = 0;
+  let unpricedTools = 0;
+  const breakdown: ToolCost[] = [];
+
+  for (const tool of tools) {
+    const { requestText, responseText } = simulatedCallTexts(tool, toolsContext);
+    const counts = counter.countProxyCall({
+      requestText,
+      responseText,
+      model: modelId,
+      requestPayload: { params: { arguments: minimalArgsFromSchema(tool.inputSchema) } },
+      responsePayload: { result: { content: [{ type: 'text' }] } },
+    });
+
+    let costUsd = 0;
+    if (resolved) {
+      const cost = pricing.computeCost(counts.requestTokens, counts.responseTokens, resolved);
+      costUsd = cost.costUsd;
+      if (cost.priced) sources.add(resolved.source);
+    } else {
+      unpricedTools++;
+    }
+
+    totalInput += counts.requestTokens;
+    totalOutput += counts.responseTokens;
+    totalCost += costUsd;
+
+    breakdown.push({
+      toolName: tool.name,
+      tokens: counts.requestTokens + counts.responseTokens,
+      calls: 1,
+      cost: Math.round(costUsd * 10000) / 10000,
+    });
+  }
+
+  return {
+    inputTokens: totalInput,
+    outputTokens: totalOutput,
+    totalTokens: totalInput + totalOutput,
+    costUsd: Math.round(totalCost * 10000) / 10000,
+    toolBreakdown: breakdown,
+    priced: resolved !== null && unpricedTools === 0,
+    pricingSources: [...sources],
+    pricingModel,
+    modelId,
+    provider,
+    unpricedTools,
+  };
+}

@@ -3,6 +3,7 @@ import {
   getLlmConfig,
   resetLlmConfigForTests,
   resolveModelId,
+  resolveModelIdForServer,
 } from '../../src/config/llm-config.js';
 
 describe('llm-config', () => {
@@ -67,5 +68,15 @@ describe('llm-config', () => {
     expect(resolveModelId()).toBe('gpt-4o-mini');
     process.env.GUARDIAN_MODEL = 'gpt-4o';
     expect(resolveModelId()).toBe('gpt-4o');
+  });
+
+  it('resolveModelIdForServer prefers server env and GUARDIAN_MODEL_<SERVER>', () => {
+    process.env.GUARDIAN_LLM_MODEL = 'gpt-4o-mini';
+    expect(resolveModelIdForServer('my-server', { GUARDIAN_MODEL: 'claude-3-5-sonnet' })).toBe(
+      'claude-3-5-sonnet',
+    );
+    delete process.env.GUARDIAN_MODEL_MY_SERVER;
+    process.env.GUARDIAN_MODEL_MY_SERVER = 'gpt-4o';
+    expect(resolveModelIdForServer('my-server')).toBe('gpt-4o');
   });
 });

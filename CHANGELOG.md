@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.10] - 2026-05-18
+
+### Fixed
+- **Cost auditor in audit/scan/report modes** — `mcp-guardian audit` and `report` no longer return empty costs when proxy `call_records` are absent. Connects via `tools/list`, simulates per-tool `tools/call` token footprint with `TokenCounter` + `RuntimeModelPricing`, and persists estimates to `cost_records`.
+
+### Added
+- **`resolveModelIdForServer()`** — Per-server model from server `env`, `GUARDIAN_MODEL_<SERVER>`, or global `GUARDIAN_LLM_MODEL` / `GUARDIAN_MODEL`.
+- **`src/utils/cost-estimate.ts`** — Schema-based minimal args and per-tool cost breakdown for audit mode.
+- **Cost report metadata** — `costSource` (`proxy-records` | `estimated` | `none`), `modelId`, `provider`, `priced` on `CostReport`.
+
+### Tests
+- `tests/services/cost-auditor-audit-mode.test.ts`, `resolveModelIdForServer` in `tests/config/llm-config.test.ts`.
+
 ## [2.7.9] - 2026-05-18
 
 ### Fixed (enterprise security analysis remediation)

@@ -74,3 +74,22 @@ export function resolveModelId(payloadModel?: string | null): string {
     getLlmConfig().model
   );
 }
+
+/** Per-server model: server env → GUARDIAN_MODEL_<SERVER> → global resolveModelId(). */
+export function resolveModelIdForServer(
+  serverName: string,
+  serverEnv?: Record<string, string>,
+): string {
+  const fromServerEnv =
+    serverEnv?.GUARDIAN_MODEL ||
+    serverEnv?.GUARDIAN_LLM_MODEL ||
+    serverEnv?.ANTHROPIC_MODEL ||
+    serverEnv?.OPENAI_MODEL;
+  if (fromServerEnv?.trim()) return fromServerEnv.trim();
+
+  const normalized = serverName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const perServer = process.env[`GUARDIAN_MODEL_${normalized}`];
+  if (perServer?.trim()) return perServer.trim();
+
+  return resolveModelId();
+}

@@ -4,14 +4,15 @@ import { HistoryDatabase } from '../../src/database/history-db.js';
 import { PricingClient } from '../../src/clients/pricing-client.js';
 
 describe('CostAuditor', () => {
-  it('returns zero cost when no records', async () => {
+  it('returns zero cost when no records and server not probeable', async () => {
     const db = new HistoryDatabase(':memory:');
     const pricing = new PricingClient();
     const auditor = new CostAuditor(pricing, db);
     const report = await auditor.auditServer({ name: 'test', transport: 'stdio' });
     expect(report.tokensUsed).toBe(0);
     expect(report.toolBreakdown).toHaveLength(0);
-    expect(report.note).toContain('No recorded call data');
+    expect(report.costSource).toBe('none');
+    expect(report.note).toMatch(/No command or URL|Probe failed/);
     db.close();
   });
 

@@ -324,6 +324,8 @@ mcp-guardian health --all --fail-on-overload
 mcp-guardian report --all --format markdown --output report.md
 ```
 
+**Cost audit** works without the proxy: when no `call_records` exist, Guardian probes each server (`tools/list`), estimates per-tool token cost using `TokenCounter` + `RuntimeModelPricing`, and writes summaries to `cost_records`. Set the model via `GUARDIAN_LLM_MODEL`, `GUARDIAN_MODEL`, server env `GUARDIAN_MODEL`, or per-server `GUARDIAN_MODEL_<SERVER>` (e.g. `GUARDIAN_MODEL_GITHUB`). Proxy mode still provides exact per-call totals when traffic flows through `mcp-guardian proxy`.
+
 ### `mcp-guardian proxy`
 
 ```bash
