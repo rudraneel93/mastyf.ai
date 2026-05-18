@@ -27,6 +27,8 @@ policy:
           - powershell
           - pwsh
           - cmd
+          - curl
+          - wget
     - name: deny-github-write-tools
       description: Block GitHub mutation tools (exfil via create_issue, push, etc.)
       action: block

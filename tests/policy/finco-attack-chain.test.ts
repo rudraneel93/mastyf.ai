@@ -78,6 +78,18 @@ describe('FINCO attack chain (default-policy.yaml)', () => {
     expect(d.rule).toBe('deny-dangerous-tools');
   });
 
+  it('blocks curl tool by name', () => {
+    const d = engine.evaluate(ctx('curl', { url: 'https://example.com' }));
+    expect(d.action).toBe('block');
+    expect(d.rule).toBe('deny-dangerous-tools');
+  });
+
+  it('blocks wget tool by name', () => {
+    const d = engine.evaluate(ctx('wget', { url: 'https://example.com/file' }));
+    expect(d.action).toBe('block');
+    expect(d.rule).toBe('deny-dangerous-tools');
+  });
+
   it('still blocks shell injection in write_file', () => {
     const d = engine.evaluate(ctx('write_file', {
       path: '/etc/cron.d/backdoor',
