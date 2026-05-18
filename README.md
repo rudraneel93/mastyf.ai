@@ -10,6 +10,51 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
+## Proven under attack (v2.8.1)
+
+**v2.8.1** ships **per-block instant attack learning** on proxy policy blocks — rolling stats and attack-pattern suggestions in a sliding window while traffic is active (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; debounced batch cycles remain for full AI review). **Repo eval** numbers below come from [`reports/attack-learning-eval/metrics.json`](reports/attack-learning-eval/metrics.json) (reproducible CI). **[sca/](sca/)** adds a separate **synthetic** 180-minute escalation sim — use repo metrics when numbers must match CI.
+
+### Instant vs batch (long-run, verified)
+
+`pnpm eval:attack-learning:long` — **5003** simulated blocked `tools/call` events, **~4.9h** attack stream (2–5s inter-arrival, 30s batch debounce). Source: [`metrics.json`](reports/attack-learning-eval/metrics.json).
+
+| Metric | Instant learning | Batch-only (debounced) |
+|--------|------------------|-------------------------|
+| Suggestions queued | 5 | 5 |
+| Avg blocks to first suggestion | **3.0** | **1000.6** |
+| Median time-to-suggestion | **41 s** | **~4.9 h** |
+
+**Verdict:** Same suggestion throughput, but **instant** discovers repeat `(rule, tool)` clusters during the stream; **batch-only** defers until debounce quiet periods, pushing median discovery toward session end. Deep dive: [Attack learning evaluation](#attack-learning-evaluation) · [summary.md](reports/attack-learning-eval/summary.md) · [docs/AI_LEARNING.md](docs/AI_LEARNING.md).
+
+```mermaid
+flowchart LR
+  B[Policy block] --> I[Instant rolling stats]
+  I --> Q{≥ min blocks in window?}
+  Q -->|yes| S[Queue attack-pattern suggestion]
+  Q -->|no| W[More blocks in stream]
+  B --> D[Debounced batch cycle]
+  D --> S
+  S --> P[Human accept or auto-apply → policy YAML]
+```
+
+### Hero charts (repo eval + synthetic sim)
+
+| Instant vs batch — repo eval | Time to first suggestion — repo eval | Stage 1 → 2 detection — synthetic 180 min sim |
+|:---:|:---:|:---:|
+| ![Instant vs batch cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | ![CDF time to first suggestion](reports/attack-learning-eval/figures/fig4-cdf-time-to-suggestion.png) | ![Detection accuracy by attack type](sca/CHART_1_Detection_Accuracy.png) |
+
+*Instant curve rises in the first minutes; batch stays flat until ~4.9h debounce quiet — same 5 suggestions, different discovery latency.*
+
+*CDF: instant mass at **~41s** median; batch at **~4.87h** — the core instant-vs-batch story in one chart.*
+
+*Synthetic sim ([sca/](sca/)): Stage 2 detection **+8.8pp** avg vs Stage 1 across 12 escalating attack types (not `metrics.json`).*
+
+```bash
+pnpm eval:attack-learning:long && pnpm eval:attack-learning:charts   # refresh fig1–fig7 + metrics.json
+```
+
+---
+
 MCP Guardian sits between AI agents and MCP servers, enforcing **active security policies**, tracking **real token costs**, monitoring **server health**, and providing **enterprise observability** — all through a YAML-configurable engine with hot-reload.
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
@@ -36,6 +81,7 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
 
 ## Table of Contents
 
+- [Proven under attack (v2.8.1)](#proven-under-attack-v281)
 - [Production blockers (v2.8.0)](#production-blockers-v280--all-resolved)
 - [Quick Start](#quick-start)
 - [Real-World Integration (Cline, Cursor, Claude Code)](#real-world-integration-cline-cursor-claude-code)
@@ -51,6 +97,9 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
 - [Environment Variables](#environment-variables)
 - [Production Checklist](#production-checklist)
 - [Architecture](#architecture)
+- [Attack learning evaluation](#attack-learning-evaluation)
+  - [Repo evaluation (reproducible CI)](#repo-evaluation-reproducible-ci)
+  - [Extended attack simulation (sca collateral)](#extended-attack-simulation-sca-collateral)
 - [Development](#development)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
@@ -731,6 +780,87 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 
 ---
 
+## Attack learning evaluation
+
+See **[Proven under attack (v2.8.1)](#proven-under-attack-v281)** for headline metrics and hero charts. Below: embedded figures with captions; full galleries in collapsible blocks.
+
+### Repo evaluation (reproducible CI)
+
+Long-run harness: **5003** blocks, **4.9h** sim — [`metrics.json`](reports/attack-learning-eval/metrics.json) · [`summary.md`](reports/attack-learning-eval/summary.md).
+
+| Blocks until suggestion | Rule × tool heatmap |
+|:---:|:---:|
+| ![Blocks until first suggestion per group](reports/attack-learning-eval/figures/fig7-blocks-until-suggestion.png) | ![Blocks by rule and tool](reports/attack-learning-eval/figures/fig6-heatmap.png) |
+
+*Instant clusters at **3** blocks per group; batch at **~1000+** when debounce never fires mid-stream.*
+
+*Which policies fire on which tools under the synthetic attack mix (`semantic-shell-guard:search` dominant).*
+
+Regenerate: `pnpm eval:attack-learning:long` then `pnpm eval:attack-learning:charts`. Interactive: [attack-learning-eval.canvas.tsx](reports/attack-learning-eval/attack-learning-eval.canvas.tsx).
+
+<details>
+<summary><strong>All repo eval figures (fig1–fig7)</strong></summary>
+
+| Fig | Chart | Caption |
+|-----|-------|---------|
+| 1 | ![Block rate per minute](reports/attack-learning-eval/figures/fig1-blocks-per-minute.png) | Steady ~15–19 blocks/min — continuous enterprise stream, not a single burst |
+| 2 | ![Cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | Instant vs batch cumulative suggestions (also in hero row above) |
+| 3 | ![Repeat clusters](reports/attack-learning-eval/figures/fig3-repeat-clusters.png) | Top `(rule, tool)` with ≥3 blocks in 5 min — `semantic-shell-guard:search` (32) |
+| 4 | ![CDF time to suggestion](reports/attack-learning-eval/figures/fig4-cdf-time-to-suggestion.png) | CDF latency to first suggestion (also in hero row above) |
+| 5 | ![Queue size](reports/attack-learning-eval/figures/fig5-queue-size.png) | Pending queue depth — both modes peak at **5**; instant fills incrementally |
+| 6 | ![Heatmap](reports/attack-learning-eval/figures/fig6-heatmap.png) | Blocks by rule × tool (also embedded above) |
+| 7 | ![Blocks until suggestion](reports/attack-learning-eval/figures/fig7-blocks-until-suggestion.png) | Blocks until suggestion per group (also embedded above) |
+
+</details>
+
+### Extended attack simulation (sca collateral)
+
+**Synthetic** 180-minute live-proxy escalation ([sca/README.md](sca/README.md)): **349,200** requests, **95.6%** overall detection, Stage 2 **+8.8pp** vs Stage 1, latency **189ms → 111ms** (~58% faster) per [LIVE_PROXY_ATTACK_SUMMARY.md](sca/LIVE_PROXY_ATTACK_SUMMARY.md). **Not** the same dataset as `metrics.json`.
+
+| Detection latency (Stage 1 → 2) | 180-min attack timeline | Two-stage learning architecture |
+|:---:|:---:|:---:|
+| ![Detection latency by attack type](sca/CHART_3_Detection_Latency.png) | ![Attack sequence and detection rate](sca/CHART_5_Attack_Timeline.png) | ![Instant + batch learning stages](sca/CHART_7_AI_Learning_Stages.png) |
+
+*~58% faster detection in Stage 2; model poisoning drops **680ms → 256ms** in the sim narrative.*
+
+*Escalation at ~112 min triggers adapted Stage 2 attacks — detection rate improves along the timeline.*
+
+*Maps proxy blocks → instant rolling stats → suggestion queue → debounced batch review (aligns with production env vars).*
+
+| ROI / incident reduction (synthetic business case) |
+|:---:|
+| ![Cost-benefit and ROI](sca/CHART_10_Cost_Benefit_Analysis.png) |
+
+*Narrative from the sim: **971%** annual ROI, **1.2** month payback — illustrative only; not CI-verified.*
+
+Further reading: [ATTACK_SIMULATION_INDEX.md](sca/ATTACK_SIMULATION_INDEX.md) · [EXECUTIVE_SUMMARY.md](sca/EXECUTIVE_SUMMARY.md) (Vitest **99.8%** pass, **7.0/10** readiness).
+
+<details>
+<summary><strong>All SCA charts (CHART_1–CHART_10)</strong></summary>
+
+| Chart | Figure | Caption |
+|-------|--------|---------|
+| 1 | ![Detection accuracy](sca/CHART_1_Detection_Accuracy.png) | Stage 1 vs 2 detection by attack type (+8.8pp avg) — hero row above |
+| 2 | ![AI confidence evolution](sca/CHART_2_AI_Confidence_Evolution.png) | Confidence vs accuracy over time (~0.88 calibration by end) |
+| 3 | ![Detection latency](sca/CHART_3_Detection_Latency.png) | Latency by attack; Stage 1 → 2 improvement (embedded above) |
+| 4 | ![Request blocking matrix](sca/CHART_4_Request_Blocking_Matrix.png) | Blocked vs allowed per attack — **333,141 / 349,200** blocked in sim |
+| 5 | ![Attack timeline](sca/CHART_5_Attack_Timeline.png) | 180-min sequence (embedded above) |
+| 6 | ![Security metrics dashboard](sca/CHART_6_Security_Metrics_Dashboard.png) | Six-panel heatmap, scatter, distributions |
+| 7 | ![AI learning stages](sca/CHART_7_AI_Learning_Stages.png) | Architecture diagram (embedded above) |
+| 8 | ![Performance under load](sca/CHART_8_Performance_Under_Load.png) | CPU/memory/throughput — **92%** stability under sustained load |
+| 9 | ![Attack surface coverage](sca/CHART_9_Attack_Surface_Coverage.png) | Coverage across eight attack categories (~96% Stage 2 avg) |
+| 10 | ![Cost-benefit](sca/CHART_10_Cost_Benefit_Analysis.png) | ROI narrative (embedded above) |
+
+</details>
+
+```bash
+pnpm eval:attack-learning          # short scenario (~52 min sim)
+pnpm eval:attack-learning:long     # sustained stream (updates long-run metrics)
+pnpm eval:attack-learning:charts   # refresh fig1–fig7 PNGs
+```
+
+---
+
 ## Development
 
 ```bash
@@ -906,6 +1036,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.
