@@ -5,7 +5,11 @@ import { Logger } from '../utils/logger.js';
 import { getRuntimeModelPricing } from './runtime-model-pricing.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
 import { McpClient } from '../utils/mcp-client.js';
-import { estimateServerCostFromTools } from '../utils/cost-estimate.js';
+import {
+  allowsCostEstimates,
+  estimateServerCostFromTools,
+  resolveModelListRates,
+} from '../utils/cost-estimate.js';
 
 /** Daily spend cap from GUARDIAN_DAILY_BUDGET_USD (preferred) or MCP_GUARDIAN_COST_BUDGET. */
 export function getDailyBudgetCapUsd(): number {
@@ -74,62 +78,143 @@ export class CostAuditor {
       try {
         const records = await this.db.getCallRecordsForServer(server.name);
         if (records.length > 0) {
-          const report = await this.buildReportFromRecords(server.name, records);
-          return { ...report, costSource: 'proxy-records', priced: report.estimatedCostUSD > 0 || !report.unpricedCalls };
+          const report = await this.buildReportFromRecords(server.name, records, server);
+          return {
+            ...report,
+            costSource: 'actual',
+            priced: report.estimatedCostUSD > 0 || !report.unpricedCalls,
+          };
         }
       } catch (err: unknown) {
         Logger.warn(`Cost audit: DB read failed for ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    return this.estimateCostFromServer(server);
+    return this.auditWithoutProxyRecords(server);
   }
 
-  /** Live or schema-based cost estimate when no proxy call_records exist. */
-  private async estimateCostFromServer(server: McpServerConfig): Promise<CostReport> {
-    const modelId = resolveModelIdForServer(server.name, server.env);
+  /**
+   * No proxy call_records: resolve real model, optionally probe connectivity,
+   * report list rates only (zero measured cost) unless GUARDIAN_COST_ALLOW_ESTIMATES=true.
+   */
+  private async auditWithoutProxyRecords(server: McpServerConfig): Promise<CostReport> {
+    const modelId = resolveModelIdForServer(server.name, server.env, server.args);
     const provider = detectProvider(modelId);
+    const rates = await resolveModelListRates(modelId);
     const untrackedSse = server.transport === 'sse' || (!!server.url && !server.command);
 
     if (!server.command && !server.url) {
-      return this.emptyReport(server.name, 'No command or URL configured — cannot probe tools.', {
+      return this.emptyReport(server.name, 'No command or URL configured — cannot probe server.', {
         modelId,
         provider,
         costSource: 'none',
+        listInputPerM: rates.inputPerM,
+        listOutputPerM: rates.outputPerM,
       });
     }
 
     const probe = await McpClient.probe(server);
-    if (!probe.success || !probe.tools) {
+    if (!probe.success) {
       const reason = probe.error
         ? `Probe failed: ${probe.error}`
         : probe.authRequired
           ? 'Server requires authentication — configure credentials in server env'
-          : 'Could not list tools from server';
+          : 'Could not reach server';
       const sseNote = untrackedSse
-        ? `${reason}. SSE traffic is untracked at runtime unless routed through \`mcp-guardian proxy\` or wrap.`
+        ? `${reason}. SSE traffic is untracked unless routed through \`mcp-guardian proxy\` or wrap.`
         : reason;
-      return this.emptyReport(server.name, sseNote, { modelId, provider, costSource: 'none' });
+      return this.modelOnlyReport(server.name, modelId, provider, rates, sseNote, probe.tools?.length ?? 0);
     }
 
-    if (probe.tools.length === 0) {
-      return this.emptyReport(server.name, 'No tools exposed by server.', {
-        modelId,
-        provider,
-        costSource: 'none',
-      });
+    const toolCount = probe.tools?.length ?? probe.toolCount ?? 0;
+
+    if (allowsCostEstimates() && probe.tools && probe.tools.length > 0) {
+      return this.estimatedReportFromTools(server, probe.tools, modelId, provider, untrackedSse);
     }
 
-    const estimate = await estimateServerCostFromTools(probe.tools, modelId, this.tokenCounter);
     const noteParts = [
-      `Estimated from ${probe.tools.length} tool definition(s) via tools/list (1 simulated call per tool; token source: estimated)`,
+      `Model: ${modelId} (${provider})`,
+      rates.priced
+        ? `List rates: $${rates.inputPerM}/M input, $${rates.outputPerM}/M output (${rates.pricingSources.join(', ') || rates.pricingModel})`
+        : 'Rates unresolved — set GUARDIAN_MODEL or use Cline/LiteLLM pricing',
+      toolCount > 0
+        ? `${toolCount} tool(s) reachable via tools/list — $0 measured (no proxy traffic)`
+        : 'Server reachable — no tools listed',
+      'Run \`mcp-guardian proxy\` for measured token and USD costs from real tools/call traffic',
+      untrackedSse ? 'SSE IDE traffic is untracked unless clients use Guardian proxy/wrap' : null,
+      allowsCostEstimates()
+        ? null
+        : 'Set GUARDIAN_COST_ALLOW_ESTIMATES=true to enable legacy tools/list simulation',
+    ].filter(Boolean);
+
+    return {
+      serverName: server.name,
+      tokensUsed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUSD: 0,
+      actualCostUSD: 0,
+      pricingModel: rates.pricingModel,
+      pricingSources: rates.pricingSources,
+      toolBreakdown: [],
+      note: noteParts.join('; '),
+      modelId,
+      provider,
+      costSource: 'model-only',
+      priced: rates.priced,
+      listInputPerM: rates.inputPerM,
+      listOutputPerM: rates.outputPerM,
+    };
+  }
+
+  private modelOnlyReport(
+    serverName: string,
+    modelId: string,
+    provider: string,
+    rates: Awaited<ReturnType<typeof resolveModelListRates>>,
+    reason: string,
+    toolCount: number,
+  ): CostReport {
+    const rateNote = rates.priced
+      ? `List rates: $${rates.inputPerM}/M input, $${rates.outputPerM}/M output`
+      : 'Rates unresolved for resolved model';
+    return {
+      serverName,
+      tokensUsed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUSD: 0,
+      actualCostUSD: 0,
+      pricingModel: rates.pricingModel,
+      pricingSources: rates.pricingSources,
+      toolBreakdown: [],
+      note: `${reason}; ${rateNote}; Model: ${modelId} (${provider})${
+        toolCount > 0 ? `; ${toolCount} tool(s) known` : ''
+      }; run proxy for measured cost`,
+      modelId,
+      provider,
+      costSource: 'model-only',
+      priced: rates.priced,
+      listInputPerM: rates.inputPerM,
+      listOutputPerM: rates.outputPerM,
+    };
+  }
+
+  private async estimatedReportFromTools(
+    server: McpServerConfig,
+    tools: NonNullable<Awaited<ReturnType<typeof McpClient.probe>>['tools']>,
+    modelId: string,
+    provider: string,
+    untrackedSse: boolean,
+  ): Promise<CostReport> {
+    const estimate = await estimateServerCostFromTools(tools, modelId, this.tokenCounter);
+    const noteParts = [
+      `LEGACY ESTIMATE (GUARDIAN_COST_ALLOW_ESTIMATES=true): simulated ${tools.length} tool(s) via tools/list`,
       `Model: ${modelId} (${provider})`,
       !estimate.priced
-        ? 'Rates unresolved — set GUARDIAN_MODEL, GUARDIAN_LLM_MODEL, or run with Cline pricing active'
+        ? 'Rates unresolved — set GUARDIAN_MODEL or activate Cline/LiteLLM pricing'
         : null,
-      untrackedSse
-        ? 'SSE: live IDE traffic still untracked unless clients use Guardian proxy/wrap'
-        : null,
+      untrackedSse ? 'SSE: live IDE traffic still untracked unless clients use Guardian proxy/wrap' : null,
     ].filter(Boolean);
 
     return {
@@ -154,7 +239,7 @@ export class CostAuditor {
   private emptyReport(
     serverName: string,
     note: string,
-    meta?: Pick<CostReport, 'modelId' | 'provider' | 'costSource' | 'priced'>,
+    meta?: Pick<CostReport, 'modelId' | 'provider' | 'costSource' | 'priced' | 'listInputPerM' | 'listOutputPerM'>,
   ): CostReport {
     return {
       serverName,
@@ -172,10 +257,16 @@ export class CostAuditor {
       provider: meta?.provider,
       costSource: meta?.costSource ?? 'none',
       priced: meta?.priced ?? false,
+      listInputPerM: meta?.listInputPerM,
+      listOutputPerM: meta?.listOutputPerM,
     };
   }
 
-  private async buildReportFromRecords(serverName: string, records: ProxyCallRecord[]): Promise<CostReport> {
+  private async buildReportFromRecords(
+    serverName: string,
+    records: ProxyCallRecord[],
+    server?: McpServerConfig,
+  ): Promise<CostReport> {
     const pricing = getRuntimeModelPricing();
     const toolMap = new Map<string, { inputTokens: number; outputTokens: number; calls: number; cost: number; models: Set<string> }>();
     const sources = new Set<string>();
@@ -201,8 +292,12 @@ export class CostAuditor {
       existing.calls += 1;
 
       let callCost = r.costUsd ?? 0;
-      if (callCost <= 0 && r.model) {
-        const resolved = await pricing.resolveModelId(r.model);
+      const recordModel =
+        r.model ||
+        resolveModelIdForServer(serverName, server?.env, server?.args);
+
+      if (callCost <= 0 && recordModel) {
+        const resolved = await pricing.resolveModelId(recordModel);
         if (resolved) {
           callCost = pricing.computeCost(r.requestTokens, r.responseTokens, resolved).costUsd;
           if (callCost > 0) sources.add(resolved.source);
@@ -218,9 +313,9 @@ export class CostAuditor {
         unpricedCalls++;
       }
 
-      if (r.model) {
-        existing.models.add(r.model);
-        primaryModel = primaryModel || r.model;
+      if (recordModel) {
+        existing.models.add(recordModel);
+        primaryModel = primaryModel || recordModel;
       }
       toolMap.set(r.toolName, existing);
       totalInput += r.requestTokens;
@@ -239,7 +334,8 @@ export class CostAuditor {
       });
     }
 
-    const modelId = primaryModel || resolveModelId();
+    const modelId =
+      primaryModel || resolveModelIdForServer(serverName, server?.env, server?.args);
 
     return {
       serverName,
@@ -255,11 +351,12 @@ export class CostAuditor {
       modelId,
       provider: detectProvider(modelId),
       note: [
+        'Measured from proxy call_records',
         unpricedCalls > 0
-          ? `${unpricedCalls} call(s) could not be priced — ensure Cline is active or set GUARDIAN_MODEL`
+          ? `${unpricedCalls} call(s) could not be priced — set GUARDIAN_MODEL or use live pricing`
           : null,
         apiSourcedCalls > 0 || estimatedCalls > 0
-          ? `Token sources: ${apiSourcedCalls} API, ${estimatedCalls} estimated (USD only)`
+          ? `Token sources: ${apiSourcedCalls} API, ${estimatedCalls} estimated`
           : null,
       ]
         .filter(Boolean)

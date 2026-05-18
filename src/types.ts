@@ -75,10 +75,19 @@ export interface CostReport {
   modelId?: string;
   /** Provider inferred from model id (openai, anthropic, google, unknown) */
   provider?: string;
-  /** proxy-records = history DB; estimated = tools/list simulation; none = empty */
-  costSource?: 'proxy-records' | 'estimated' | 'none';
+  /**
+   * actual — measured tokens/cost from proxy call_records;
+   * model-only — resolved model + list rates, zero recorded traffic;
+   * estimated — simulated tools/list (GUARDIAN_COST_ALLOW_ESTIMATES=true only);
+   * none — no model or connectivity
+   */
+  costSource?: 'actual' | 'model-only' | 'estimated' | 'none';
   /** False when model rates could not be resolved */
   priced?: boolean;
+  /** USD per 1M input tokens (model-only / pricing preview) */
+  listInputPerM?: number;
+  /** USD per 1M output tokens (model-only / pricing preview) */
+  listOutputPerM?: number;
 }
 
 export interface ToolCost {

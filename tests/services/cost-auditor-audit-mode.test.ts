@@ -1,17 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { CostAuditor } from '../../src/services/cost-auditor.js';
 import { HistoryDatabase } from '../../src/database/history-db.js';
 import { PricingClient } from '../../src/clients/pricing-client.js';
 import { McpClient } from '../../src/utils/mcp-client.js';
-import { estimateServerCostFromTools } from '../../src/utils/cost-estimate.js';
+import { estimateServerCostFromTools, allowsCostEstimates } from '../../src/utils/cost-estimate.js';
 import { getDailyBudgetCapUsd } from '../../src/services/cost-auditor.js';
 
-describe('CostAuditor audit-mode estimation', () => {
+describe('CostAuditor audit-mode (no fabricated usage)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.GUARDIAN_COST_ALLOW_ESTIMATES;
   });
 
-  it('produces non-empty cost report from mocked tools/list', async () => {
+  it('reports model-only with zero tokens when no proxy records (default)', async () => {
     vi.spyOn(McpClient, 'probe').mockResolvedValue({
       success: true,
       toolCount: 2,
@@ -42,17 +43,47 @@ describe('CostAuditor audit-mode estimation', () => {
       env: { GUARDIAN_MODEL: 'gpt-4o-mini' },
     });
 
-    expect(report.costSource).toBe('estimated');
-    expect(report.tokensUsed).toBeGreaterThan(0);
-    expect(report.toolBreakdown).toHaveLength(2);
+    expect(report.costSource).toBe('model-only');
+    expect(report.tokensUsed).toBe(0);
+    expect(report.estimatedCostUSD).toBe(0);
+    expect(report.toolBreakdown).toHaveLength(0);
     expect(report.modelId).toBe('gpt-4o-mini');
     expect(report.provider).toBe('openai');
-    expect(report.note).toContain('tools/list');
+    expect(report.note).toContain('no proxy traffic');
+    expect(report.note).toContain('mcp-guardian proxy');
     auditor.dispose();
     db.close();
   });
 
-  it('prefers proxy call_records over live estimation', async () => {
+  it('uses legacy simulation only when GUARDIAN_COST_ALLOW_ESTIMATES=true', async () => {
+    process.env.GUARDIAN_COST_ALLOW_ESTIMATES = 'true';
+    expect(allowsCostEstimates()).toBe(true);
+
+    vi.spyOn(McpClient, 'probe').mockResolvedValue({
+      success: true,
+      toolCount: 1,
+      tools: [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }],
+      authRequired: false,
+      latencyMs: 1,
+    });
+
+    const db = new HistoryDatabase(':memory:');
+    const auditor = new CostAuditor(new PricingClient(), db);
+    const report = await auditor.auditServer({
+      name: 'fixture',
+      transport: 'stdio',
+      command: 'echo',
+      env: { GUARDIAN_MODEL: 'gpt-4o-mini' },
+    });
+
+    expect(report.costSource).toBe('estimated');
+    expect(report.tokensUsed).toBeGreaterThan(0);
+    expect(report.toolBreakdown.length).toBeGreaterThan(0);
+    auditor.dispose();
+    db.close();
+  });
+
+  it('prefers proxy call_records over model-only audit', async () => {
     vi.spyOn(McpClient, 'probe').mockResolvedValue({
       success: true,
       tools: [{ name: 'should-not-use', description: 'x' }],
@@ -77,7 +108,7 @@ describe('CostAuditor audit-mode estimation', () => {
 
     const auditor = new CostAuditor(new PricingClient(), db);
     const report = await auditor.auditServer({ name: 'fixture', transport: 'stdio', command: 'echo' });
-    expect(report.costSource).toBe('proxy-records');
+    expect(report.costSource).toBe('actual');
     expect(report.tokensUsed).toBe(100);
     expect(report.toolBreakdown[0].toolName).toBe('echo');
     expect(McpClient.probe).not.toHaveBeenCalled();
@@ -85,7 +116,7 @@ describe('CostAuditor audit-mode estimation', () => {
     db.close();
   });
 
-  it('estimateServerCostFromTools returns per-tool breakdown', async () => {
+  it('estimateServerCostFromTools still available for opt-in path', async () => {
     const est = await estimateServerCostFromTools(
       [{ name: 'ping', description: 'Ping', inputSchema: { type: 'object', properties: {} } }],
       'gpt-4o-mini',

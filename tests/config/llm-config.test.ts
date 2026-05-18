@@ -4,6 +4,7 @@ import {
   resetLlmConfigForTests,
   resolveModelId,
   resolveModelIdForServer,
+  extractModelFromServerArgs,
 } from '../../src/config/llm-config.js';
 
 describe('llm-config', () => {
@@ -78,5 +79,20 @@ describe('llm-config', () => {
     delete process.env.GUARDIAN_MODEL_MY_SERVER;
     process.env.GUARDIAN_MODEL_MY_SERVER = 'gpt-4o';
     expect(resolveModelIdForServer('my-server')).toBe('gpt-4o');
+  });
+
+  it('resolveModelIdForServer reads --model from server args', () => {
+    expect(resolveModelIdForServer('srv', {}, ['run', '--model', 'claude-sonnet-4'])).toBe(
+      'claude-sonnet-4',
+    );
+    expect(extractModelFromServerArgs(['--model=gpt-4o'])).toBe('gpt-4o');
+  });
+
+  it('resolveModelId reads CURSOR_MODEL from env', () => {
+    for (const k of keys) delete process.env[k];
+    process.env.CURSOR_MODEL = 'cursor-fast';
+    resetLlmConfigForTests();
+    expect(resolveModelId()).toBe('cursor-fast');
+    delete process.env.CURSOR_MODEL;
   });
 });

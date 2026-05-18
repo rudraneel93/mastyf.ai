@@ -1,6 +1,7 @@
 import type { IDatabase } from '../database/database-interface.js';
 import type { ProxyCallRecord } from '../types.js';
 import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
+import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from './metrics.js';
 import { broadcastDashboardEvent } from './dashboard-events.js';
 import { withSqliteBusyRetry } from './sqlite-busy-retry.js';
@@ -8,14 +9,33 @@ import { withSqliteBusyRetry } from './sqlite-busy-retry.js';
 export async function enrichCallRecord(
   record: ProxyCallRecord,
   msg?: unknown,
+  serverEnv?: Record<string, string>,
+  serverArgs?: string[],
 ): Promise<ProxyCallRecord> {
   const pricing = getRuntimeModelPricing();
   const cost = await pricing.computeCostForCall(record.requestTokens, record.responseTokens, msg);
+  const fallbackModel = resolveModelIdForServer(record.serverName, serverEnv, serverArgs);
+  const model = cost.model || fallbackModel;
+
+  let costUsd = cost.priced ? cost.costUsd : 0;
+  let pricingSource = cost.source;
+
+  if (costUsd <= 0 && model && (record.requestTokens + record.responseTokens) > 0) {
+    const resolved = await pricing.resolveModelId(model);
+    if (resolved) {
+      const recomputed = pricing.computeCost(record.requestTokens, record.responseTokens, resolved);
+      if (recomputed.priced) {
+        costUsd = recomputed.costUsd;
+        pricingSource = recomputed.source;
+      }
+    }
+  }
+
   return {
     ...record,
-    model: cost.model,
-    costUsd: cost.priced ? cost.costUsd : 0,
-    pricingSource: cost.source,
+    model,
+    costUsd,
+    pricingSource,
   };
 }
 
@@ -23,8 +43,10 @@ export async function persistCallRecord(
   db: IDatabase,
   record: ProxyCallRecord,
   msg?: unknown,
+  serverEnv?: Record<string, string>,
+  serverArgs?: string[],
 ): Promise<ProxyCallRecord> {
-  const enriched = await enrichCallRecord(record, msg);
+  const enriched = await enrichCallRecord(record, msg, serverEnv, serverArgs);
   await withSqliteBusyRetry(() => db.addCallRecord(enriched));
   broadcastDashboardEvent({
     type: enriched.blocked ? 'policy-block' : 'audit:decision',

@@ -36,12 +36,13 @@ describe('Integration: MCP Guardian pipeline tests', () => {
     expect(result.cves).toBeDefined();
   });
 
-  it('should estimate cost from tools/list when no proxy call_records', async () => {
+  it('should report model-only cost when no proxy call_records', async () => {
     const result = await costAuditor.auditServer(config);
-    expect(result.tokensUsed).toBeGreaterThan(0);
-    expect(result.costSource).toBe('estimated');
-    expect(result.toolBreakdown.length).toBe(2);
-    expect(result.note).toContain('tools/list');
+    expect(result.tokensUsed).toBe(0);
+    expect(result.estimatedCostUSD).toBe(0);
+    expect(result.costSource).toBe('model-only');
+    expect(result.toolBreakdown.length).toBe(0);
+    expect(result.note).toMatch(/proxy|no proxy traffic/i);
   });
 
   it('should perform health check against real stdio process', async () => {

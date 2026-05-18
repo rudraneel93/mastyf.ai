@@ -2,6 +2,18 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.11] - 2026-05-18
+
+### Changed
+- **Cost auditor — actual vs estimated** — Audit/report without proxy `call_records` no longer fabricates per-tool token volumes from `tools/list`. Reports **`model-only`**: resolved model, official list rates (`$`/M input/output), **$0 measured** until traffic goes through `mcp-guardian proxy`. Measured usage uses **`costSource: actual`** from proxy records.
+- **`costSource` values** — `actual` (proxy records), `model-only` (rates only), `estimated` (legacy simulation, opt-in), `none`.
+- **Model discovery** — `resolveModelIdForServer()` reads server `env`, `--model` in `args`, `GUARDIAN_MODEL_<SERVER>`, `CURSOR_MODEL` / `CLINE_MODEL`, and Cline `globalState.json` act-mode model; documented chain in `src/config/llm-config.ts`.
+- **Proxy call records** — Persist `model` on each record via `resolveModelIdForServer` when message metadata has no model.
+
+### Added
+- **`GUARDIAN_COST_ALLOW_ESTIMATES=true`** — Opt-in to previous tools/list simulation (`costSource: estimated`).
+- **`resolveModelListRates()`** — List-price preview without simulated call volume.
+
 ## [2.7.10] - 2026-05-18
 
 ### Fixed

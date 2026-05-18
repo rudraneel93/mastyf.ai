@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+
 export type LlmProvider = 'anthropic' | 'openai' | 'ollama';
 
 export interface LlmConfig {
@@ -63,33 +67,118 @@ export function resetLlmConfigForTests(): void {
   cached = null;
 }
 
-/** Resolve model id from call payload, legacy env vars, or centralized config. */
-export function resolveModelId(payloadModel?: string | null): string {
-  return (
-    payloadModel ||
-    process.env.GUARDIAN_MODEL ||
-    process.env.ANTHROPIC_MODEL ||
-    process.env.OPENAI_MODEL ||
-    process.env.MCP_PRICING_MODEL ||
-    getLlmConfig().model
-  );
+const GLOBAL_MODEL_ENV_KEYS = [
+  'GUARDIAN_MODEL',
+  'GUARDIAN_LLM_MODEL',
+  'ANTHROPIC_MODEL',
+  'OPENAI_MODEL',
+  'MCP_PRICING_MODEL',
+  'MCP_MODEL',
+  'MODEL',
+  'CURSOR_MODEL',
+  'CLINE_MODEL',
+] as const;
+
+const SERVER_MODEL_ENV_KEYS = [
+  'GUARDIAN_MODEL',
+  'GUARDIAN_LLM_MODEL',
+  'ANTHROPIC_MODEL',
+  'OPENAI_MODEL',
+  'MCP_MODEL',
+  'MODEL',
+] as const;
+
+function firstNonEmpty(...values: (string | undefined | null)[]): string | undefined {
+  for (const v of values) {
+    const t = v?.trim();
+    if (t) return t;
+  }
+  return undefined;
 }
 
-/** Per-server model: server env → GUARDIAN_MODEL_<SERVER> → global resolveModelId(). */
+/** Read act-mode model id from Cline globalState (IDE), when present. */
+function readClineActModeModelId(): string | undefined {
+  const statePath = join(homedir(), '.cline', 'data', 'globalState.json');
+  if (!existsSync(statePath)) return undefined;
+  try {
+    const state = JSON.parse(readFileSync(statePath, 'utf-8')) as Record<string, unknown>;
+    return firstNonEmpty(
+      String(state.actModeClineModelId || ''),
+      String(state.actModeAnthropicModelId || ''),
+      String(state.actModeOpenAiModelId || ''),
+      String(state.actModeGeminiModelId || ''),
+      String(state.actModeGroqModelId || ''),
+      String(state.actModeOpenRouterModelId || ''),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+/** Parse `--model`, `--model=id`, or trailing model flags from MCP server args. */
+export function extractModelFromServerArgs(args?: string[]): string | undefined {
+  if (!args?.length) return undefined;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--model' || a === '-m') {
+      const next = args[i + 1]?.trim();
+      if (next) return next;
+    }
+    if (a.startsWith('--model=')) {
+      const v = a.slice('--model='.length).trim();
+      if (v) return v;
+    }
+    const modelEq = a.match(/(?:^|,)model=([^,]+)/i);
+    if (modelEq?.[1]?.trim()) return modelEq[1].trim();
+  }
+  return undefined;
+}
+
+/**
+ * Model discovery chain (first match wins):
+ *
+ * **Per-server (audit / proxy record time)**
+ * 1. MCP server `env` — GUARDIAN_MODEL, GUARDIAN_LLM_MODEL, ANTHROPIC_MODEL, OPENAI_MODEL, MCP_MODEL, MODEL
+ * 2. MCP server `args` — `--model`, `-m`, `--model=id`
+ * 3. Process env `GUARDIAN_MODEL_<NORMALIZED_SERVER_NAME>`
+ *
+ * **Global / IDE**
+ * 4. `resolveModelId(payloadModel)` — message metadata, then GUARDIAN_MODEL, ANTHROPIC_MODEL, OPENAI_MODEL,
+ *    MCP_PRICING_MODEL, CURSOR_MODEL, CLINE_MODEL, GUARDIAN_LLM_MODEL, `getLlmConfig().model`
+ * 5. Cline `~/.cline/data/globalState.json` act-mode model ids (when no env model)
+ */
+export function resolveModelId(payloadModel?: string | null): string {
+  const fromPayload = payloadModel?.trim();
+  if (fromPayload) return fromPayload;
+
+  for (const key of GLOBAL_MODEL_ENV_KEYS) {
+    const v = process.env[key]?.trim();
+    if (v) return v;
+  }
+
+  const cline = readClineActModeModelId();
+  if (cline) return cline;
+
+  return getLlmConfig().model;
+}
+
+/** Per-server model: server env → args → GUARDIAN_MODEL_<SERVER> → global resolveModelId(). */
 export function resolveModelIdForServer(
   serverName: string,
   serverEnv?: Record<string, string>,
+  serverArgs?: string[],
 ): string {
-  const fromServerEnv =
-    serverEnv?.GUARDIAN_MODEL ||
-    serverEnv?.GUARDIAN_LLM_MODEL ||
-    serverEnv?.ANTHROPIC_MODEL ||
-    serverEnv?.OPENAI_MODEL;
-  if (fromServerEnv?.trim()) return fromServerEnv.trim();
+  for (const key of SERVER_MODEL_ENV_KEYS) {
+    const v = serverEnv?.[key]?.trim();
+    if (v) return v;
+  }
+
+  const fromArgs = extractModelFromServerArgs(serverArgs);
+  if (fromArgs) return fromArgs;
 
   const normalized = serverName.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-  const perServer = process.env[`GUARDIAN_MODEL_${normalized}`];
-  if (perServer?.trim()) return perServer.trim();
+  const perServer = process.env[`GUARDIAN_MODEL_${normalized}`]?.trim();
+  if (perServer) return perServer;
 
   return resolveModelId();
 }

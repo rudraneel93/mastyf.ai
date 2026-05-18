@@ -28,7 +28,7 @@ import { persistCallRecord } from '../utils/call-record-cost.js';
 import { onPolicyBlock, fingerprintArgs, ingestPolicyDecision } from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
 import type { HistoryDatabase } from '../database/history-db.js';
-import { resolveModelId } from '../config/llm-config.js';
+import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { startMemoryMonitor } from '../utils/memory-monitor.js';
 
@@ -224,7 +224,7 @@ export class McpProxyServer {
           const reqMsg = {
             params: { name: this.requestToolName, arguments: this.requestArguments },
           };
-          const model = resolveModelId(this.requestModel);
+          const model = resolveModelId(this.requestModel) || resolveModelIdForServer(this.serverName, this.spawnEnv, this.spawnArgs);
           const counts = this.tokenCounter.countProxyCall({
             requestText: this.requestRaw || JSON.stringify(reqMsg),
             responseText: line,
@@ -241,8 +241,9 @@ export class McpProxyServer {
             durationMs: proxyLatencyMs,
             timestamp: new Date().toISOString(),
             tokenSource: counts.tokenSource,
+            model,
           };
-          persistCallRecord(this.db, record, reqMsg).catch((err) =>
+          persistCallRecord(this.db, record, reqMsg, this.spawnEnv, this.spawnArgs).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
           this.circuitBreaker.recordSuccess();
@@ -325,7 +326,13 @@ export class McpProxyServer {
                 durationMs: Date.now() - this.requestStartTime,
                 timestamp: new Date().toISOString(),
               };
-              persistCallRecord(this.db, { ...blockedRecord, blocked: true, blockRule: 'response-inspection' }).catch(() => {});
+              persistCallRecord(
+                this.db,
+                { ...blockedRecord, blocked: true, blockRule: 'response-inspection' },
+                undefined,
+                this.spawnEnv,
+                this.spawnArgs,
+              ).catch(() => {});
               Metrics.blockedRequestsTotal.inc({
                 server_name: this.serverName,
                 block_reason: hasCritical ? 'response_injection_critical' : 'response_injection_high',
@@ -438,7 +445,7 @@ export class McpProxyServer {
       blockRule,
       blockReason,
     };
-    persistCallRecord(this.db, record).catch((err) =>
+    persistCallRecord(this.db, record, undefined, this.spawnEnv, this.spawnArgs).catch((err) =>
       Logger.debug(`Proxy: failed to store denied call record: ${err?.message}`)
     );
     onPolicyBlock(

@@ -47,10 +47,24 @@ export class ReportGenerator {
   formatCostReports(reports: CostReport[]): string {
     let out = chalk.bold.underline('\n💰 Cost Audit\n');
     for (const r of reports) {
-      const sourceLabel = r.costSource === 'estimated' ? 'estimated' : r.costSource === 'proxy-records' ? 'proxy' : 'n/a';
-      out += `\n${chalk.bold(r.serverName)}: ${chalk.yellow(String(r.tokensUsed))} tokens, ${chalk.green(`$${r.estimatedCostUSD.toFixed(4)}`)} (${r.pricingModel}, ${sourceLabel})\n`;
+      const sourceLabel =
+        r.costSource === 'actual'
+          ? 'measured'
+          : r.costSource === 'model-only'
+            ? 'model rates'
+            : r.costSource === 'estimated'
+              ? 'simulated'
+              : 'n/a';
+      const costLabel =
+        r.costSource === 'model-only'
+          ? '$0.0000 (no proxy traffic)'
+          : `$${r.estimatedCostUSD.toFixed(4)}`;
+      out += `\n${chalk.bold(r.serverName)}: ${chalk.yellow(String(r.tokensUsed))} tokens, ${chalk.green(costLabel)} (${r.pricingModel}, ${sourceLabel})\n`;
       out += `  Input: ${r.inputTokens} tokens, Output: ${r.outputTokens} tokens`;
       if (r.modelId) out += ` | Model: ${r.modelId}`;
+      if (r.costSource === 'model-only' && r.listInputPerM != null && r.listOutputPerM != null) {
+        out += ` | List: $${r.listInputPerM}/M in, $${r.listOutputPerM}/M out`;
+      }
       out += '\n';
       for (const t of r.toolBreakdown) {
         out += `  ${chalk.dim(t.toolName)}: ${t.tokens} tokens, ${t.calls} calls, $${t.cost.toFixed(4)}\n`;
@@ -58,7 +72,11 @@ export class ReportGenerator {
       if (r.note) out += `  ${chalk.dim('ℹ️ ' + r.note)}\n`;
     }
     const grandTotal = reports.reduce((sum, r) => sum + r.estimatedCostUSD, 0);
-    out += `\n${chalk.bold(`Total estimated cost: $${grandTotal.toFixed(4)}`)}\n`;
+    const allModelOnly = reports.length > 0 && reports.every((r) => r.costSource === 'model-only');
+    const totalLine = allModelOnly
+      ? `Total measured cost: $${grandTotal.toFixed(4)} (model rates only — run proxy for usage)`
+      : `Total cost: $${grandTotal.toFixed(4)}`;
+    out += `\n${chalk.bold(totalLine)}\n`;
     return out;
   }
 

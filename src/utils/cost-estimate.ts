@@ -3,10 +3,10 @@ import { TokenCounter, detectProvider } from './token-counter.js';
 import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
 import type { ToolCost } from '../types.js';
 
-/** Default simulated tool result size when no live tools/call is made. */
+/** Default simulated tool result size when opt-in estimates run. */
 const DEFAULT_RESPONSE_CHARS = 512;
 
-/** Agent context overhead (system + tool-selection framing) added once per server audit. */
+/** Agent context overhead added once per server when simulating calls (opt-in only). */
 const CONTEXT_OVERHEAD_CHARS = 800;
 
 export interface ToolCostEstimate {
@@ -29,6 +29,44 @@ export interface ServerCostEstimate {
   modelId: string;
   provider: string;
   unpricedTools: number;
+}
+
+export interface ModelListRates {
+  modelId: string;
+  provider: string;
+  pricingModel: string;
+  inputPerM: number;
+  outputPerM: number;
+  inputPer1k: number;
+  outputPer1k: number;
+  priced: boolean;
+  pricingSources: string[];
+}
+
+/** Opt-in simulated per-tool costs (tools/list footprint). Off by default since v2.7.11. */
+export function allowsCostEstimates(): boolean {
+  return process.env.GUARDIAN_COST_ALLOW_ESTIMATES === 'true';
+}
+
+/** Official list rates for a resolved model — no simulated call volume. */
+export async function resolveModelListRates(modelId: string): Promise<ModelListRates> {
+  const pricing = getRuntimeModelPricing();
+  const resolved = await pricing.resolveModelId(modelId);
+  const provider = detectProvider(modelId);
+  const pricingModel = resolved?.displayName || resolved?.modelId || modelId;
+  const sources = resolved ? [resolved.source] : [];
+
+  return {
+    modelId,
+    provider,
+    pricingModel,
+    inputPerM: resolved?.inputPerM ?? 0,
+    outputPerM: resolved?.outputPerM ?? 0,
+    inputPer1k: resolved ? resolved.inputPerM / 1000 : 0,
+    outputPer1k: resolved ? resolved.outputPerM / 1000 : 0,
+    priced: resolved !== null,
+    pricingSources: sources,
+  };
 }
 
 /** Build minimal JSON arguments from JSON Schema (required fields only). */
@@ -84,7 +122,8 @@ function simulatedCallTexts(
 }
 
 /**
- * Estimate per-tool MCP cost from tool definitions (audit/scan modes without proxy history).
+ * Estimate per-tool MCP cost from tool definitions.
+ * Requires GUARDIAN_COST_ALLOW_ESTIMATES=true — not used by default audit path.
  */
 export async function estimateServerCostFromTools(
   tools: McpToolDefinition[],
