@@ -212,7 +212,11 @@ export async function startDashboardServer(
     return req.socket?.remoteAddress || 'unknown';
   }
 
-  const loginRateLimiter: LRUCache<string, number> = new LRUCache({ max: 500, ttl: 60000 });
+  const loginRateLimiter: LRUCache<string, number> = new LRUCache({
+    max: 500,
+    ttl: 60000,
+    updateAgeOnGet: false,
+  });
 
   const server = createServer(async (req, res) => {
     const url = (req.url || '/').split('?')[0] || '/';

@@ -37,4 +37,22 @@ describe('claimDpopJtiOnRedis', () => {
     );
     expect(results.filter(Boolean)).toHaveLength(1);
   });
+
+  it('allows only one winner per jti across 100 concurrent claims', async () => {
+    const redis = new MockRedis();
+    const prefix = 'test:dpop:';
+    const results = await Promise.all(
+      Array.from({ length: 100 }, () => claimDpopJtiOnRedis(redis, prefix, 'hot-jti', 3600)),
+    );
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('tracks distinct jtis independently', async () => {
+    const redis = new MockRedis();
+    const prefix = 'test:dpop:';
+    const claims = await Promise.all(
+      Array.from({ length: 50 }, (_, i) => claimDpopJtiOnRedis(redis, prefix, `jti-${i}`, 3600)),
+    );
+    expect(claims.filter(Boolean)).toHaveLength(50);
+  });
 });

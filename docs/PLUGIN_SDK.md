@@ -56,7 +56,20 @@ Plugins run **after** built-in `scanForSecrets()` in the secret scanner pipeline
 
 ## Publishing
 
-1. Depend on `@mcp-guardian/plugin-sdk@^3.0.0`.
+**npm:** `@mcp-guardian/plugin-sdk` (from `packages/plugin-sdk`). Publish from the monorepo root:
+
+```bash
+pnpm --filter @mcp-guardian/plugin-sdk run build
+pnpm publish --filter @mcp-guardian/plugin-sdk --access public
+```
+
+**Monorepo / fork:** depend via workspace without publishing:
+
+```json
+"@mcp-guardian/plugin-sdk": "workspace:*"
+```
+
+1. Depend on `@mcp-guardian/plugin-sdk@^3.0.0` (npm) or `workspace:*` (monorepo).
 2. Compile plugin to `.js` (Node 18+).
 3. Document required env vars in your README.
 4. Test with `GUARDIAN_PLUGIN_PATH` in staging before production.

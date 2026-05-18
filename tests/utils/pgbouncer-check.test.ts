@@ -35,6 +35,19 @@ describe('pgbouncer-check', () => {
     expect(result.action).toBe('error');
   });
 
+  it('errors on direct postgres when strict mode and replicas > 50', () => {
+    const result = evaluatePgBouncerStartup({
+      dbType: 'postgres',
+      databaseUrl: 'postgresql://u:p@postgres:5432/guardian',
+      replicaCount: 87,
+      inK8s: true,
+      redisConfigured: true,
+      strictMode: true,
+      requirePgBouncer: false,
+    });
+    expect(result.action).toBe('error');
+  });
+
   it('warns on direct postgres in k8s multi-replica', () => {
     const result = evaluatePgBouncerStartup({
       dbType: 'postgres',

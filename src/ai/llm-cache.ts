@@ -75,7 +75,11 @@ export class LlmCache {
     this.ttlMs = ttlSec() * 1000;
     this.region = getGuardianRegion();
     this.redisPrefix = `mcp_guardian:llm_cache:${this.region}:`;
-    this.lru = new LRUCache<string, string>({ max: LRU_MAX, ttl: this.ttlMs });
+    this.lru = new LRUCache<string, string>({
+      max: LRU_MAX,
+      ttl: this.ttlMs,
+      updateAgeOnGet: false,
+    });
 
     if (this.enabled && isRedisConfigured()) {
       this.redis = createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });

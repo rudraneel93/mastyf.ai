@@ -53,12 +53,14 @@ Redis-backed rate limits and session locks assume **<80ms** RTT to Redis. Chaos 
 |----------|---------|-------------|
 | `GUARDIAN_REQUIRE_PGBOUNCER` | `false` | Exit if `DATABASE_URL` is not pooler-shaped (`pgbouncer` host or port `6432`) |
 | `REPLICA_COUNT` | `1` | Set by Helm; used with K8s/Redis hints for pooler warnings |
+| `GUARDIAN_STRICT_MODE` | `false` | With `REPLICA_COUNT` > 50 and direct `:5432`, fail startup (PgBouncer required) |
 
 ## Helm
 
 ```yaml
 pgbouncer:
   enabled: true   # required for production multi-replica Postgres
+  requireGuardianEnforcement: true   # sets GUARDIAN_REQUIRE_PGBOUNCER when database.type=postgres
 
 postgres:
   maxConnections: 300

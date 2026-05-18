@@ -12,6 +12,11 @@ describe('CostAuditor audit-mode (no fabricated usage)', () => {
     delete process.env.GUARDIAN_COST_ALLOW_ESTIMATES;
   });
 
+  it('disallows cost estimates by default', () => {
+    delete process.env.GUARDIAN_COST_ALLOW_ESTIMATES;
+    expect(allowsCostEstimates()).toBe(false);
+  });
+
   it('reports model-only with zero tokens when no proxy records (default)', async () => {
     vi.spyOn(McpClient, 'probe').mockResolvedValue({
       success: true,

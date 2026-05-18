@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { LRUCache } from 'lru-cache';
 import { AgentIdentity } from './auth-types.js';
 import { Logger } from '../utils/logger.js';
 
@@ -8,7 +9,7 @@ import { Logger } from '../utils/logger.js';
  * Subsequent calls must include this session token, not the raw JWT.
  * This prevents replay of captured JWTs within their expiry window.
  *
- * In production, replace with Redis for multi-replica HA.
+ * In production multi-replica, use RedisSessionCache (REDIS_URL).
  */
 
 export interface SessionEntry {
@@ -19,10 +20,12 @@ export interface SessionEntry {
   expiresAt: number;
 }
 
+const SESSION_CACHE_MAX = 10_000;
+const NONCE_CACHE_MAX = 50_000;
+
 export class SessionCache {
-  private sessions: Map<string, SessionEntry> = new Map();
-  /** nonce → timestamp (ms) for TTL-based expiry */
-  private usedNonces: Map<string, number> = new Map();
+  private sessions: LRUCache<string, SessionEntry>;
+  private usedNonces: LRUCache<string, number>;
   protected readonly sessionTtlMs: number;
   protected readonly nonceTtlMs: number;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
@@ -30,8 +33,21 @@ export class SessionCache {
   constructor(sessionTtlMs: number = 5 * 60 * 1000, nonceTtlMs: number = 10 * 60 * 1000) {
     this.sessionTtlMs = sessionTtlMs;
     this.nonceTtlMs = nonceTtlMs;
-    // Cleanup expired entries every 60s
-    this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+    this.sessions = new LRUCache<string, SessionEntry>({
+      max: SESSION_CACHE_MAX,
+      ttl: sessionTtlMs,
+      updateAgeOnGet: false,
+    });
+    this.usedNonces = new LRUCache<string, number>({
+      max: NONCE_CACHE_MAX,
+      ttl: nonceTtlMs,
+      updateAgeOnGet: false,
+    });
+    // Periodic sweep for entries past custom expiresAt (LRU ttl is a backstop)
+    this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
   }
 
   /** Dispose of the cleanup timer and clear all state */
@@ -47,14 +63,10 @@ export class SessionCache {
   /**
    * Create a session after successful JWT validation.
    * Returns a session token the client must use for subsequent calls.
-   * The JWT cannot be replayed because:
-   * 1. We track used nonces (jti or sub+iat)
-   * 2. We issue a session token with a short (5min) TTL
    */
   createSession(identity: AgentIdentity, jwtNonce?: string): SessionEntry {
     const nonce = jwtNonce || `${identity.sub}:${Date.now()}:${randomUUID()}`;
 
-    // Prevent nonce replay — reject immediately
     if (this.usedNonces.has(nonce)) {
       Logger.warn(`[session-cache] Replay detected: nonce ${nonce}`);
       throw new Error('Nonce replay detected');
@@ -89,33 +101,21 @@ export class SessionCache {
     return entry.identity;
   }
 
-  /**
-   * Check if a JWT nonce has been used (replay detection).
-   */
+  /** Check if a JWT nonce has been used (replay detection). */
   isNonceUsed(nonce: string): boolean {
     return this.usedNonces.has(nonce);
   }
 
-  /**
-   * Revoke a session (e.g., on logout or suspicious activity).
-   */
+  /** Revoke a session (e.g., on logout or suspicious activity). */
   revokeSession(token: string): void {
     this.sessions.delete(token);
   }
 
   protected cleanup(): void {
     const now = Date.now();
-    // Clean expired sessions
     for (const [token, entry] of this.sessions) {
       if (now > entry.expiresAt) {
         this.sessions.delete(token);
-      }
-    }
-    // Clean expired nonces based on nonceTtlMs
-    const nonceExpiry = now - this.nonceTtlMs;
-    for (const [nonce, timestamp] of this.usedNonces) {
-      if (timestamp < nonceExpiry) {
-        this.usedNonces.delete(nonce);
       }
     }
   }

@@ -2,6 +2,23 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.8.0] - 2026-05-18
+
+### Production hardening bundle
+
+Resolves and documents all production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md).
+
+### Fixed
+- **LRU memory leaks** — `updateAgeOnGet: false` on `llm-cache`, CVE cache, dashboard login limiter, and session/nonce caches (LRU max 10k / 50k with periodic sweep).
+- **Session cache** — Replaced unbounded `Map` with bounded LRU for long IDE sessions.
+
+### Added
+- **Policy engine memory test** — `tests/policy/policy-engine-memory.test.ts` (120k unique clients, cache stays at max).
+- **PgBouncer strict-mode test** — Fail startup when `GUARDIAN_STRICT_MODE` + `REPLICA_COUNT` > 50 and direct `:5432`.
+- **DPoP concurrent claims** — 100-way race + 50 distinct jtis in `tests/auth/dpop-redis-lock.test.ts`.
+- **Cost audit default** — Explicit test that `allowsCostEstimates()` is false without `GUARDIAN_COST_ALLOW_ESTIMATES`.
+- **`@mcp-guardian/plugin-sdk`** — `publishConfig`, `prepublishOnly` build; monorepo `workspace:*` documented in [docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md).
+
 ## [2.7.11] - 2026-05-18
 
 ### Changed

@@ -6,9 +6,12 @@ Sender-constrained OAuth tokens require a fresh DPoP proof JWT on each request. 
 
 ### Enable enforcement
 
+**Multi-replica:** `GUARDIAN_REQUIRE_DPOP=true` without `REDIS_URL` only deduplicates `jti` per pod (replay possible across replicas). Always pair enforcement with Redis (or Sentinel/Cluster).
+
 ```bash
 export GUARDIAN_REQUIRE_DPOP=true
 export REDIS_URL=redis://redis:6379   # required for multi-replica jti dedup
+export GUARDIAN_STRICT_MODE=true      # optional: exit if Redis missing in K8s / REPLICA_COUNT>1
 ```
 
 Clients must send:
