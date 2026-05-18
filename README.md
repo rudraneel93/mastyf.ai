@@ -14,11 +14,11 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+**Version 2.8.1** adds **per-block instant attack learning** on proxy policy blocks — synchronous rolling stats and attack-pattern suggestions in a sliding window (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`); optional rate-limited LLM classifier on critical blocks (`GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** (`updateAgeOnGet: false`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E, AI learning with quorum/drift/rollback, [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
-> **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline. AI learning remains batch/block-triggered — not per-attack instant ML.
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence, dashboard auth (fail-closed), **browser SPA** (`deploy/dashboard-spa/`), **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** (`updateAgeOnGet: false`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E, **instant + batch AI learning** (quorum/drift/rollback), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
+> **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline.
 
 ### Production blockers (v2.8.0 — all resolved)
 
@@ -225,7 +225,8 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **mTLS** — Mutual TLS for proxy ↔ upstream via `MCP_TLS_*` env vars; Helm `mtls.enabled` + `mtls.existingSecret` mounts certs at `/etc/mcp-guardian/tls/` ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md), [MTLS.md](docs/MTLS.md))
 
 ### AI learning (honest scope)
-- **What it is** — **Instant per-block learning** (rolling stats + attack suggestions in a sliding window) plus debounced full learning cycles (`GUARDIAN_AI_BLOCK_DEBOUNCE_MS`). Suggestions queue to pending JSON; YAML apply still requires human accept or `GUARDIAN_AI_AUTO_APPLY=true` (quorum gates self-improvement tuning).
+- **Two paths** — **Instant (real-time)** runs synchronously on every proxy policy block: rolling `(rule, tool)` stats, reason n-grams, and `.attack-learning-state.json` updates; queues attack-pattern suggestions after `GUARDIAN_AI_ATTACK_MIN_BLOCKS` repeats within `GUARDIAN_AI_INSTANT_WINDOW_MS`. **Batch (debounced)** runs the full `SuggestionEngine` cycle on a timer or after blocks (`GUARDIAN_AI_BLOCK_DEBOUNCE_MS`, set `0` for immediate). Both write to `.ai-pending-suggestions.json`; YAML apply still requires human accept or `GUARDIAN_AI_AUTO_APPLY=true` (quorum gates self-improvement tuning).
+- **Instant LLM (optional)** — `GUARDIAN_AI_INSTANT_LLM=true` rate-limits a small classifier on critical blocks (`semantic-shell-guard`, `secret-scan`, `path-guard`); metrics `mcp_guardian_instant_learning_events_total`, log `instant_learning_event`. See [AI_LEARNING.md](docs/AI_LEARNING.md).
 - **Anti-poisoning** — Label quorum: `GUARDIAN_AI_MIN_DISTINCT_LABELERS` (default 2) or `GUARDIAN_AI_MIN_TOTAL_LABELS` (default 10); admin label weights; drift detection freezes auto threshold tuning until `GUARDIAN_AI_DRIFT_OVERRIDE=true`
 - **Rollback** — `mcp-guardian ai rollback` and `POST /api/ai/rollback` restore the last learning snapshot; auto-rollback if precision proxy drops >10%
 - **Human accept → policy** — TUI (`a` accept) or dashboard accept writes suggested rules to policy YAML (auto-apply off unless `GUARDIAN_AI_AUTO_APPLY=true`)
@@ -285,7 +286,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **538 tests** — `pnpm vitest run` (95 files, 537 passed + 1 skipped; unit, integration, E2E proxy + adversarial proxy, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, cost-auditor, dpop-redis-lock, policy-engine-memory, pgbouncer-check, memory-monitor, secret-scanner coverage)
+- **546 tests** — `pnpm vitest run` (96 files, 546 passed + 1 skipped; unit, integration, E2E proxy + adversarial proxy, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, cost-auditor, dpop-redis-lock, policy-engine-memory, pgbouncer-check, memory-monitor, instant-attack-learning, secret-scanner coverage)
 - **Enterprise corpus** — **226** JSON fixtures ([`corpus/`](corpus/README.md)); `pnpm eval` via `PolicyEngine` + `default-policy.yaml` — **100% F1** on latest eval (see [`corpus-eval-report.json`](corpus-eval-report.json))
 - **Pen-test evidence** — [`docs/PEN_TEST_REPORT.md`](docs/PEN_TEST_REPORT.md), OWASP MCP/LLM mapping in [`security/ATTACK_MATRIX.md`](security/ATTACK_MATRIX.md)
 - **Adversarial scenarios** — 58+ inline regression tests ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts)); **10** corpus attacks through live proxy ([`adversarial-proxy.e2e.test.ts`](tests/e2e/adversarial-proxy.e2e.test.ts))
@@ -696,7 +697,7 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 8. **Cost** — Merge `policy-templates/enterprise-cost-governance.yaml`; set `GUARDIAN_DAILY_BUDGET_USD`; do **not** set `GUARDIAN_COST_ALLOW_ESTIMATES` unless you need legacy simulation — default audit is **model-only** ($0 measured without proxy traffic).
 9. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
 10. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
-11. **Verify** — `pnpm test` (538 tests); `pnpm eval` before deploy; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`; adversarial scenarios after policy changes.
+11. **Verify** — `pnpm test` (546 tests); `pnpm eval` before deploy; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`; adversarial scenarios after policy changes.
 12. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only).
 13. **Plugins** — Use published `@mcp-guardian/plugin-sdk`; audit `GUARDIAN_PLUGIN_PATH`; `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
 14. **HTTP tools** — `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools.
@@ -744,11 +745,12 @@ pnpm exec tsx benchmarks/run.ts   # proxy latency benchmarks
 node scripts/generate-pen-test-report.cjs   # docs/PEN_TEST_REPORT.md from eval output
 ```
 
-### Test & evidence depth (v2.8.0)
+### Test & evidence depth (v2.8.1)
 
 | Asset | Count / scope |
 |-------|----------------|
-| Vitest suite | **538** tests (**95** files, 537 passed + 1 skipped; `pnpm vitest run`) |
+| Vitest suite | **546** tests (**96** files, 546 passed + 1 skipped; `pnpm vitest run`) |
+| v2.8.1 regressions | `instant-attack-learning` |
 | v2.8.0 regressions | `policy-engine-memory`, `pgbouncer-check`, `dpop-redis-lock`, `cost-auditor-audit-mode`, `memory-monitor` |
 | v2.7.6 regressions | `cost-governance`, `dpop-require`, `redis-client`, `mtls-config` |
 | Enterprise corpus | **226** JSON fixtures (`corpus/`) |
@@ -830,6 +832,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ---
 
 ## Roadmap
+
+### Shipped in v2.8.1
+- **Per-block instant attack learning** — `recordInstantBlockEvent` on every proxy block; rolling stats in `GUARDIAN_AI_ATTACK_STATE_PATH` (`~/.mcp-guardian/.attack-learning-state.json`)
+- **Sliding-window suggestions** — after `GUARDIAN_AI_ATTACK_MIN_BLOCKS` (default 3) same `(block_rule, tool)` within `GUARDIAN_AI_INSTANT_WINDOW_MS` (default 5 min)
+- **Optional instant LLM** — `GUARDIAN_AI_INSTANT_LLM` + `GUARDIAN_AI_INSTANT_LLM_RATE_MS` on critical blocks
+- **Metrics** — `mcp_guardian_instant_learning_events_total`; structured log `instant_learning_event`
+- **Proxy path** — `recordDeniedCall` → instant stats + debounced full cycle (`GUARDIAN_AI_BLOCK_DEBOUNCE_MS`)
 
 ### Shipped in v2.8.0
 - **Production hardening bundle** — All five blockers resolved; [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md)
