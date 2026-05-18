@@ -116,10 +116,11 @@ Short-run (`pnpm eval:attack-learning`) produces lower median batch latency (deb
 | **Fig 1** | `fig1-blocks-per-minute.png` | Block rate over simulated session minutes — validates sustained ~15–19 blocks/min in long run |
 | **Fig 2** | `fig2-cumulative-suggestions.png` | Cumulative suggestions: instant rises in first minutes; batch flat until session-end cluster |
 | **Fig 3** | `fig3-repeat-clusters.png` | Top `(rule, tool)` repeat counts in 5 min window — e.g. `semantic-shell-guard:search` |
-| **Fig 4** | `fig4-cdf-time-to-suggestion.png` | CDF of time from first block in group to queued suggestion — instant left, batch right |
 | **Fig 5** | `fig5-queue-size.png` | Pending suggestion queue depth over time |
 | **Fig 6** | `fig6-heatmap.png` | Heatmap: block rule × tool (volume by category) |
 | **Fig 7** | `fig7-blocks-until-suggestion.png` | Distribution of blocks until first suggestion per group |
+
+**Fig 4 omitted:** `fig4-cdf-time-to-suggestion.png` is excluded from docs — degenerate CDF (one point per category) renders blank. Use the median time-to-suggestion row in the metrics table above.
 
 Interactive copy: [attack-learning-eval.canvas.tsx](../reports/attack-learning-eval/attack-learning-eval.canvas.tsx) (may reflect last **short** run — check header vs `metrics.json` `runType`).
 

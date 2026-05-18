@@ -39,13 +39,11 @@ flowchart LR
 
 ### Hero charts (repo eval + synthetic sim)
 
-| Instant vs batch — repo eval | Time to first suggestion — repo eval | Stage 1 → 2 detection — synthetic 180 min sim |
-|:---:|:---:|:---:|
-| ![Instant vs batch cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | ![CDF time to first suggestion](reports/attack-learning-eval/figures/fig4-cdf-time-to-suggestion.png) | ![Detection accuracy by attack type](sca/CHART_1_Detection_Accuracy.png) |
+| Instant vs batch — repo eval | Stage 1 → 2 detection — synthetic 180 min sim |
+|:---:|:---:|
+| ![Instant vs batch cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | ![Detection accuracy by attack type](sca/CHART_1_Detection_Accuracy.png) |
 
-*Instant curve rises in the first minutes; batch stays flat until ~4.9h debounce quiet — same 5 suggestions, different discovery latency.*
-
-*CDF: instant mass at **~41s** median; batch at **~4.87h** — the core instant-vs-batch story in one chart.*
+*Instant curve rises in the first minutes; batch stays flat until ~4.9h debounce quiet — same 5 suggestions, different discovery latency (median **~41s** instant vs **~4.87h** batch in metrics table above).*
 
 *Synthetic sim ([sca/](sca/)): Stage 2 detection **+8.8pp** avg vs Stage 1 across 12 escalating attack types (not `metrics.json`).*
 
@@ -806,10 +804,11 @@ Regenerate: `pnpm eval:attack-learning:long` then `pnpm eval:attack-learning:cha
 | 1 | ![Block rate per minute](reports/attack-learning-eval/figures/fig1-blocks-per-minute.png) | Steady ~15–19 blocks/min — continuous enterprise stream, not a single burst |
 | 2 | ![Cumulative suggestions](reports/attack-learning-eval/figures/fig2-cumulative-suggestions.png) | Instant vs batch cumulative suggestions (also in hero row above) |
 | 3 | ![Repeat clusters](reports/attack-learning-eval/figures/fig3-repeat-clusters.png) | Top `(rule, tool)` with ≥3 blocks in 5 min — `semantic-shell-guard:search` (32) |
-| 4 | ![CDF time to suggestion](reports/attack-learning-eval/figures/fig4-cdf-time-to-suggestion.png) | CDF latency to first suggestion (also in hero row above) |
 | 5 | ![Queue size](reports/attack-learning-eval/figures/fig5-queue-size.png) | Pending queue depth — both modes peak at **5**; instant fills incrementally |
 | 6 | ![Heatmap](reports/attack-learning-eval/figures/fig6-heatmap.png) | Blocks by rule × tool (also embedded above) |
 | 7 | ![Blocks until suggestion](reports/attack-learning-eval/figures/fig7-blocks-until-suggestion.png) | Blocks until suggestion per group (also embedded above) |
+
+*Fig 4 (`fig4-cdf-time-to-suggestion.png`) omitted: degenerate CDF (one point per category) renders blank; use median time-to-suggestion in the metrics table instead.*
 
 </details>
 

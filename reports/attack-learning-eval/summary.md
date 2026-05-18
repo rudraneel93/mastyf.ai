@@ -40,10 +40,11 @@ All figures are generated from the same blocked-event stream (`metrics.json` →
 | **1** | `fig1-blocks-per-minute.png` | **Y:** blocked `tools/call` count per simulated minute. Steady ~15–19/min shows a continuous enterprise attack stream (not a single burst). |
 | **2** | `fig2-cumulative-suggestions.png` | **Instant** curve rises in the first minutes as repeat clusters hit the 3-block threshold; **batch** stays flat until debounce fires (here: end of ~4.9h stream). This is the core instant-vs-batch story. |
 | **3** | `fig3-repeat-clusters.png` | Bar chart of top `(block_rule, tool)` groups with ≥3 blocks inside a 5 min window. Dominant cluster: `semantic-shell-guard:search` (32 repeats in long run). |
-| **4** | `fig4-cdf-time-to-suggestion.png` | CDF of elapsed time from first block in a group to queued suggestion. Instant mass at **~41s** median; batch mass at **~4.87h** (17 515s). |
 | **5** | `fig5-queue-size.png` | Pending attack-pattern suggestions over time. Both modes peak at **5** suggestions; instant fills the queue incrementally, batch in a late step. |
 | **6** | `fig6-heatmap.png` | Intensity of blocks by **rule** (rows) × **tool** (columns). Use to see which policy rules fire on which tools under the synthetic mix. |
 | **7** | `fig7-blocks-until-suggestion.png` | Histogram of how many blocks occurred before the first suggestion per discovered group. Instant clusters at **3**; batch at ~1000+ (debounce never mid-stream). |
+
+**Fig 4 omitted:** `fig4-cdf-time-to-suggestion.png` is not linked here — the CDF is degenerate (one point per category) and renders as a blank chart. Median time-to-suggestion (**41.1s** instant vs **17 515.7s** batch) is in the key metrics table above.
 
 **Short vs long run:** `pnpm eval:attack-learning` (~52 min, 8–30s inter-arrival) yields a lower batch median (debounce can fire between bursts). This summary reflects the **long** run in `metrics.json` (`runType: "long"`). Refresh `attack-learning-eval.canvas.tsx` after re-running evals if headline stats drift.
 
