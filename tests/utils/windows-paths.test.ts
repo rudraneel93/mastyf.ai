@@ -78,7 +78,7 @@ describe('windows-paths', () => {
   describe('guardian-proxy.ps1 on disk', () => {
     const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-    it('exists at repo root and quotes node/cli paths', () => {
+    it('exists at repo root with try/catch and arg forwarding', () => {
       const rootScript = path.join(repoRoot, 'guardian-proxy.ps1');
       const scriptsScript = path.join(repoRoot, 'scripts', 'guardian-proxy.ps1');
       expect(fs.existsSync(rootScript)).toBe(true);
@@ -86,7 +86,9 @@ describe('windows-paths', () => {
 
       for (const scriptPath of [rootScript, scriptsScript]) {
         const content = fs.readFileSync(scriptPath, 'utf-8');
-        expect(content).toMatch(/& node "\$cliPath" proxy @args/);
+        expect(content).toMatch(/ValueFromRemainingArguments/);
+        expect(content).toMatch(/& \$nodeExe @argList/);
+        expect(content).toMatch(/try \{/);
         expect(content).toMatch(/MCP_GUARDIAN_DB_PATH/);
         expect(content).toMatch(/DASHBOARD_ENABLED/);
       }

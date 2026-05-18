@@ -24,6 +24,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Verify pnpm-lock.yaml is tracked
+        run: git ls-files --error-unmatch pnpm-lock.yaml
+
       # Build root FIRST — cli imports @mcp-guardian/server (root), needs dist/
       - run: npx tsc --project tsconfig.json
 

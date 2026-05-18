@@ -22,7 +22,7 @@ export class PolicyEngine {
   private callCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
     max: 50000,
     ttl: 60000,
-    updateAgeOnGet: true,
+    updateAgeOnGet: false,
   });
   private normalizer: ReturnType<typeof getNormalizer>;
   private shellTokenizer = new ShellTokenizer();

@@ -2,6 +2,24 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [2.7.9] - 2026-05-18
+
+### Fixed (enterprise security analysis remediation)
+- **LRU cache TTL** — `updateAgeOnGet: false` on policy and per-client rate limit caches so hot keys cannot pin entries indefinitely during 8+ hour IDE sessions.
+- **DPoP Redis replay** — Short-lived distributed lock around `SET NX` jti claims for multi-replica HA (`claimDpopJtiOnRedis`).
+- **Memory monitoring** — Periodic heap/RSS warnings in long-running proxy (`GUARDIAN_MEMORY_MONITOR=false` to disable).
+- **PostgreSQL pool** — Configurable `GUARDIAN_PG_POOL_MAX` (default 10); Helm sets `4` per replica when using PgBouncer.
+- **Docker reproducibility** — Pin `node:20-alpine` image digest in `Dockerfile`.
+- **PowerShell launcher** — `try/catch`, CLI path check, and `ValueFromRemainingArguments` arg forwarding.
+
+### Added
+- **Audio token estimates** — `estimateAudioTokens` / `countAudioTokensInPayload` (~25 tokens/sec heuristic) in cost path.
+- **Helm PgBouncer guard** — `pgbouncer.requireGuardianEnforcement` sets `GUARDIAN_REQUIRE_PGBOUNCER` for Postgres deployments.
+- **CI lockfile gate** — `git ls-files --error-unmatch pnpm-lock.yaml` in CI.
+
+### Tests
+- `tests/auth/dpop-redis-lock.test.ts`, `tests/utils/memory-monitor.test.ts`, `tests/cost/multimodal-audio.test.ts`.
+
 ## [2.7.8] - 2026-05-18
 
 ### Fixed (security review P0/P1)

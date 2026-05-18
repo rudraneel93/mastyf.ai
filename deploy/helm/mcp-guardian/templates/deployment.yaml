@@ -53,6 +53,12 @@ spec:
                   name: {{ .Values.secrets.existingSecret | default (printf "%s-secret" (include "mcp-guardian.fullname" .)) }}
                   key: database-url
                   optional: true
+            {{- if .Values.pgbouncer.requireGuardianEnforcement }}
+            - name: GUARDIAN_REQUIRE_PGBOUNCER
+              value: "true"
+            {{- end }}
+            - name: GUARDIAN_PG_POOL_MAX
+              value: {{ .Values.pgbouncer.poolMaxPerReplica | default "4" | quote }}
             {{- end }}
             {{- if and .Values.redis.sentinel.external .Values.redis.sentinel.sentinels }}
             - name: REDIS_SENTINELS

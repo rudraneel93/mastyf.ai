@@ -53,7 +53,7 @@ Guardian does not manage keys; document your KMS owner in your HIPAA BAA evidenc
 | Requirement | Status |
 |-------------|--------|
 | **HIPAA BAA / formal evidence** | Audit events exist; BAA and control evidence are operator-owned |
-| **SOC2 evidence pack** | Audit logs exist; formal evidence bundle is operator-owned |
+| **SOC2 evidence pack** | Audit logs exist; append-only SIEM + cryptographic log chaining are operator-owned (not in-box) |
 | **SQLCipher in-box** | Not bundled — use volume encryption or custom build |
 | **Native Windows MSI** | PowerShell wrapper shipped; MSI installer planned (see `installer/README.md`) |
 

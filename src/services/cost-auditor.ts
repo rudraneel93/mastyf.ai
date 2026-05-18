@@ -81,7 +81,10 @@ export class CostAuditor {
       Logger.warn(`Cost audit: DB read failed for ${server.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    return this.emptyReport(server.name, 'No recorded call data. Use `mcp-guardian proxy` to capture real token usage.');
+    return this.emptyReport(
+      server.name,
+      'No recorded call data. Cost tracking requires `mcp-guardian proxy` (stdio) — MCP audit/scan modes do not persist per-call token usage.',
+    );
   }
 
   private emptyReport(serverName: string, note: string): CostReport {

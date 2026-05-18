@@ -33,20 +33,55 @@ export class InMemoryDPoPNonceStore implements DPoPNonceStore {
   }
 }
 
+const DPOP_LOCK_MAX_ATTEMPTS = 3;
+const DPOP_LOCK_BASE_DELAY_MS = 10;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Redis claim with short-lived lock — reduces replay window under replication lag. */
+export async function claimDpopJtiOnRedis(
+  redis: Pick<Redis, 'set' | 'get' | 'del'>,
+  keyPrefix: string,
+  jti: string,
+  ttlSeconds: number,
+): Promise<boolean> {
+  const lockKey = `${keyPrefix}lock:${jti}`;
+  const dataKey = `${keyPrefix}${jti}`;
+
+  for (let attempt = 0; attempt < DPOP_LOCK_MAX_ATTEMPTS; attempt++) {
+    const locked = await redis.set(lockKey, '1', 'EX', 1, 'NX');
+    if (locked !== 'OK') {
+      await sleep(DPOP_LOCK_BASE_DELAY_MS * 2 ** attempt);
+      continue;
+    }
+    try {
+      const existing = await redis.get(dataKey);
+      if (existing) return false;
+      const ok = await redis.set(dataKey, '1', 'EX', ttlSeconds, 'NX');
+      return ok === 'OK';
+    } finally {
+      await redis.del(lockKey);
+    }
+  }
+  return false;
+}
+
 export class RedisDPoPNonceStore implements DPoPNonceStore {
   private redis: Redis | Cluster;
   private readonly prefix = 'mcp_guardian:dpop:jti:';
 
   constructor(
     private readonly ttlSeconds: number,
+    redis?: Redis | Cluster,
   ) {
-    this.redis = createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
+    this.redis = redis ?? createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
     Logger.info(`[dpop] Redis nonce store (${getRedisConnectionLabel()})`);
   }
 
   async claim(jti: string): Promise<boolean> {
-    const ok = await this.redis.set(`${this.prefix}${jti}`, '1', 'EX', this.ttlSeconds, 'NX');
-    return ok === 'OK';
+    return claimDpopJtiOnRedis(this.redis, this.prefix, jti, this.ttlSeconds);
   }
 
   async close(): Promise<void> {

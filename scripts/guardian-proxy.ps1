@@ -1,16 +1,33 @@
-# MCP Guardian stdio proxy launcher (Windows) — same as repo-root guardian-proxy.ps1 when run from scripts/.
+# MCP Guardian stdio proxy launcher (Windows)
 $ErrorActionPreference = 'Stop'
 
-$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$cliPath = Join-Path $Root 'dist\cli.js'
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ProxyArgs
+)
 
-if (-not $env:MCP_GUARDIAN_DB_PATH) {
-  $env:MCP_GUARDIAN_DB_PATH = Join-Path $env:USERPROFILE '.mcp-guardian\history.db'
+try {
+    $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $cliPath = Join-Path $Root 'dist\cli.js'
+
+    if (-not (Test-Path -LiteralPath $cliPath)) {
+        throw "Guardian CLI not built: missing $cliPath (run pnpm build)"
+    }
+
+    if (-not $env:MCP_GUARDIAN_DB_PATH) {
+        $env:MCP_GUARDIAN_DB_PATH = Join-Path $env:USERPROFILE '.mcp-guardian\history.db'
+    }
+    if (-not $env:DASHBOARD_ENABLED) { $env:DASHBOARD_ENABLED = 'true' }
+    if (-not $env:METRICS_ENABLED) { $env:METRICS_ENABLED = 'true' }
+    if (-not $env:METRICS_PORT) { $env:METRICS_PORT = '9090' }
+    if (-not $env:DASHBOARD_PORT) { $env:DASHBOARD_PORT = '4000' }
+
+    $nodeExe = (Get-Command node -ErrorAction Stop).Source
+    $argList = @($cliPath, 'proxy') + @($ProxyArgs)
+    & $nodeExe @argList
+    exit $LASTEXITCODE
 }
-if (-not $env:DASHBOARD_ENABLED) { $env:DASHBOARD_ENABLED = 'true' }
-if (-not $env:METRICS_ENABLED) { $env:METRICS_ENABLED = 'true' }
-if (-not $env:METRICS_PORT) { $env:METRICS_PORT = '9090' }
-if (-not $env:DASHBOARD_PORT) { $env:DASHBOARD_PORT = '4000' }
-
-& node "$cliPath" proxy @args
-exit $LASTEXITCODE
+catch {
+    Write-Error "Failed to launch Guardian proxy: $_"
+    exit 1
+}

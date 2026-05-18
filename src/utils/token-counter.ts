@@ -40,6 +40,7 @@ export interface ProxyTokenCounts {
   requestTokenSource: TokenSource;
   responseTokenSource: TokenSource;
   imageTokens: number;
+  audioTokens: number;
   method?: string;
 }
 
@@ -63,6 +64,8 @@ const PROVIDER_RATIOS: Record<string, number> = {
 };
 
 const IMAGE_TOKENS_DIVISOR = 750;
+/** Whisper-style heuristic: ~25 tokens per second of audio (documented drift vs provider billing). */
+const AUDIO_TOKENS_PER_SECOND = 25;
 const DRIFT_LOG_THRESHOLD = 0.05;
 
 const litellmCache = new Map<string, number>();
@@ -139,6 +142,57 @@ export function countImageTokensInPayload(payload: unknown, seen = new WeakSet<o
   for (const value of Object.values(obj)) {
     if (value && typeof value === 'object') {
       total += countImageTokensInPayload(value, seen);
+    }
+  }
+  return total;
+}
+
+export function estimateAudioTokens(durationSeconds: number): number {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
+  return Math.ceil(durationSeconds * AUDIO_TOKENS_PER_SECOND);
+}
+
+/** Recursively scan payload for audio duration fields and sum token estimates. */
+export function countAudioTokensInPayload(payload: unknown, seen = new WeakSet<object>()): number {
+  if (payload == null) return 0;
+  if (typeof payload !== 'object') return 0;
+  if (seen.has(payload as object)) return 0;
+  seen.add(payload as object);
+
+  let total = 0;
+  const obj = payload as Record<string, unknown>;
+
+  const durationKeys = [
+    'duration_seconds',
+    'durationSeconds',
+    'audio_duration',
+    'audioDuration',
+  ] as const;
+  for (const key of durationKeys) {
+    const v = obj[key];
+    if (typeof v === 'number') total += estimateAudioTokens(v);
+  }
+  if (typeof obj.duration_ms === 'number') {
+    total += estimateAudioTokens(obj.duration_ms / 1000);
+  }
+  if (typeof obj.durationMs === 'number') {
+    total += estimateAudioTokens(obj.durationMs / 1000);
+  }
+  if (obj.type === 'audio' || obj.type === 'input_audio') {
+    const dur = obj.duration ?? obj.duration_seconds;
+    if (typeof dur === 'number') total += estimateAudioTokens(dur);
+  }
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      total += countAudioTokensInPayload(item, seen);
+    }
+    return total;
+  }
+
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') {
+      total += countAudioTokensInPayload(value, seen);
     }
   }
   return total;
@@ -320,6 +374,9 @@ export class TokenCounter {
     const { requestText, responseText, model, requestPayload, responsePayload } = options;
     const imageTokens =
       countImageTokensInPayload(requestPayload) + countImageTokensInPayload(responsePayload);
+    const audioTokens =
+      countAudioTokensInPayload(requestPayload) + countAudioTokensInPayload(responsePayload);
+    const multimodalTokens = imageTokens + audioTokens;
 
     const reqEstimate = this.estimateTextTokens(requestText, model);
     const resEstimate = this.estimateTextTokens(responseText, model);
@@ -328,18 +385,18 @@ export class TokenCounter {
     const resUsage = extractApiUsage(responsePayload);
     const combinedUsage = extractApiUsage(responsePayload) ?? extractApiUsage(requestPayload);
 
-    let requestTokens = reqEstimate.tokens + imageTokens;
+    let requestTokens = reqEstimate.tokens + multimodalTokens;
     let responseTokens = resEstimate.tokens;
     let requestTokenSource: TokenSource = 'estimated';
     let responseTokenSource: TokenSource = 'estimated';
 
     if (reqUsage?.inputTokens !== undefined) {
       logTokenDriftIfNeeded(requestTokens, reqUsage.inputTokens, 'request input_tokens');
-      requestTokens = reqUsage.inputTokens + imageTokens;
+      requestTokens = reqUsage.inputTokens + multimodalTokens;
       requestTokenSource = 'api';
     } else if (combinedUsage?.inputTokens !== undefined) {
       logTokenDriftIfNeeded(requestTokens, combinedUsage.inputTokens, 'combined input_tokens');
-      requestTokens = combinedUsage.inputTokens + imageTokens;
+      requestTokens = combinedUsage.inputTokens + multimodalTokens;
       requestTokenSource = 'api';
     }
 
@@ -364,6 +421,7 @@ export class TokenCounter {
       requestTokenSource,
       responseTokenSource,
       imageTokens,
+      audioTokens,
       method: reqEstimate.method,
     };
   }

@@ -21,9 +21,10 @@ export class PostgresDatabase implements IDatabase {
     if (this.initialized) return;
 
     const { Pool } = await loadPg();
+    const poolMax = parseInt(process.env['GUARDIAN_PG_POOL_MAX'] ?? '10', 10);
     this.pool = new Pool({
       connectionString: this.connectionString,
-      max: 10,
+      max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 10,
       idleTimeoutMillis: 30000,
     });
 

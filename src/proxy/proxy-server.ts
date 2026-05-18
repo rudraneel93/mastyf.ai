@@ -3,6 +3,7 @@ import { createInterface } from 'readline';
 import { randomUUID, createHash } from 'crypto';
 import {
   TokenCounter,
+  countAudioTokensInPayload,
   countImageTokensInPayload,
   extractModelFromPayload,
 } from '../utils/token-counter.js';
@@ -29,6 +30,7 @@ import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semanti
 import type { HistoryDatabase } from '../database/history-db.js';
 import { resolveModelId } from '../config/llm-config.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
+import { startMemoryMonitor } from '../utils/memory-monitor.js';
 
 const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
@@ -66,8 +68,9 @@ export class McpProxyServer {
   private clientRateCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
     max: 10000,
     ttl: 60000,
-    updateAgeOnGet: true,
+    updateAgeOnGet: false,
   });
+  private stopMemoryMonitor: (() => void) | null = null;
 
   /** P0 Week 2: SHA-256 fingerprint of the tools/list response at session init.
    *  Compared on every subsequent tools/list to detect rug-pull attacks
@@ -125,6 +128,9 @@ export class McpProxyServer {
 
     Metrics.circuitBreakerState.set({ server_name: this.serverName }, 0);
     this.spawnChild();
+    if (process.env['GUARDIAN_MEMORY_MONITOR'] !== 'false') {
+      this.stopMemoryMonitor = startMemoryMonitor({ label: this.serverName });
+    }
 
     StructuredLogger.info({
       event: 'proxy_started',
@@ -510,7 +516,8 @@ export class McpProxyServer {
           this.tokenCounter.countWithProvider(raw, this.requestModel)?.tokens ??
           this.tokenCounter.count(raw);
         const imageTokens = countImageTokensInPayload(msg.params?.arguments);
-        this.requestTokens = reqEstimate + imageTokens;
+        const audioTokens = countAudioTokensInPayload(msg.params?.arguments);
+        this.requestTokens = reqEstimate + imageTokens + audioTokens;
         this.requestArguments = msg.params?.arguments;
         const toolName = this.requestToolName || 'unknown';
 

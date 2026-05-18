@@ -1,4 +1,5 @@
-FROM node:20-alpine AS builder
+# Pinned digest for reproducible builds (see docs/SUPPLY_CHAIN.md)
+FROM node:20-alpine@sha256:2bfb33e7cde99c9ec8e73e81b4ecc9a9d936ca7e2c5c36efde62e94f96b0ed38 AS builder
 WORKDIR /app
 
 COPY . .
@@ -13,7 +14,7 @@ RUN cd packages/server && pnpm build
 RUN npx tsc --project tsconfig.json
 RUN cd packages/cli && pnpm build
 
-FROM node:20-alpine
+FROM node:20-alpine@sha256:2bfb33e7cde99c9ec8e73e81b4ecc9a9d936ca7e2c5c36efde62e94f96b0ed38
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 RUN apk add --no-cache curl su-exec
 WORKDIR /app
