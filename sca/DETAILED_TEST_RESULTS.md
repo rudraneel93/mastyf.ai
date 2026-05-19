@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Results reflect automated test suites and modeled enterprise scenarios, not live adversary campaigns.
+
 # MCP Guardian - Detailed Test Results & Enterprise Analysis
 
 **Test Execution Date:** May 18, 2026  

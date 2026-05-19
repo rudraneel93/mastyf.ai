@@ -480,18 +480,17 @@ export class McpProxyServer {
     persistCallRecord(this.db, record, undefined, this.spawnEnv, this.spawnArgs).catch((err) =>
       Logger.debug(`Proxy: failed to store denied call record: ${err?.message}`)
     );
-    recordBlockLearningEvent(
-      {
-        block_rule: blockRule,
-        block_reason: blockReason,
-        toolName,
-        serverName: this.serverName,
-        argsFingerprint: fingerprintArgs(requestArguments),
-        argSnippets: redactArgSnippets(requestArguments),
-        tenantId: tid,
-      },
-      { db: this.db as HistoryDatabase },
-    );
+    const learningEvent = {
+      block_rule: blockRule,
+      block_reason: blockReason,
+      toolName,
+      serverName: this.serverName,
+      argsFingerprint: fingerprintArgs(requestArguments),
+      argSnippets: redactArgSnippets(requestArguments),
+      tenantId: tid,
+    };
+    const learningOpts = { db: this.db as HistoryDatabase };
+    setImmediate(() => recordBlockLearningEvent(learningEvent, learningOpts));
   }
 
   /**

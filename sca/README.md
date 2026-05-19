@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Test and attack metrics in this folder are from lab runs and modeled scenarios unless explicitly tied to a dated production deployment.
+
 # SCA — security & compliance analysis collateral
 
 **SCA** in this folder means **security, compliance, and attack-learning analysis deliverables** produced alongside MCP Guardian v2.8.x — not a separate npm package and not traditional dependency SCA (Software Composition Analysis).

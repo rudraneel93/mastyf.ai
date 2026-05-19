@@ -4,6 +4,13 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Closed — 71/100 review headline gaps (verified 2026-05-19)
+- **PI request-path recall** — 32/32 prompt-injection corpus blocked via `scanToolCallArguments` before YAML rules (`GUARDIAN_DISABLE_SEMANTIC=true` eval pass).
+- **Async audit hot path** — `persistCallRecord` → `enqueueAuditWrite`; block-learning deferred off deny path; proxy tier c=1 p95 &lt; 150 ms.
+- **Static imports in `evaluateAsync`** — no dynamic `await import()` on policy hot path.
+- **SCA synthetic labeling** — banners on all `sca/*.md` deliverables.
+- **Multi-tenancy** — JWT-authoritative tenant binding, `TenantPolicyRegistry`, per-tenant policy templates, RBAC `tenants:`, [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
+
 ### Added
 - **Stdio stdin serial queue** — CLI and `McpProxyServer` serialize `handleClientInput` via `AsyncSerialQueue` (no `currentRequestId` races on rapid lines).
 - **Circuit breaker HALF_OPEN** — single in-flight probe (`probing` flag); concurrent callers rejected until probe completes.

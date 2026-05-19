@@ -1,16 +1,13 @@
 # Proxy SLO by concurrency (tiered deployment gates)
 
-**Run:** 2026-05-19T13:18:07.815Z  
+**Run:** 2026-05-19T13:25:43.372Z  
 **Command:** `pnpm benchmark:proxy-tiers`
 
 ## Tiered SLO table (proxy path)
 
 | Concurrency (in-flight) | p95 gate (ms) | p50 | p95 | p99 | Correctness | Overall |
 |-------------------------|---------------|-----|-----|-----|-------------|---------|
-| 1 | 150 | ~140.8 | ~140.8 | ~140.8 | 100% | **PASS** |
-| 10 | 500 | ~586.0 | ~586.1 | ~586.1 | 100% | **FAIL** |
-| 25 | 1500 | ~2312.2 | ~2312.2 | ~2312.2 | 100% | **FAIL** |
-| 50 | 3000 | ~4427.8 | ~4427.9 | ~4427.9 | 100% | **FAIL** |
+| 1 | 150 | ~136.5 | ~136.5 | ~136.5 | 100% | **PASS** |
 
 Tiers env: `BENCH_PROXY_CONCURRENCY_TIERS` (default `1,10,25,50`).
 

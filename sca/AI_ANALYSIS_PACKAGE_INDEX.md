@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Package indexes modeled scenarios, not production MCP proxy captures.
+
 # Complete Analysis Package Index
 
 **MCP Guardian AI Learning Model - Enterprise Assessment**  

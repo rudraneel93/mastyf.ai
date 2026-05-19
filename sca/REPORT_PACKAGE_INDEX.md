@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Package indexes modeled scenarios, not production MCP proxy captures.
+
 # 📊 MCP Guardian - Complete Test Analysis Report Package
 
 **Analysis Completed:** May 18, 2026  

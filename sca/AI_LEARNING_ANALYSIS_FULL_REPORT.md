@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Metrics and timelines below are from modeled scenarios, not production MCP proxy traffic.
+
 # AI Learning Model - Comprehensive Enterprise Analysis Report
 
 **Report Generated:** May 18, 2026  
