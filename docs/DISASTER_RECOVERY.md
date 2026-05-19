@@ -1,64 +1,137 @@
-# MCP Guardian — Disaster Recovery
+# Disaster recovery runbook
 
-## State Inventory
+Operational procedures for MCP Guardian audit stores, Redis, and secrets.
 
-| State Type | Storage | RPO | RTO | Acceptable Loss? |
-|------------|---------|-----|-----|-----------------|
-| Audit logs (call records, scans, costs) | SQLite / PostgreSQL | Durability: ≤1s; Backup RPO: 1h-24h | 10min | Minimize — compliance gap |
-| Policy configuration | YAML (ConfigMap) | N/A (immutable at rest) | 0s (hot-reloaded) | No — security baseline |
-| Redis sessions (OAuth cache) | Redis | 5min (TTL) | 30s | Yes — JWTs re-validated |
-| Redis rate limit counters | Redis | 1min (window reset) | 60s | Yes — counters reset each window |
-| In-memory rate limit counters | Process heap | 0 (lost on restart) | 0s | Yes — local counters acceptable |
-| Circuit breaker state | Process heap | 0 | 0s (resets to CLOSED) | Yes — resets on restart |
+## Targets (suggested)
 
-## RTO by Tier
+| Metric | Target | Notes |
+|--------|--------|-------|
+| **RPO** | ≤ 15 min | SQLite file snapshot or Postgres PITR |
+| **RTO** | ≤ 60 min | Redeploy proxy + restore DB + Redis warm |
 
-| Tier | Component | RTO | Recovery Action |
-|------|-----------|-----|----------------|
-| Tier 1 | Policy evaluation (in-memory) | 0s | Always available while proxy runs |
-| Tier 1 | Proxy forwarding (stdio/HTTP) | 0s | Proxy is the process itself |
-| Tier 2 | Audit logging | 10min | PVC snapshot restore or PostgreSQL replica |
-| Tier 2 | Prometheus metrics | 5min | Scrape restarts — counters reset |
-| Tier 3 | Distributed rate limiting (Redis) | 30min | Redis reconnect + counter warm-up |
-| Tier 3 | Session cache (Redis) | 5min | TTL expiry; JWTs re-validated |
+Tune per your compliance tier.
 
-## Redis Failure Modes
+---
 
-**Node unreachable**: Session cache falls back to in-memory. Rate limiter falls back to local counters. Policy engine and circuit breaker unaffected.
+## SQLite backup and restore
 
-**Data corruption**: Rate limit counters inaccurate for one window (1min), then reset. `FLUSHDB` + proxy restart recovers.
+**Backup (hot, WAL-safe):**
 
-## SQLite Failure Modes
+```bash
+sqlite3 "$MCP_GUARDIAN_DB_PATH" ".backup '/backups/guardian-$(date +%Y%m%d-%H%M).db'"
+```
 
-**Corruption**: Stop proxy → restore from PVC snapshot → restart. RPO: daily (snapshot) or hourly (cron dump). RTO: 10min.
+Or stop proxy and copy the file + `-wal` / `-shm` siblings.
 
-**Disk full**: `kubectl patch pvc` to resize, or archive old records with `DELETE ... WHERE created_at < date('now','-90 days')`.
+**Restore:**
 
-## Backup Strategy
+1. Stop all Guardian processes using the DB
+2. Replace `MCP_GUARDIAN_DB_PATH` with backup
+3. If using `GUARDIAN_DB_ENCRYPTION_KEY`, use the **same** key as at backup time
+4. Start proxy; run `mcp-guardian doctor`
 
-### SQLite
-- **Automated**: Daily PVC snapshots via CSI snapshotter, 30-day retention
-- **Manual**: Hourly `sqlite3 .dump` to backup directory via cron
-- **Verification**: Weekly restore test to staging
+---
 
-### Redis
-- Not critical — ephemeral by design. If needed, Redis Sentinel with AOF persistence.
-- Manual: `redis-cli BGSAVE` → copy RDB file
+## PostgreSQL backup and restore
 
-### Policy
-- ConfigMap (Kubernetes etcd snapshots) + git repository
-- Hash verified by PolicyAuditor on every change
+- **Logical:** `pg_dump "$DATABASE_URL" -Fc -f guardian.dump`
+- **Restore:** `pg_restore -d "$DATABASE_URL" --clean --if-exists guardian.dump`
+- Migrations: applied automatically on startup via `schema_migrations` ([migration-runner](../src/database/migration-runner.ts))
 
-## Recovery Drills
+After restore, verify `mcp-guardian fleet status` and dashboard audit tabs.
 
-**Redis outage**: `kubectl delete pod redis-0` → verify proxy continues with in-memory fallback → Redis auto-restarts via StatefulSet
+---
 
-**Database loss**: Take backup → delete PVC → restore from snapshot → restart proxy → verify audit records intact
+## Redis
 
-**Full restart**: `kubectl rollout restart deployment mcp-guardian` → verify all pods healthy → test tools/call → check policy_decision events
+Redis holds **ephemeral** state: rate-limit counters, DPoP jti, session cache, LLM cache.
 
-## Rollback
+| Action | Effect |
+|--------|--------|
+| `FLUSHDB` / failover without persistence | Rate limits reset; DPoP replay window may reset; sessions invalidated |
+| Full loss | No audit history loss (audit is SQLite/PG) |
 
-**Version**: `helm rollback mcp-guardian <revision>`
+**Do not** treat Redis as source of truth for compliance audit.
 
-**Policy**: `git checkout <previous-commit> -- default-policy.yaml` → update ConfigMap → PolicyWatcher auto-reloads within 300ms
+Reconfigure: `REDIS_URL` / Sentinel / Cluster per [REDIS_HA.md](./REDIS_HA.md). Use `rediss://` or `GUARDIAN_REDIS_TLS=true` in production.
+
+---
+
+## Key rotation
+
+### DPoP / session (Redis-backed)
+
+1. Deploy new Redis AUTH password if applicable
+2. Rolling restart Guardian pods — clients obtain new tokens from IdP
+3. Old jti entries expire per TTL
+
+### Dashboard JWT / API key
+
+1. Issue new `DASHBOARD_JWT_SECRET` or `DASHBOARD_API_KEY` in secret manager
+2. Rolling restart dashboard + proxy
+3. Invalidate old sessions (users re-login)
+
+### MCP / OAuth client secrets
+
+Rotate at identity provider; update server env in `mcp.json` / Helm values.
+
+### `GUARDIAN_DB_ENCRYPTION_KEY`
+
+Field-encrypted rows cannot be read with a different key. Plan:
+
+1. Export audit with old key attached
+2. Set new key
+3. Re-import or run maintenance script to re-encrypt columns
+
+SQLCipher: use official rekey workflow.
+
+---
+
+## GDPR — erase all audit data
+
+```typescript
+import { HistoryDatabase } from '@mcp-guardian/server';
+
+const db = new HistoryDatabase();
+const counts = db.eraseAllAuditData();           // all tenants
+// db.eraseAllAuditData('acme-corp');           // single tenant
+```
+
+Also purge:
+
+- Central SIEM / log aggregator
+- Postgres `unified_*` tables if `GUARDIAN_AUDIT_SYNC_ENABLED`
+- Exported reports on object storage
+
+Document erasure in your ROPA; retention default 30 days (`HistoryDatabase` purge TTL).
+
+---
+
+## Failure scenarios
+
+| Scenario | Response |
+|----------|----------|
+| Corrupt SQLite | Restore from backup; last resort `eraseAllAuditData` + accept data loss |
+| Postgres unavailable | Proxy may degrade; enable `GUARDIAN_STRICT_MODE` only when DB required |
+| Redis down | Rate limits fall back to local LRU; DPoP strict mode may block — see [PRODUCTION_BLOCKERS.md](./PRODUCTION_BLOCKERS.md) |
+| Policy mis-deploy | Roll back ConfigMap / `default-policy.yaml`; use `policy-audit` mode |
+
+---
+
+## Verification after recovery
+
+```bash
+mcp-guardian doctor --policy default-policy.yaml
+pnpm test   # or CI smoke
+curl -s http://localhost:9090/healthz
+curl -s http://localhost:9090/readyz
+```
+
+---
+
+## Related docs
+
+- [ENCRYPTION_AT_REST.md](./ENCRYPTION_AT_REST.md)
+- [REDIS_HA.md](./REDIS_HA.md)
+- [COMPLIANCE.md](./COMPLIANCE.md)
+- [SCALE_AND_RESILIENCE.md](./SCALE_AND_RESILIENCE.md)

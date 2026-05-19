@@ -18,6 +18,8 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, rmSync 
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import { IDatabase } from './database-interface.js';
+import { monitorDbQuery } from '../utils/db-performance-monitor.js';
+import { decryptField, encryptField, getFieldEncryptionKey } from '../utils/field-encryption.js';
 
 export interface SecurityRecord {
   id: number;
@@ -136,6 +138,7 @@ export class HistoryDatabase implements IDatabase {
       this.db.pragma('journal_mode = WAL');
       this.db.pragma('synchronous = NORMAL');
       this.db.pragma('foreign_keys = ON');
+      this.applySqlCipherKeyIfConfigured();
       this.migrate();
       Logger.info(`[HistoryDb] Opened in-memory database`);
       return;
@@ -171,6 +174,7 @@ export class HistoryDatabase implements IDatabase {
       this.db.pragma('synchronous = NORMAL');
     }
     this.db.pragma('foreign_keys = ON');
+    this.applySqlCipherKeyIfConfigured();
 
     if (!openedReadOnly) {
       this.migrate();
@@ -191,6 +195,19 @@ export class HistoryDatabase implements IDatabase {
 
   isReadOnly(): boolean {
     return this.openedReadOnly;
+  }
+
+  /** SQLCipher PRAGMA key when GUARDIAN_DB_ENCRYPTION_KEY is set (requires sqlcipher-enabled build). */
+  private applySqlCipherKeyIfConfigured(): void {
+    const key = getFieldEncryptionKey();
+    if (!key || this.dbPath === ':memory:') return;
+    try {
+      this.db.pragma(`key = '${key.replace(/'/g, "''")}'`);
+      Logger.info('[HistoryDb] SQLCipher key applied (PRAGMA key)');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Logger.warn(`[HistoryDb] SQLCipher PRAGMA key not supported — use field encryption or LUKS: ${msg}`);
+    }
   }
 
   private migrate(): void {
@@ -241,6 +258,28 @@ export class HistoryDatabase implements IDatabase {
     `);
     this.migrateCallRecordsColumns();
     this.migrateTenantAuditColumns();
+    this.migrateQueryIndexes();
+  }
+
+  private migrateQueryIndexes(): void {
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_call_records_tenant_ts
+        ON call_records(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_call_records_server_ts
+        ON call_records(server_name, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_cost_records_tenant_ts
+        ON cost_records(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_cost_records_server_ts
+        ON cost_records(server_name, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_security_scans_tenant_ts
+        ON security_scans(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_security_scans_server_ts
+        ON security_scans(server_name, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_health_checks_tenant_ts
+        ON health_checks(tenant_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_health_checks_server_ts
+        ON health_checks(server_name, created_at DESC);
+    `);
   }
 
   private migrateTenantAuditColumns(): void {
@@ -287,6 +326,7 @@ export class HistoryDatabase implements IDatabase {
   }
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
+    monitorDbQuery('addCallRecord', () => {
     const stmt = this.db.prepare(
       'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id) VALUES (@serverName, @toolName, @requestTokens, @responseTokens, @totalTokens, @durationMs, @blocked, @blockRule, @blockReason, @model, @costUsd, @pricingSource, @tokenSource, @tenantId)'
     );
@@ -299,12 +339,13 @@ export class HistoryDatabase implements IDatabase {
       durationMs: record.durationMs,
       blocked: record.blocked ? 1 : 0,
       blockRule: record.blockRule ?? null,
-      blockReason: record.blockReason ?? null,
+      blockReason: encryptField(record.blockReason ?? null),
       model: record.model ?? null,
       costUsd: record.costUsd ?? null,
       pricingSource: record.pricingSource ?? null,
       tokenSource: record.tokenSource ?? null,
       tenantId: record.tenantId ?? 'default',
+    });
     });
   }
 
@@ -313,6 +354,7 @@ export class HistoryDatabase implements IDatabase {
     limit = 5000,
     tenantId?: string,
   ): Promise<ProxyCallRecord[]> {
+    return monitorDbQuery('getCallRecordsForServer', () => {
     const rows = tenantId
       ? this.db
         .prepare('SELECT * FROM call_records WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT ?')
@@ -333,12 +375,13 @@ export class HistoryDatabase implements IDatabase {
       pricingSource: row.pricing_source ?? undefined,
       blocked: Boolean(row.blocked),
       blockRule: row.block_rule ?? undefined,
-      blockReason: row.block_reason ?? undefined,
+      blockReason: decryptField(row.block_reason ?? null) ?? undefined,
       tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
         ? row.token_source
         : undefined,
       tenantId: row.tenant_id ?? 'default',
     }));
+    });
   }
 
   async transaction<T>(fn: () => Promise<T> | T): Promise<T> {

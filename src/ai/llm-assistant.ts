@@ -10,6 +10,7 @@
 import { getLlmConfig } from '../config/llm-config.js';
 import { getLlmCache } from './llm-cache.js';
 import { Logger } from '../utils/logger.js';
+import { getSemanticTimeoutMs } from '../utils/semantic-timeout.js';
 
 export interface LlmAssistantConfig {
   model: string;
@@ -88,6 +89,7 @@ export class LlmAssistant {
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       try {
         const startTime = Date.now();
+        const hotPathBudgetMs = Math.min(this.config.timeoutMs, getSemanticTimeoutMs());
         const response = await fetch(`${this.config.ollamaUrl}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -100,7 +102,7 @@ export class LlmAssistant {
               num_predict: this.config.maxTokens,
             },
           }),
-          signal: AbortSignal.timeout(this.config.timeoutMs),
+          signal: AbortSignal.timeout(hotPathBudgetMs),
         });
 
         if (!response.ok) {

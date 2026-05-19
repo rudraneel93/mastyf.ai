@@ -738,6 +738,8 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 
 ## Production Checklist
 
+**Ops:** [Disaster recovery runbook](docs/DISASTER_RECOVERY.md) · [Encryption at rest](docs/ENCRYPTION_AT_REST.md) · [Redis HA](docs/REDIS_HA.md)
+
 Short list before `default-policy.yaml` + block mode in production. All five blockers from [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are resolved in **v2.8.0** — use this checklist to configure them:
 
 1. **Policy** — Roll out `policy-audit.yaml` → `policy-warn.yaml` → `default-policy.yaml`; run `mcp-guardian policy test` on risky tools; set `GUARDIAN_WORKSPACE` or path prefixes ([POLICY.md](docs/POLICY.md)).

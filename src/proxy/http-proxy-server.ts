@@ -210,7 +210,10 @@ export class HttpProxyServer {
           if (decision.action === 'block') {
             Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: `policy:${decision.rule}`, rule: decision.rule });
             Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
-            res.writeHead(403, { 'Content-Type': 'application/json' });
+            const rateLimited =
+              /rate\s*limit/i.test(decision.reason || '') ||
+              /rate/i.test(decision.rule || '');
+            res.writeHead(rateLimited ? 429 : 403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               jsonrpc: '2.0',
               id: msg.id,

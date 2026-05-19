@@ -68,12 +68,29 @@ export function getRedisConnectionLabel(): string {
   return 'none';
 }
 
+function shouldUseRedisTls(url?: string): boolean {
+  if (process.env['GUARDIAN_REDIS_TLS'] === 'true') return true;
+  if (process.env['GUARDIAN_REDIS_TLS'] === 'false') return false;
+  const u = url || process.env['REDIS_URL'] || '';
+  return u.startsWith('rediss://');
+}
+
+function tlsOptions(): Pick<RedisOptions, 'tls'> | Record<string, never> {
+  if (!shouldUseRedisTls()) return {};
+  return {
+    tls: {
+      rejectUnauthorized: process.env['GUARDIAN_REDIS_TLS_REJECT_UNAUTHORIZED'] !== 'false',
+    },
+  };
+}
+
 function baseOptions(options?: RedisClientOptions): RedisOptions {
   return {
     maxRetriesPerRequest: options?.maxRetriesPerRequest ?? 2,
     lazyConnect: options?.lazyConnect ?? false,
     connectTimeout: options?.connectTimeout,
     password: process.env['REDIS_PASSWORD'] || undefined,
+    ...tlsOptions(),
   };
 }
 
@@ -106,8 +123,11 @@ export function createRedisClient(options?: RedisClientOptions): Redis | Cluster
     });
   }
 
-  const url = process.env['REDIS_URL'] || 'redis://localhost:6379';
-  Logger.info(`[redis] URL mode: ${url}`);
+  let url = process.env['REDIS_URL'] || 'redis://localhost:6379';
+  if (process.env['GUARDIAN_REDIS_TLS'] === 'true' && url.startsWith('redis://')) {
+    url = 'rediss://' + url.slice('redis://'.length);
+  }
+  Logger.info(`[redis] URL mode: ${url}${shouldUseRedisTls(url) ? ' (TLS)' : ''}`);
   return new Redis(url, opts);
 }
 

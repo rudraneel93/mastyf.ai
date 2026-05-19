@@ -16,6 +16,7 @@ import {
   isLocalSemanticEnabled,
   scoreLocalSemanticRisk,
 } from './local-semantic-classifier.js';
+import { withSemanticTimeout } from '../utils/semantic-timeout.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 
 export interface SemanticAuditJob {
@@ -199,7 +200,11 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   const userPrompt =
     `Server: ${job.serverName}\nTool: ${job.toolName}\nSync decision: ${job.syncDecision.action} (${job.syncDecision.rule})\nArguments: ${argsPreview}`;
 
-  const response = await getLlm().generate(systemPrompt, userPrompt);
+  const response = await withSemanticTimeout(
+    'async_semantic_audit',
+    () => getLlm().generate(systemPrompt, userPrompt),
+    null,
+  );
   stats.processed++;
   if (!response) {
     semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'no_llm' });

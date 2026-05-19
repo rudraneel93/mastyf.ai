@@ -2,27 +2,25 @@ import { PolicyConfig, PolicyDecision, CallContext, PolicyAction, PolicyMode } f
 import { Logger } from '../utils/logger.js';
 import { getNormalizer } from '../utils/payload-normalizer.js';
 import { isFpWhitelisted } from '../ai/fp-whitelist.js';
-import { evaluateSemanticGuards } from './semantic-guards.js';
-import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
+import { ShellTokenizer } from './shell-tokenizer.js';
 import { LRUCache } from 'lru-cache';
 import { resolvePolicyPrecedence } from './policy-precedence.js';
-import { StructuredLogger } from '../utils/structured-logger.js';
-import { evaluateOpaPolicy } from './opa-policy.js';
 import {
   getCachedPolicyDecision,
   isPolicyEvalCacheEnabled,
   policyEvalCacheKey,
   setCachedPolicyDecision,
 } from './policy-eval-cache.js';
-import { evaluateShadowPolicy } from './shadow-policy.js';
-import {
-  hashIdempotentPayload,
-  isDuplicateIdempotentRequest,
-} from './idempotency-store.js';
-import { isRedisConfigured } from '../utils/redis-client.js';
-import { getSharedRedisRateLimiter } from '../utils/redis-rate-limiter.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
-import { scanToolCallArguments } from '../scanners/prompt-injection-detector.js';
+import {
+  SYNC_POLICY_STRATEGIES,
+  evaluateIdempotency,
+  evaluateRedisRateLimit,
+  opaStrategy,
+  runShadowPolicy,
+  type PolicyEngineDeps,
+  type SyncEvaluateContext,
+} from './strategies/index.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -30,6 +28,7 @@ import { scanToolCallArguments } from '../scanners/prompt-injection-detector.js'
  *
  * v1.2: Integrated payload normalization and semantic shell analysis layers
  * v2.1: Replaced Map with LRUCache to prevent memory leaks under sustained load
+ * v2.9: Strategy-pattern pipeline under src/policy/strategies/
  */
 export class PolicyEngine {
   private rules: PolicyConfig['policy']['rules'];
@@ -43,7 +42,6 @@ export class PolicyEngine {
   private normalizer: ReturnType<typeof getNormalizer>;
   private shellTokenizer = new ShellTokenizer();
 
-  // Pre-compiled regex patterns (constructed once, not on every tools/call)
   private compiledPatterns: Map<string, { compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
   private compiledArgPatterns: Map<string, { field: string; compiled: RegExp[]; rule: PolicyConfig['policy']['rules'][number] }[]> = new Map();
 
@@ -55,10 +53,8 @@ export class PolicyEngine {
     this.compilePatterns();
   }
 
-  /** Pre-compile all regex patterns at construction to avoid re-compilation on every tools/call */
   private compilePatterns(): void {
     for (const rule of this.rules) {
-      // Compile rule.patterns
       if (rule.patterns?.length) {
         try {
           const compiled = rule.patterns.map(p => new RegExp(p, 'i'));
@@ -70,7 +66,6 @@ export class PolicyEngine {
           Logger.warn(`Policy: invalid regex in rule '${rule.name}' patterns — skipping pre-compilation`);
         }
       }
-      // Compile rule.argPatterns
       if (rule.argPatterns?.length) {
         for (const ap of rule.argPatterns) {
           try {
@@ -87,18 +82,27 @@ export class PolicyEngine {
     }
   }
 
-  /** Recursively extract all leaf string values from a nested argument object */
   private extractLeafValues(obj: unknown): string[] {
     return walkStringLeaves(obj).map((l) => l.value);
   }
 
-  /**
-   * Evaluate a tools/call request and return a decision.
-   *
-   * Order: (1) OPA/Rego block if OPA_URL set, (2) YAML rules + default_action.
-   * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
-   */
-  /** OPA runs only when policy.opa or GUARDIAN_OPA_ENABLED and OPA_URL is set. */
+  private buildDeps(): PolicyEngineDeps {
+    return {
+      config: this.config,
+      rules: this.rules,
+      mode: this.mode,
+      normalizer: this.normalizer,
+      shellTokenizer: this.shellTokenizer,
+      compiledPatterns: this.compiledPatterns,
+      compiledArgPatterns: this.compiledArgPatterns,
+      callCounters: this.callCounters,
+      resolveAction: (a) => this.resolveAction(a),
+      extractLeafValues: (o) => this.extractLeafValues(o),
+      evaluateRule: (rule, ctx, analysis, skip) =>
+        this.evaluateRule(rule, ctx, analysis, skip),
+    };
+  }
+
   isOpaEnabled(): boolean {
     if (!process.env['OPA_URL']) return false;
     if (this.config.policy.opa === false) return false;
@@ -106,7 +110,7 @@ export class PolicyEngine {
   }
 
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
-    void evaluateShadowPolicy(context);
+    runShadowPolicy(context);
 
     if (isPolicyEvalCacheEnabled()) {
       const cacheKey = policyEvalCacheKey(context);
@@ -114,64 +118,20 @@ export class PolicyEngine {
       if (cached) return cached;
     }
 
-    if (this.mode === 'block' && context.idempotencyKey) {
-      const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
-      const cacheKey = hashIdempotentPayload(
-        tenant,
-        context.serverName,
-        context.toolName,
-        context.arguments,
-        context.idempotencyKey,
-      );
-      if (await isDuplicateIdempotentRequest(cacheKey, tenant)) {
-        return {
-          action: 'block',
-          rule: 'idempotency-replay',
-          reason: `Duplicate idempotency key '${context.idempotencyKey}' within TTL`,
-        };
-      }
+    const idempotencyDecision = await evaluateIdempotency(context, this.mode);
+    if (idempotencyDecision) return idempotencyDecision;
+
+    const deps = this.buildDeps();
+    const opaDecision = this.isOpaEnabled()
+      ? await opaStrategy.evaluateAsync(context, deps)
+      : null;
+
+    const { decision: rateDecision, skipLocalRateLimit } = await evaluateRedisRateLimit(context, deps);
+    if (rateDecision) {
+      return resolvePolicyPrecedence(opaDecision, rateDecision);
     }
 
-    const opaDecision = this.isOpaEnabled() ? await evaluateOpaPolicy(context) : null;
-
-    let yamlDecision: PolicyDecision;
-    let skipLocalRateLimit = false;
-
-    if (isRedisConfigured()) {
-      try {
-        const rl = getSharedRedisRateLimiter();
-        for (const rule of this.rules) {
-          if (!rule.maxCallsPerMinute) continue;
-          const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
-          const clientId = context.agentIdentity?.clientId || context.agentIdentity?.sub;
-          const key = clientId
-            ? `${context.serverName}:${context.toolName}:${clientId}:${rule.name}`
-            : `${context.serverName}:${context.toolName}:${rule.name}`;
-          const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute, 60000, tenant);
-          if (!allowed) {
-            yamlDecision = {
-              action: this.resolveAction(rule.action),
-              rule: rule.name,
-              reason: `Rate limit exceeded: ${rule.maxCallsPerMinute} calls per minute (cluster)`,
-            };
-            return resolvePolicyPrecedence(opaDecision, yamlDecision);
-          }
-        }
-        skipLocalRateLimit = true;
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        Logger.warn(`[policy] redis_rate_limit_degraded: ${message}`);
-        StructuredLogger.info({
-          event: 'redis_rate_limit_degraded' as const,
-          serverName: context.serverName,
-          toolName: context.toolName,
-          error: message,
-        });
-        skipLocalRateLimit = false;
-      }
-    }
-
-    yamlDecision = this.evaluate(context, { skipLocalRateLimit });
+    const yamlDecision = this.evaluate(context, { skipLocalRateLimit });
     const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
     if (isPolicyEvalCacheEnabled()) {
       await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
@@ -180,7 +140,6 @@ export class PolicyEngine {
   }
 
   evaluate(context: CallContext, options?: { skipLocalRateLimit?: boolean }): PolicyDecision {
-    // ── v1.2: Payload normalization (before regex evaluation) ──
     const normalizedArgs = context.arguments
       ? this.normalizer.normalizeJsonValue(context.arguments) as Record<string, unknown>
       : {};
@@ -188,111 +147,27 @@ export class PolicyEngine {
       ...context,
       arguments: normalizedArgs,
     };
-
-    // ── Request-path prompt injection (all severities, all argument leaves) ──
-    const piFindings = scanToolCallArguments(normalizedArgs);
-    if (piFindings.length > 0) {
-      const top = piFindings.sort((a, b) => {
-        const rank = { critical: 0, high: 1, medium: 2 };
-        return rank[a.severity] - rank[b.severity];
-      })[0];
-      const rule = 'request-prompt-injection';
-      if (!isFpWhitelisted(rule, top.patternId)) {
-        return {
-          action: this.resolveAction('block'),
-          rule,
-          reason: `Prompt injection in tool arguments: ${top.patternId} (${top.severity})`,
-        };
-      }
-    }
-
-    // ── v1.2: Semantic shell analysis on argument strings ──
     const argsStr = JSON.stringify(normalizedArgs);
-    const shellRisk: CommandRisk = argsStr.length > 0
-      ? this.shellTokenizer.analyzeRisk(this.shellTokenizer.tokenize(argsStr).commands)
-      : { hasCommandSubstitution: false, hasPipes: false, hasRedirects: false, hasLogicalChains: false, dangerousCommands: [], shellMetacharacters: [] };
 
-    // Semantic shell analysis runs once per request (not per rule)
-    const psReason = this.shellTokenizer.detectPowerShellRisk(argsStr);
-    if (psReason) {
-      return {
-        action: this.resolveAction('block'),
-        rule: 'semantic-shell-guard',
-        reason: psReason,
-      };
-    }
+    const syncCtx: SyncEvaluateContext = {
+      raw: context,
+      normalized: normalizedContext,
+      argsStr,
+      skipLocalRateLimit: options?.skipLocalRateLimit,
+    };
 
-    const b64ShellReason = this.shellTokenizer.detectBase64PipeShell(argsStr);
-    if (b64ShellReason) {
-      return {
-        action: this.resolveAction('block'),
-        rule: 'semantic-shell-guard',
-        reason: b64ShellReason,
-      };
-    }
-
-    const semanticDecision = this.evaluateSemanticShell(shellRisk, context.toolName);
-    if (semanticDecision) return semanticDecision;
-
-    const semanticAbuse = evaluateSemanticGuards(normalizedContext);
-    if (semanticAbuse) {
-      return { ...semanticAbuse, action: this.resolveAction(semanticAbuse.action) };
-    }
-
-    let permittedByAllowlist = false;
-    for (const rule of this.rules) {
-      if (rule.tools?.allow?.length && rule.tools.allow.includes(normalizedContext.toolName)) {
-        permittedByAllowlist = true;
-      }
-      const decision = this.evaluateRule(rule, normalizedContext, { argsStr }, options?.skipLocalRateLimit);
+    const deps = this.buildDeps();
+    for (const strategy of SYNC_POLICY_STRATEGIES) {
+      const decision = strategy.evaluate(syncCtx, deps);
       if (decision) return decision;
     }
 
-    if (permittedByAllowlist) {
-      return {
-        action: 'pass',
-        rule: 'allowlist',
-        reason: `Tool '${normalizedContext.toolName}' is allowlisted and passed policy checks`,
-      };
-    }
-
-    // GAP 14: default_action when no rule matches — omit for fail-open (rule-only policies);
-    // set explicitly to 'block' in default-policy.yaml for fail-closed production posture.
     const defaultAction = this.config.policy.default_action ?? 'pass';
-    return { action: this.resolveAction(defaultAction), rule: 'default', reason: `No matching rule — applying default_action: ${defaultAction}` };
-  }
-
-  /** Global semantic shell guard — evaluated once before rule iteration */
-  private evaluateSemanticShell(shellRisk: CommandRisk, toolName: string): PolicyDecision | null {
-    if (this.config.policy.semantic_shell === false) return null;
-
-    if (shellRisk.hasCommandSubstitution) {
-      Logger.info(`[policy] Semantic: command substitution detected in '${toolName}' arguments`);
-      return {
-        action: this.resolveAction('block'),
-        rule: 'semantic-shell-guard',
-        reason: 'Semantic: shell command substitution detected in arguments',
-      };
-    }
-
-    if (shellRisk.dangerousCommands.length > 0) {
-      Logger.info(`[policy] Semantic: dangerous commands [${shellRisk.dangerousCommands.join(', ')}] in '${toolName}' arguments`);
-      return {
-        action: this.resolveAction('block'),
-        rule: 'semantic-shell-guard',
-        reason: `Semantic: dangerous shell commands detected: [${shellRisk.dangerousCommands.join(', ')}]`,
-      };
-    }
-
-    if (shellRisk.hasPipes && shellRisk.hasCommandSubstitution) {
-      return {
-        action: this.resolveAction('block'),
-        rule: 'semantic-shell-guard',
-        reason: 'Semantic: pipe chain with command substitution',
-      };
-    }
-
-    return null;
+    return {
+      action: this.resolveAction(defaultAction),
+      rule: 'default',
+      reason: `No matching rule — applying default_action: ${defaultAction}`,
+    };
   }
 
   private evaluateRule(
@@ -301,11 +176,9 @@ export class PolicyEngine {
     analysis: { argsStr: string },
     skipLocalRateLimit = false,
   ): PolicyDecision | null {
-    // Tool allowlist/denylist
     if (rule.tools) {
       if (rule.tools.allow && rule.tools.allow.length > 0) {
         if (rule.tools.allow.includes(ctx.toolName)) {
-          // Allowed tool — keep evaluating pattern/deny/rate rules below.
           return null;
         }
         return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Tool '${ctx.toolName}' not in allowlist: [${rule.tools.allow.join(', ')}]` };
@@ -317,11 +190,10 @@ export class PolicyEngine {
       }
     }
 
-    // v2.2: Tool category matching (e.g., destructive operations)
     if (rule.toolCategories?.deny) {
       const toolLower = ctx.toolName.toLowerCase();
       const matchesCategory = rule.toolCategories.deny.some(
-        (cat) => toolLower.includes(cat.toLowerCase())
+        (cat) => toolLower.includes(cat.toLowerCase()),
       );
       const isException = (rule.toolAllowExceptions ?? []).includes(ctx.toolName);
       if (matchesCategory && !isException) {
@@ -333,7 +205,6 @@ export class PolicyEngine {
       }
     }
 
-    // v2.2: Argument-level field patterns — uses pre-compiled regexes, recursive leaf walk
     if (ctx.arguments) {
       const compiledAps = this.compiledArgPatterns.get(rule.name) || [];
       for (const { field, compiled, rule: r } of compiledAps) {
@@ -357,7 +228,6 @@ export class PolicyEngine {
       }
     }
 
-    // v1.2: Malicious pattern detection — uses pre-compiled regexes
     if (ctx.arguments) {
       const compiledPs = this.compiledPatterns.get(rule.name) || [];
       for (const { compiled, rule: r } of compiledPs) {
@@ -371,12 +241,10 @@ export class PolicyEngine {
       }
     }
 
-    // Max tokens per call
     if (rule.maxTokens && ctx.requestTokens > rule.maxTokens) {
       return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Token count ${ctx.requestTokens} exceeds max ${rule.maxTokens}` };
     }
 
-    // v0.5.1: RBAC — scope and client_id constraints
     if (rule.rbac) {
       const identity = ctx.agentIdentity;
       if (!identity) {
@@ -415,7 +283,6 @@ export class PolicyEngine {
       }
     }
 
-    // Rate limiting (LRU-backed, prevents memory leaks) — skipped when Redis cluster limiter is active
     if (rule.maxCallsPerMinute && !skipLocalRateLimit) {
       const tenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
       const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub;
@@ -456,11 +323,6 @@ export class PolicyEngine {
     return this.rules.length;
   }
 
-  /**
-   * v2.5: Response inspection — scan tool RESPONSES for prompt injection and data exfiltration.
-   * Unlike request evaluation, response inspection is informational (warn, not block)
-   * since blocking a response mid-stream would corrupt the JSON-RPC state.
-   */
   private static RESPONSE_INJECTION_PATTERNS: RegExp[] = [
     /(?:ignore|disregard|forget)\s+(?:previous|all|above|your)\s+(?:instructions?|training|rules|constraints)/i,
     /(?:system|assistant):\s*(?:you\s+are|your\s+new\s+role|override)/i,
@@ -485,6 +347,8 @@ export class PolicyEngine {
     serverName: string,
     responseBody: string | null | undefined,
   ): { clean: boolean; detections: string[] } {
+    void toolName;
+    void serverName;
     const detections: string[] = [];
 
     if (responseBody == null || typeof responseBody !== 'string') {
@@ -519,7 +383,6 @@ export class PolicyEngine {
     return { clean: detections.length === 0, detections };
   }
 
-  /** Expose the shell tokenizer for testing */
   getShellTokenizer(): ShellTokenizer {
     return this.shellTokenizer;
   }

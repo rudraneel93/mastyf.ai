@@ -13,11 +13,21 @@ Use **one Redis deployment per region**. Do not run active-active Redis across r
 
 | Mode | Environment | Example |
 |------|-------------|---------|
-| Single | `REDIS_URL` | `redis://redis-master:6379` |
+| Single | `REDIS_URL` | `redis://redis-master:6379` or **`rediss://`** for TLS |
 | Sentinel | `REDIS_SENTINELS` + `REDIS_SENTINEL_MASTER_NAME` | `sentinel-0:26379,sentinel-1:26379` + `mymaster` |
 | Cluster | `REDIS_CLUSTER_NODES` | `redis-0:6379,redis-1:6379,redis-2:6379` |
 
 Optional: `REDIS_PASSWORD` for auth.
+
+### TLS in transit
+
+| Variable | Effect |
+|----------|--------|
+| `rediss://` in `REDIS_URL` | TLS enabled (ioredis native) |
+| `GUARDIAN_REDIS_TLS=true` | Upgrades `redis://` → `rediss://` and sets `tls` options |
+| `GUARDIAN_REDIS_TLS_REJECT_UNAUTHORIZED=false` | Dev only — accept self-signed certs |
+
+Production: prefer **`rediss://`** endpoints from your cloud Redis offering.
 
 Priority if multiple are set: **Cluster** > **Sentinel** > **URL**.
 
