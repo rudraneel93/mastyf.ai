@@ -8,6 +8,12 @@ import { LRUCache } from 'lru-cache';
 import { resolvePolicyPrecedence } from './policy-precedence.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { evaluateOpaPolicy } from './opa-policy.js';
+import {
+  getCachedPolicyDecision,
+  isPolicyEvalCacheEnabled,
+  policyEvalCacheKey,
+  setCachedPolicyDecision,
+} from './policy-eval-cache.js';
 import { evaluateShadowPolicy } from './shadow-policy.js';
 import {
   hashIdempotentPayload,
@@ -92,8 +98,21 @@ export class PolicyEngine {
    * Order: (1) OPA/Rego block if OPA_URL set, (2) YAML rules + default_action.
    * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
    */
+  /** OPA runs only when policy.opa or GUARDIAN_OPA_ENABLED and OPA_URL is set. */
+  isOpaEnabled(): boolean {
+    if (!process.env['OPA_URL']) return false;
+    if (this.config.policy.opa === false) return false;
+    return this.config.policy.opa === true || process.env['GUARDIAN_OPA_ENABLED'] === 'true';
+  }
+
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
     void evaluateShadowPolicy(context);
+
+    if (isPolicyEvalCacheEnabled()) {
+      const cacheKey = policyEvalCacheKey(context);
+      const cached = await getCachedPolicyDecision(cacheKey);
+      if (cached) return cached;
+    }
 
     if (this.mode === 'block' && context.idempotencyKey) {
       const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
@@ -113,7 +132,7 @@ export class PolicyEngine {
       }
     }
 
-    const opaDecision = await evaluateOpaPolicy(context);
+    const opaDecision = this.isOpaEnabled() ? await evaluateOpaPolicy(context) : null;
 
     let yamlDecision: PolicyDecision;
     let skipLocalRateLimit = false;
@@ -153,7 +172,11 @@ export class PolicyEngine {
     }
 
     yamlDecision = this.evaluate(context, { skipLocalRateLimit });
-    return resolvePolicyPrecedence(opaDecision, yamlDecision);
+    const finalDecision = resolvePolicyPrecedence(opaDecision, yamlDecision);
+    if (isPolicyEvalCacheEnabled()) {
+      await setCachedPolicyDecision(policyEvalCacheKey(context), finalDecision);
+    }
+    return finalDecision;
   }
 
   evaluate(context: CallContext, options?: { skipLocalRateLimit?: boolean }): PolicyDecision {

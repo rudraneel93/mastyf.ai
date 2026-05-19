@@ -11,8 +11,29 @@ import {
   resolveModelListRates,
 } from '../utils/cost-estimate.js';
 
+/** Per-tenant caps from GUARDIAN_TENANT_DAILY_BUDGET_JSON={"acme":100,"beta":50}. */
+export function getTenantDailyBudgetMap(): Map<string, number> {
+  const map = new Map<string, number>();
+  const raw = process.env['GUARDIAN_TENANT_DAILY_BUDGET_JSON'];
+  if (!raw?.trim()) return map;
+  try {
+    const obj = JSON.parse(raw) as Record<string, number | string>;
+    for (const [tenant, val] of Object.entries(obj)) {
+      const cap = typeof val === 'number' ? val : parseFloat(String(val));
+      if (Number.isFinite(cap) && cap > 0) map.set(tenant, cap);
+    }
+  } catch {
+    /* ignore */
+  }
+  return map;
+}
+
 /** Daily spend cap from GUARDIAN_DAILY_BUDGET_USD (preferred) or MCP_GUARDIAN_COST_BUDGET. */
-export function getDailyBudgetCapUsd(): number {
+export function getDailyBudgetCapUsd(tenantId?: string): number {
+  if (tenantId) {
+    const perTenant = getTenantDailyBudgetMap().get(tenantId);
+    if (perTenant !== undefined) return perTenant;
+  }
   const daily = process.env['GUARDIAN_DAILY_BUDGET_USD'] ?? process.env['MCP_GUARDIAN_COST_BUDGET'];
   if (!daily) return 0;
   const cap = parseFloat(daily);
@@ -57,16 +78,17 @@ export class CostAuditor {
     return Math.round(total * 10000) / 10000;
   }
 
-  async isDailyBudgetExceeded(): Promise<{
+  async isDailyBudgetExceeded(tenantId?: string): Promise<{
     exceeded: boolean;
     spentUsd: number;
     capUsd: number;
   }> {
-    const capUsd = getDailyBudgetCapUsd();
+    const tid = tenantId ?? this.tenantId;
+    const capUsd = getDailyBudgetCapUsd(tid);
     if (capUsd <= 0) {
       return { exceeded: false, spentUsd: 0, capUsd: 0 };
     }
-    const spentUsd = await this.getDailySpendUsd();
+    const spentUsd = await this.getDailySpendUsd(tid);
     return { exceeded: spentUsd >= capUsd, spentUsd, capUsd };
   }
 

@@ -20,7 +20,7 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import { inspectFullResponse, isResponseScanSkipped } from '../utils/streaming-inspector.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
@@ -136,11 +136,16 @@ export class WebSocketProxyServer {
   }
 
   private inspectToolResult(msg: Record<string, unknown>): Record<string, unknown> | null {
-    if (!this.opts.policy || this.opts.policy.getMode() !== 'block') return null;
+    if (!this.opts.policy || this.opts.policy.getMode() !== 'block' || isResponseScanSkipped()) {
+      return null;
+    }
     const resultText = JSON.stringify((msg as { result?: unknown }).result ?? '');
-    const findings = detectPromptInjection('response', resultText);
-    const critical = findings.some((f) => f.severity === 'critical' || f.severity === 'high');
-    if (!critical) return null;
+    const inspect = inspectFullResponse(resultText, {
+      toolName: 'response',
+      serverName: this.opts.serverName,
+      policy: this.opts.policy,
+    });
+    if (!inspect.hasCritical && !inspect.hasHigh) return null;
     return {
       jsonrpc: '2.0',
       id: msg.id,

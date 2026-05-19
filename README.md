@@ -315,6 +315,10 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Remote SSH path map** — `GUARDIAN_REMOTE_SSH=true` + `GUARDIAN_REMOTE_PATH_MAP` translates local IDE paths for path-guard ([REMOTE_SSH.md](docs/REMOTE_SSH.md))
 - **Dev containers** — Bind-mount the same `history.db`; see [DEVCONTAINERS.md](docs/DEVCONTAINERS.md)
 
+### Enterprise readiness
+
+See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an honest production vs pilot scorecard (dashboard RBAC, streaming response scan, local semantic fallback, multi-replica policy cache, integration fixtures).
+
 ### Enterprise (v2.5+)
 - **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview
 - **Fleet aggregation (v2.7)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`)

@@ -132,6 +132,26 @@ rbac:
   tenants: [acme-corp]
 ```
 
+## Multi-replica policy cache
+
+When running multiple Guardian replicas behind a load balancer, enable distributed policy evaluation caching:
+
+```bash
+export REDIS_URL=redis://redis:6379
+export GUARDIAN_POLICY_EVAL_CACHE=true
+export GUARDIAN_POLICY_EVAL_CACHE_TTL_MS=5000
+```
+
+Cache keys: `policy-eval:{tenantId}:{serverName}:{toolName}:{argsHash}`. Mirrors the OPA LRU pattern in `src/policy/opa-policy.ts`. Disable with `GUARDIAN_POLICY_EVAL_CACHE=false`.
+
+Prometheus metrics include `tenant_id` on `mcp_guardian_requests_total`, `mcp_guardian_blocked_total`, and `mcp_guardian_proxy_latency_ms` for per-tenant dashboards.
+
+Per-tenant spend caps:
+
+```bash
+export GUARDIAN_TENANT_DAILY_BUDGET_JSON='{"acme-corp":100,"beta":25}'
+```
+
 ## Limits
 
 - **Not** full network/data-plane isolation — tenants share process memory, SQLite file, and Redis instance unless you deploy separate deployments/namespaces.

@@ -5,7 +5,11 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import { URL } from 'url';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import {
+  findingsToMessages,
+  inspectFullResponse,
+  isResponseScanSkipped,
+} from '../utils/streaming-inspector.js';
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
@@ -402,32 +406,19 @@ export class SseProxyServer extends EventEmitter {
     requestId: unknown,
   ): Record<string, unknown> | null {
     const result = (response as { result?: unknown }).result;
-    if (result == null) return null;
+    if (result == null || isResponseScanSkipped()) return null;
 
     const responseText = JSON.stringify(result);
-    const allDetections: string[] = [];
-    if (this.opts.policy) {
-      const { clean, detections } = this.opts.policy.evaluateResponse(
-        toolName,
-        this.opts.serverName,
-        responseText,
-      );
-      if (!clean) allDetections.push(...detections);
-    }
+    const inspect = inspectFullResponse(responseText, {
+      toolName,
+      serverName: this.opts.serverName,
+      policy: this.opts.policy,
+    });
+    const hasCritical = inspect.hasCritical;
+    const hasHigh = inspect.hasHigh;
+    if (inspect.clean) return null;
 
-    const injectionFindings = detectPromptInjection(toolName, responseText);
-    const hasCritical = injectionFindings.some((f) => f.severity === 'critical');
-    const hasHigh = injectionFindings.some((f) => f.severity === 'high');
-    const hasDetections = injectionFindings.length > 0 || allDetections.length > 0;
-
-    if (!hasDetections) return null;
-
-    const allMessages = [
-      ...allDetections,
-      ...injectionFindings.map(
-        (f) => `${f.severity.toUpperCase()}: ${f.description} (${f.matchPreview})`,
-      ),
-    ];
+    const allMessages = findingsToMessages(inspect.findings);
     Logger.warn(
       `[sse-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
     );

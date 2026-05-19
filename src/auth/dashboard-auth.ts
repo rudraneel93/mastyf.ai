@@ -19,11 +19,19 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { resolveTenantContext, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { validateJwtTenantBinding } from '../tenant/jwt-tenant-binding.js';
+import {
+  type DashboardRole,
+  parseDashboardRolesEnv,
+  resolveRolesForApiKey,
+  resolveRolesFromSessionPayload,
+} from './dashboard-rbac.js';
 
 export interface AuthResult {
   authenticated: boolean;
   reason?: string;
   identity?: string;
+  roles?: DashboardRole[];
+  sessionTenantId?: string;
 }
 
 export interface DashboardAuthConfig {
@@ -64,6 +72,8 @@ export class DashboardAuth {
   private config: DashboardAuthConfig;
   private loginRateMap: Map<string, LoginRateEntry> = new Map();
   private activeTokens: Set<string> = new Set();
+  private sessionMeta: Map<string, { tenantId: string; roles: DashboardRole[] }> = new Map();
+  private apiKeyRoles: Map<string, DashboardRole> = parseDashboardRolesEnv();
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(config?: Partial<DashboardAuthConfig>) {
@@ -139,7 +149,11 @@ export class DashboardAuth {
       const queryKey = urlObj.searchParams.get('api_key');
       if (queryKey && this.config.apiKey) {
         if (this.timingSafeCompare(queryKey, this.config.apiKey)) {
-          return { authenticated: true, identity: 'api_key' };
+          return {
+            authenticated: true,
+            identity: 'api_key',
+            roles: resolveRolesForApiKey(queryKey, this.apiKeyRoles),
+          };
         }
       }
     } catch {
@@ -155,7 +169,11 @@ export class DashboardAuth {
 
         // Check if it's the API key
         if (this.config.apiKey && this.timingSafeCompare(token, this.config.apiKey)) {
-          return { authenticated: true, identity: 'api_key' };
+          return {
+            authenticated: true,
+            identity: 'api_key',
+            roles: resolveRolesForApiKey(token, this.apiKeyRoles),
+          };
         }
 
         // Check if it's a valid session token
@@ -165,7 +183,12 @@ export class DashboardAuth {
           if (!bind.ok) {
             return { authenticated: false, reason: bind.reason };
           }
-          return { authenticated: true, identity: 'session' };
+          return {
+            authenticated: true,
+            identity: 'session',
+            roles: this.getSessionRoles(token),
+            sessionTenantId: sessionTenant,
+          };
         }
       }
     }
@@ -179,14 +202,23 @@ export class DashboardAuth {
       if (!bind.ok) {
         return { authenticated: false, reason: bind.reason };
       }
-      return { authenticated: true, identity: 'session' };
+      return {
+        authenticated: true,
+        identity: 'session',
+        roles: this.getSessionRoles(sessionCookie),
+        sessionTenantId: sessionTenant,
+      };
     }
 
     // ── Check X-API-Key header ──
     const apiKeyHeader = headers['x-api-key'];
     if (apiKeyHeader && this.config.apiKey) {
       if (this.timingSafeCompare(apiKeyHeader, this.config.apiKey)) {
-        return { authenticated: true, identity: 'api_key' };
+        return {
+          authenticated: true,
+          identity: 'api_key',
+          roles: resolveRolesForApiKey(apiKeyHeader, this.apiKeyRoles),
+        };
       }
     }
 
@@ -230,7 +262,8 @@ export class DashboardAuth {
 
     // Check API key shortcut
     if (body.api_key && this.config.apiKey && this.timingSafeCompare(body.api_key, this.config.apiKey)) {
-      const token = this.createSessionToken(tenantId);
+      const roles = resolveRolesForApiKey(body.api_key, this.apiKeyRoles);
+      const token = this.createSessionToken(tenantId, roles);
       Logger.info(`[dashboard-auth] Login via API key from ${ip}`);
       return { success: true, token };
     }
@@ -249,12 +282,14 @@ export class DashboardAuth {
       this.timingSafeCompare(body.username, expectedUsername) &&
       this.timingSafeCompare(body.password, expectedPassword)
     ) {
-      const token = this.createSessionToken(tenantId);
+      const roles = this.sessionRolesFromLogin(body as { role?: string; roles?: string });
+      const token = this.createSessionToken(tenantId, roles);
       StructuredLogger.info({
         event: 'dashboard_login',
         ip,
         identity: body.username,
         tenantId,
+        roles,
       });
       return { success: true, token };
     }
@@ -273,6 +308,14 @@ export class DashboardAuth {
    */
   logout(token: string): void {
     this.activeTokens.delete(token);
+    this.sessionMeta.delete(token);
+  }
+
+  /** Roles for an active session or API key identity (defaults to viewer when auth disabled). */
+  getRolesForAuth(auth: AuthResult): DashboardRole[] {
+    if (!this.config.enabled) return ['admin'];
+    if (auth.roles?.length) return auth.roles;
+    return ['viewer'];
   }
 
   /** Whether mutating requests require CSRF validation (auth on and configured). */
@@ -426,11 +469,15 @@ ${csrfField}
   /**
    * Create a signed HMAC session token (fresh jti on every login).
    */
-  private createSessionToken(tenantId: string = DEFAULT_TENANT_ID): string {
+  private createSessionToken(
+    tenantId: string = DEFAULT_TENANT_ID,
+    roles: DashboardRole[] = ['viewer'],
+  ): string {
     const payload = Buffer.from(JSON.stringify({
       iat: Math.floor(Date.now() / 1000),
       jti: randomBytes(16).toString('hex'),
       tenant_id: tenantId,
+      roles,
     })).toString('base64url');
 
     const signature = createHmac('sha256', this.config.jwtSecret || randomBytes(32).toString('hex'))
@@ -439,11 +486,30 @@ ${csrfField}
 
     const token = `${payload}.${signature}`;
     this.activeTokens.add(token);
+    this.sessionMeta.set(token, { tenantId, roles });
 
     // Auto-expire after TTL
-    setTimeout(() => this.activeTokens.delete(token), this.config.sessionTtlSeconds * 1000);
+    setTimeout(() => {
+      this.activeTokens.delete(token);
+      this.sessionMeta.delete(token);
+    }, this.config.sessionTtlSeconds * 1000);
 
     return token;
+  }
+
+  private sessionRolesFromLogin(body: { role?: string; roles?: string }): DashboardRole[] {
+    if (body.roles) {
+      try {
+        const parsed = JSON.parse(body.roles) as string[];
+        return resolveRolesFromSessionPayload({ roles: parsed });
+      } catch {
+        return resolveRolesFromSessionPayload({ roles: body.roles.split(',') });
+      }
+    }
+    if (body.role) return resolveRolesFromSessionPayload({ role: body.role });
+    const envRole = process.env['GUARDIAN_DASHBOARD_LOGIN_ROLE'];
+    if (envRole) return resolveRolesFromSessionPayload({ role: envRole });
+    return ['viewer'];
   }
 
   /**
@@ -465,17 +531,36 @@ ${csrfField}
     return this.activeTokens.has(token);
   }
 
-  private getSessionTenantId(token: string): string | undefined {
+  private parseSessionPayload(token: string): {
+    tenant_id?: string;
+    roles?: string[];
+    role?: string;
+  } | undefined {
     try {
       const [payloadB64] = token.split('.');
       if (!payloadB64) return undefined;
-      const json = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as {
+      return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as {
         tenant_id?: string;
+        roles?: string[];
+        role?: string;
       };
-      return json.tenant_id;
     } catch {
       return undefined;
     }
+  }
+
+  private getSessionTenantId(token: string): string | undefined {
+    const meta = this.sessionMeta.get(token);
+    if (meta) return meta.tenantId;
+    return this.parseSessionPayload(token)?.tenant_id;
+  }
+
+  private getSessionRoles(token: string): DashboardRole[] {
+    const meta = this.sessionMeta.get(token);
+    if (meta?.roles?.length) return meta.roles;
+    const json = this.parseSessionPayload(token);
+    if (json) return resolveRolesFromSessionPayload(json);
+    return ['viewer'];
   }
 
   /**
@@ -553,6 +638,9 @@ ${csrfField}
   dispose(): void {
     if (this.cleanupInterval) clearInterval(this.cleanupInterval);
     this.activeTokens.clear();
+    this.sessionMeta.clear();
     this.loginRateMap.clear();
   }
 }
+
+export type { DashboardRole } from './dashboard-rbac.js';

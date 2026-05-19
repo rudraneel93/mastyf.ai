@@ -58,6 +58,7 @@
   "scripts": {
     "build": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build",
     "test": "vitest run && turbo run test",
+    "test:integration": "vitest run tests/integration",
     "typecheck": "turbo run typecheck",
     "dogfood": "node scripts/run-dogfood-scenario.cjs",
     "e2e:tui": "node scripts/run-e2e-tui.cjs",

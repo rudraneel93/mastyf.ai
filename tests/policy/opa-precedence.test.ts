@@ -8,6 +8,7 @@ const yamlPolicy: PolicyConfig = {
   version: '1.0',
   policy: {
     mode: 'block',
+    opa: true,
     rules: [
       {
         name: 'deny-eval',

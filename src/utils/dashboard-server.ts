@@ -10,6 +10,10 @@ import {
   DashboardAuth,
   SESSION_COOKIE_NAME,
 } from '../auth/dashboard-auth.js';
+import {
+  assertTenantAdminScope,
+  canAccessRoute,
+} from '../auth/dashboard-rbac.js';
 import { resolveTenantContext, InvalidTenantIdError, isMultiTenantModeEnabled } from '../tenant/resolve-tenant.js';
 import { tenantRateLimitKey } from './redis-rate-limiter.js';
 import { Registry } from 'prom-client';
@@ -402,6 +406,25 @@ export async function startDashboardServer(
 
       if (url === '/' || url === '/dashboard.html') { setCors(); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(dashboardHtml); return; }
 
+      const roles = auth.getRolesForAuth(authResult);
+      const tenantScope = assertTenantAdminScope(
+        roles,
+        authResult.sessionTenantId,
+        requestTenantId,
+      );
+      if (!tenantScope.ok) {
+        setCors();
+        writeJson(res, 403, { error: 'Forbidden', reason: tenantScope.reason });
+        return;
+      }
+
+      const rbac = canAccessRoute(roles, method, req.url || url);
+      if (!rbac.allowed) {
+        setCors();
+        writeJson(res, 403, { error: 'Forbidden', reason: rbac.reason, required: rbac.required });
+        return;
+      }
+
       if (
         url.startsWith('/api/')
         && url !== '/api/login'
@@ -424,6 +447,25 @@ export async function startDashboardServer(
       if (url === '/api/policy/reload' && method === 'POST') {
         setCors();
         writeJson(res, 200, { status: 'ok', message: 'Policy watcher auto-detects changes' }); return;
+      }
+
+      if (url === '/api/policy/test' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { runPolicyTest } = await import('../cli/policy-test.js');
+        const policyPath =
+          process.env['GUARDIAN_POLICY_PATH'] ||
+          process.env['MCP_GUARDIAN_POLICY_PATH'] ||
+          'default-policy.yaml';
+        const result = runPolicyTest({
+          policy: String(body.policyPath || policyPath),
+          tool: String(body.tool || 'unknown'),
+          args: JSON.stringify(body.arguments ?? {}),
+          server: String(body.server || 'dashboard-test'),
+          blockingMode: body.mode ? String(body.mode) : undefined,
+        });
+        writeJson(res, 200, result);
+        return;
       }
 
       if (url === '/api/admin/tenant' && method === 'GET') {
@@ -473,6 +515,7 @@ export async function startDashboardServer(
         writeJson(res, 200, {
           authenticated: true,
           identity: authResult.identity,
+          roles,
           authRequired,
           authConfigured: auth.isConfigured(),
         });

@@ -4,6 +4,19 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Dashboard RBAC** — roles `viewer`, `analyst`, `operator`, `admin`, `tenant-admin`; `GUARDIAN_DASHBOARD_ROLES` API key mapping; route guards in `dashboard-server.ts`; `POST /api/policy/test` for operators; tests `tests/auth/dashboard-rbac.test.ts`.
+- **Streaming response inspection** — `src/utils/streaming-inspector.ts` (64KB windows + overlap); wired to stdio/SSE/WS proxies; `GUARDIAN_SKIP_RESPONSE_SCAN` for trusted upstream.
+- **Local semantic fallback** — `src/ai/local-semantic-classifier.ts` heuristic risk 0–1 when no LLM API key; wired in `async-semantic-audit.ts`; `GUARDIAN_LOCAL_SEMANTIC` (default on without keys).
+- **Distributed policy eval cache** — Redis + LRU keyed `tenant+server+tool+argsHash` (`GUARDIAN_POLICY_EVAL_CACHE`, `GUARDIAN_POLICY_EVAL_CACHE_TTL_MS`); documented in [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
+- **Integration fixture matrix** — `tests/integration/mcp-fixtures.test.ts` (echo stdio, filesystem fixture, SQL block); `pnpm test:integration`.
+- **Per-tenant metrics** — `tenant_id` label on request/block/latency Prometheus series.
+- **Per-tenant daily budget** — `GUARDIAN_TENANT_DAILY_BUDGET_JSON` for `CostAuditor`.
+- **Enterprise readiness scorecard** — [docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md).
+
+### Changed
+- **Lazy OPA** — evaluates only when `policy.opa: true` or `GUARDIAN_OPA_ENABLED=true` (and `OPA_URL` set).
+
 ### Fixed
 - **100% corpus attack block rate** — SQL/NoSQL/LDAP (`DELETE FROM`, sensitive `SELECT *`, `$where`/`$gt`/`$regex`/`$ne`, LDAP filters), SSRF (RFC1918 + metadata + freetext URL extraction), prompt injection (request-path `scanToolCallArguments` on all leaves), base64-decode-to-shell, kubeconfig paths; `scripts/verify-corpus-parity.sh` gates CI on `pnpm eval` (154/154 attacks, 0 false positives with `GUARDIAN_DISABLE_SEMANTIC=true`).
 

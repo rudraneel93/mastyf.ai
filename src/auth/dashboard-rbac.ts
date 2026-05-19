@@ -1,0 +1,179 @@
+/**
+ * Dashboard RBAC — role claims from JWT session payload or API key metadata.
+ *
+ * Roles: viewer, analyst, operator, admin, tenant-admin
+ * Env: GUARDIAN_DASHBOARD_ROLES — `api_key_prefix:role,...` or JSON `{"<apiKey>":"admin"}`
+ * JWT session payload may include `roles: string[]` or `role: string`.
+ */
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+
+export type DashboardRole = 'viewer' | 'analyst' | 'operator' | 'admin' | 'tenant-admin';
+
+export const DASHBOARD_ROLE_ORDER: DashboardRole[] = [
+  'viewer',
+  'analyst',
+  'operator',
+  'admin',
+  'tenant-admin',
+];
+
+const ALL_ROLES = new Set<DashboardRole>(DASHBOARD_ROLE_ORDER);
+
+export function normalizeDashboardRole(raw: string): DashboardRole | null {
+  const r = raw.trim().toLowerCase().replace(/_/g, '-');
+  if (r === 'tenantadmin') return 'tenant-admin';
+  return ALL_ROLES.has(r as DashboardRole) ? (r as DashboardRole) : null;
+}
+
+/** Parse GUARDIAN_DASHBOARD_ROLES env (comma map or JSON object). */
+export function parseDashboardRolesEnv(raw?: string): Map<string, DashboardRole> {
+  const map = new Map<string, DashboardRole>();
+  const env = raw ?? process.env['GUARDIAN_DASHBOARD_ROLES'];
+  if (!env?.trim()) return map;
+
+  const trimmed = env.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const obj = JSON.parse(trimmed) as Record<string, string>;
+      for (const [key, val] of Object.entries(obj)) {
+        const role = normalizeDashboardRole(val);
+        if (role) map.set(key, role);
+      }
+    } catch {
+      /* ignore malformed JSON */
+    }
+    return map;
+  }
+
+  for (const part of trimmed.split(',')) {
+    const eq = part.indexOf(':');
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq).trim();
+    const role = normalizeDashboardRole(part.slice(eq + 1));
+    if (key && role) map.set(key, role);
+  }
+  return map;
+}
+
+export function roleRank(role: DashboardRole): number {
+  return DASHBOARD_ROLE_ORDER.indexOf(role);
+}
+
+export function hasAtLeastRole(actual: DashboardRole, required: DashboardRole): boolean {
+  if (actual === 'tenant-admin' && required !== 'tenant-admin') {
+    return roleRank('admin') >= roleRank(required);
+  }
+  if (required === 'tenant-admin') {
+    return actual === 'tenant-admin' || actual === 'admin';
+  }
+  return roleRank(actual) >= roleRank(required);
+}
+
+export type DashboardRoutePermission =
+  | 'read'
+  | 'export'
+  | 'policy_test'
+  | 'policy_mutate'
+  | 'admin'
+  | 'ai';
+
+/** Minimum role for each permission tier. */
+const PERMISSION_MIN_ROLE: Record<DashboardRoutePermission, DashboardRole> = {
+  read: 'viewer',
+  export: 'analyst',
+  policy_test: 'operator',
+  policy_mutate: 'operator',
+  admin: 'admin',
+  ai: 'admin',
+};
+
+export function permissionForRoute(method: string, url: string): DashboardRoutePermission | null {
+  const path = url.split('?')[0] || '/';
+  const m = method.toUpperCase();
+
+  if (path === '/metrics' || path.startsWith('/api/aggregate/')) {
+    return m === 'GET' ? (path.includes('audit') && url.includes('export=1') ? 'export' : 'read') : null;
+  }
+  if (
+    path === '/api/security' ||
+    path === '/api/cost' ||
+    path === '/api/health' ||
+    path === '/api/instances' ||
+    path === '/api/auth/status'
+  ) {
+    return m === 'GET' ? 'read' : null;
+  }
+  if (path === '/api/logs') return m === 'GET' ? 'export' : null;
+  if (path === '/api/policy/test') return m === 'POST' ? 'policy_test' : null;
+  if (path === '/api/policy/reload' || path.startsWith('/api/policy/suggestions/')) {
+    return m === 'POST' ? 'policy_mutate' : m === 'GET' ? 'read' : null;
+  }
+  if (path === '/api/policy' && m === 'GET') return 'read';
+  if (path.startsWith('/api/admin/')) return m === 'GET' ? 'admin' : 'admin';
+  if (path.startsWith('/api/ai/')) return m === 'GET' ? 'ai' : 'ai';
+  if (path === '/api/logout') return 'read';
+  return null;
+}
+
+export function canAccessRoute(
+  roles: DashboardRole[],
+  method: string,
+  url: string,
+): { allowed: boolean; required?: DashboardRoutePermission; reason?: string } {
+  const perm = permissionForRoute(method, url);
+  if (!perm) return { allowed: true };
+  const minRole = PERMISSION_MIN_ROLE[perm];
+  const ok = roles.some((r) => hasAtLeastRole(r, minRole));
+  if (ok) return { allowed: true };
+  return {
+    allowed: false,
+    required: perm,
+    reason: `Requires ${minRole} role (have: ${roles.join(', ') || 'none'})`,
+  };
+}
+
+export function resolveRolesFromSessionPayload(payload: {
+  roles?: string[];
+  role?: string;
+}): DashboardRole[] {
+  const out: DashboardRole[] = [];
+  if (payload.role) {
+    const one = normalizeDashboardRole(payload.role);
+    if (one) out.push(one);
+  }
+  if (Array.isArray(payload.roles)) {
+    for (const r of payload.roles) {
+      const n = normalizeDashboardRole(String(r));
+      if (n && !out.includes(n)) out.push(n);
+    }
+  }
+  return out.length > 0 ? out : ['viewer'];
+}
+
+export function resolveRolesForApiKey(apiKey: string, mapping?: Map<string, DashboardRole>): DashboardRole[] {
+  const map = mapping ?? parseDashboardRolesEnv();
+  if (map.has(apiKey)) return [map.get(apiKey)!];
+  for (const [prefix, role] of map) {
+    if (apiKey.startsWith(prefix)) return [role];
+  }
+  const defaultRole = normalizeDashboardRole(process.env['GUARDIAN_DASHBOARD_DEFAULT_ROLE'] || 'admin');
+  return defaultRole ? [defaultRole] : ['admin'];
+}
+
+/** tenant-admin may only act within session tenant. */
+export function assertTenantAdminScope(
+  roles: DashboardRole[],
+  sessionTenantId: string | undefined,
+  requestTenantId: string,
+): { ok: boolean; reason?: string } {
+  const isTenantAdmin = roles.includes('tenant-admin') && !roles.includes('admin');
+  if (!isTenantAdmin) return { ok: true };
+  const session = sessionTenantId || DEFAULT_TENANT_ID;
+  if (session !== requestTenantId) {
+    return {
+      ok: false,
+      reason: `tenant-admin scoped to '${session}', request tenant '${requestTenantId}'`,
+    };
+  }
+  return { ok: true };
+}

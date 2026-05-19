@@ -12,6 +12,10 @@ import {
   isSemanticLlmConfigured,
   reportSemanticDegradation,
 } from '../utils/semantic-layer.js';
+import {
+  isLocalSemanticEnabled,
+  scoreLocalSemanticRisk,
+} from './local-semantic-classifier.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 
 export interface SemanticAuditJob {
@@ -74,6 +78,17 @@ export function isSemanticAsyncEnabled(): boolean {
   return process.env.GUARDIAN_LLM_ENABLED !== 'false';
 }
 
+/** @internal test helper */
+export function resetSemanticAuditStateForTests(): void {
+  queue.length = 0;
+  processing = false;
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = null;
+  llm = null;
+  stats = { processed: 0, flagged: 0, dropped: 0 };
+  semanticAuditQueueDepth.set(0);
+}
+
 export function getSemanticAuditStats(): SemanticAuditStats {
   return {
     queued: queue.length,
@@ -93,6 +108,10 @@ function getLlm(): LlmAssistant {
 export function enqueueSemanticAudit(job: SemanticAuditJob): void {
   if (!isSemanticAsyncEnabled()) return;
   if (!getLlm().isAvailable() || !isSemanticLlmConfigured()) {
+    if (isLocalSemanticEnabled()) {
+      void runLocalSemanticAudit(job);
+      return;
+    }
     reportSemanticDegradation('llm_unavailable', {
       serverName: job.serverName,
       toolName: job.toolName,
@@ -136,6 +155,39 @@ async function drainQueue(): Promise<void> {
       }, DEBOUNCE_MS);
     }
   }
+}
+
+async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
+  const score = scoreLocalSemanticRisk({
+    serverName: job.serverName,
+    toolName: job.toolName,
+    arguments: job.arguments,
+    syncRule: job.syncDecision.rule,
+  });
+  stats.processed++;
+  if (!score.suspicious) {
+    semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'local_clean' });
+    return;
+  }
+  const minRisk = parseFloat(process.env['GUARDIAN_LOCAL_SEMANTIC_MIN_RISK'] || '0.55');
+  if (score.risk < minRisk) {
+    semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'local_below_threshold' });
+    return;
+  }
+  stats.flagged++;
+  semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'local_flagged' });
+  StructuredLogger.info({
+    event: 'local_semantic_flag',
+    requestId: job.requestId,
+    serverName: job.serverName,
+    toolName: job.toolName,
+    syncDecision: job.syncDecision,
+    risk: score.risk,
+    categories: score.categories,
+    reasoning: score.reasoning,
+    timestamp: job.timestamp,
+    region: getGuardianRegionLabels().region,
+  });
 }
 
 async function runAudit(job: SemanticAuditJob): Promise<void> {

@@ -60,6 +60,8 @@ export interface PolicyConfig {
     semantic_shell?: boolean;
     /** TR39 confusables + NFKC on tool args (default: true). Set false for international teams. */
     unicode_strict?: boolean;
+    /** When true (and OPA_URL set), evaluate OPA/Rego before YAML rules. */
+    opa?: boolean;
     rules: PolicyRule[];
   };
 }

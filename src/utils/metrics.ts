@@ -1,8 +1,17 @@
 import { createServer, type Server } from 'http';
 import { Registry, Counter, Gauge, Histogram, collectDefaultMetrics } from 'prom-client';
 import { Logger } from './logger.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 export const registry = new Registry();
+
+/** Attach tenant_id label for multi-tenant Prometheus dashboards. */
+export function withTenantMetricLabels(
+  labels: Record<string, string>,
+  tenantId?: string,
+): Record<string, string> {
+  return { ...labels, tenant_id: tenantId?.trim() || DEFAULT_TENANT_ID };
+}
 
 let defaultMetricsRegistered = false;
 let metricsHttpServer: Server | null = null;
@@ -13,14 +22,14 @@ let readinessCheckRef: WeakRef<() => Promise<unknown>> | null = null;
 export const requestsTotal = new Counter({
   name: 'mcp_guardian_requests_total',
   help: 'Total number of tools/call requests proxied',
-  labelNames: ['server_name', 'decision', 'authn_success'],
+  labelNames: ['server_name', 'decision', 'authn_success', 'tenant_id'],
   registers: [registry],
 });
 
 export const blockedRequestsTotal = new Counter({
   name: 'mcp_guardian_blocked_total',
   help: 'Total number of tools/call requests blocked by policy',
-  labelNames: ['server_name', 'block_reason', 'rule'],
+  labelNames: ['server_name', 'block_reason', 'rule', 'tenant_id'],
   registers: [registry],
 });
 
@@ -67,7 +76,7 @@ export const sseUntrackedServers = new Gauge({
 export const proxyLatencyMs = new Histogram({
   name: 'mcp_guardian_proxy_latency_ms',
   help: 'Proxy processing latency in milliseconds',
-  labelNames: ['server_name'],
+  labelNames: ['server_name', 'tenant_id'],
   buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000],
   registers: [registry],
 });

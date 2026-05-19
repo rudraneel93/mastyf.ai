@@ -29,7 +29,11 @@ import {
   reportSemanticDegradation,
 } from '../utils/semantic-layer.js';
 import { isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
+import {
+  findingsToMessages,
+  inspectFullResponse,
+  isResponseScanSkipped,
+} from '../utils/streaming-inspector.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { isProxyEntropyCheckEnabled, scanArgumentEntropy } from '../utils/arg-entropy.js';
 import * as Metrics from '../utils/metrics.js';
@@ -275,8 +279,16 @@ export class McpProxyServer {
           const tenantBreaker = this.breakerFor(reqCtx.tenantId || this.defaultTenantId);
           tenantBreaker.recordSuccess();
           Metrics.circuitBreakerState.set({ server_name: this.serverName }, tenantBreaker.getState() === 'CLOSED' ? 0 : tenantBreaker.getState() === 'OPEN' ? 1 : 2);
-          Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, proxyLatencyMs);
-          Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: 'true' });
+          Metrics.proxyLatencyMs.observe(
+            Metrics.withTenantMetricLabels({ server_name: this.serverName }, reqCtx.tenantId),
+            proxyLatencyMs,
+          );
+          Metrics.requestsTotal.inc(
+            Metrics.withTenantMetricLabels(
+              { server_name: this.serverName, decision: 'pass', authn_success: 'true' },
+              reqCtx.tenantId,
+            ),
+          );
           if (this.sessionCache) Metrics.activeSessions.set(this.sessionCache.size);
 
           StructuredLogger.info({
@@ -287,36 +299,21 @@ export class McpProxyServer {
             proxyLatencyMs,
           });
 
-          // ── v2.5+: Response inspection for prompt injection / data exfiltration ──
-          if (msg?.result) {
+          // ── v2.5+: Chunked response inspection (PI / secrets / exfil) ──
+          if (msg?.result && !isResponseScanSkipped()) {
             const responseText = JSON.stringify(msg.result);
+            const inspect = inspectFullResponse(responseText, {
+              toolName: reqCtx.requestToolName || 'unknown',
+              serverName: this.serverName,
+              policy: this.policyEngine,
+            });
 
-            // Layer 1: Policy engine patterns (exfiltration URLs, token queries, base64)
-            const allDetections: string[] = [];
-            if (this.policyEngine) {
-              const { clean, detections } = this.policyEngine.evaluateResponse(
-                reqCtx.requestToolName || 'unknown',
-                this.serverName,
-                responseText,
-              );
-              if (!clean) allDetections.push(...detections);
-            }
-
-            // Layer 2: Dedicated prompt injection detector (jailbreak, role override, credential theft, etc.)
-            const injectionFindings = detectPromptInjection(
-              reqCtx.requestToolName || 'unknown',
-              responseText,
-            );
-
-            const hasCritical = injectionFindings.some(f => f.severity === 'critical');
-            const hasHigh = injectionFindings.some(f => f.severity === 'high');
-            const hasDetections = injectionFindings.length > 0 || allDetections.length > 0;
+            const hasCritical = inspect.hasCritical;
+            const hasHigh = inspect.hasHigh;
+            const hasDetections = !inspect.clean;
 
             if (hasDetections) {
-              const allMessages = [
-                ...allDetections,
-                ...injectionFindings.map(f => `${f.severity.toUpperCase()}: ${f.description} (${f.matchPreview})`),
-              ];
+              const allMessages = findingsToMessages(inspect.findings);
 
               Logger.warn(
                 `[proxy:${this.serverName}] Suspicious response from '${reqCtx.requestToolName}': ${allMessages.slice(0, 5).join('; ')}` +
@@ -328,8 +325,8 @@ export class McpProxyServer {
                 serverName: this.serverName,
                 toolName: reqCtx.requestToolName,
                 detections: allMessages,
-                criticalCount: injectionFindings.filter(f => f.severity === 'critical').length,
-                highCount: injectionFindings.filter(f => f.severity === 'high').length,
+                criticalCount: inspect.findings.filter((f) => f.severity === 'critical').length,
+                highCount: inspect.findings.filter((f) => f.severity === 'high').length,
                 blocked: (hasCritical || hasHigh) && this.policyEngine?.getMode() === 'block',
                 requestId: msg.id,
               });
@@ -360,16 +357,22 @@ export class McpProxyServer {
                 this.spawnEnv,
                 this.spawnArgs,
               ).catch(() => {});
-              Metrics.blockedRequestsTotal.inc({
-                server_name: this.serverName,
-                block_reason: hasCritical ? 'response_injection_critical' : 'response_injection_high',
-                rule: 'response-inspection',
-              });
-              Metrics.requestsTotal.inc({
-                server_name: this.serverName,
-                decision: 'block',
-                authn_success: 'true',
-              });
+              Metrics.blockedRequestsTotal.inc(
+                Metrics.withTenantMetricLabels(
+                  {
+                    server_name: this.serverName,
+                    block_reason: hasCritical ? 'response_injection_critical' : 'response_injection_high',
+                    rule: 'response-inspection',
+                  },
+                  reqCtx.tenantId,
+                ),
+              );
+              Metrics.requestsTotal.inc(
+                Metrics.withTenantMetricLabels(
+                  { server_name: this.serverName, decision: 'block', authn_success: 'true' },
+                  reqCtx.tenantId,
+                ),
+              );
 
               // Send error response instead of the malicious upstream response
               this.sendError(
