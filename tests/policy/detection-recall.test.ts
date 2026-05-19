@@ -21,6 +21,7 @@ import {
 } from '../../src/scanners/prompt-injection-detector.js';
 import { detectShellInBase64Blobs } from '../../src/utils/payload-normalizer.js';
 import { ShellTokenizer } from '../../src/policy/shell-tokenizer.js';
+import { runEval } from '../../corpus/run-eval.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const defaultPolicy = load(
@@ -183,6 +184,30 @@ describe('detection-recall', () => {
 
     it('blocks /etc/kubernetes/admin.conf', () => {
       expect(evaluatePathGuard(['/etc/kubernetes/admin.conf']).block).toBe(true);
+    });
+
+    it('blocks kubeconfig filename in path leaf', () => {
+      expect(evaluatePathGuard(['/var/lib/kubeconfig']).block).toBe(true);
+    });
+  });
+
+  describe('corpus regression (PolicyEngine, regex-only)', () => {
+    it('blocks every attack fixture with zero benign false positives', async () => {
+      const prev = process.env.GUARDIAN_DISABLE_SEMANTIC;
+      process.env.GUARDIAN_DISABLE_SEMANTIC = 'true';
+      try {
+        const report = await runEval();
+        const attackTotal = report.overall.tp + report.overall.fn;
+        expect(attackTotal).toBeGreaterThanOrEqual(150);
+        expect(report.overall.fn).toBe(0);
+        expect(report.overall.fp).toBe(0);
+        expect(report.attackBlockRate).toBe(1);
+        expect(report.benignPassRate).toBe(1);
+        expect(report.passed).toBe(true);
+      } finally {
+        if (prev === undefined) delete process.env.GUARDIAN_DISABLE_SEMANTIC;
+        else process.env.GUARDIAN_DISABLE_SEMANTIC = prev;
+      }
     });
   });
 });

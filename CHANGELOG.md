@@ -4,6 +4,9 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **100% corpus attack block rate** — SQL/NoSQL/LDAP (`DELETE FROM`, sensitive `SELECT *`, `$where`/`$gt`/`$regex`/`$ne`, LDAP filters), SSRF (RFC1918 + metadata + freetext URL extraction), prompt injection (request-path `scanToolCallArguments` on all leaves), base64-decode-to-shell, kubeconfig paths; `scripts/verify-corpus-parity.sh` gates CI on `pnpm eval` (154/154 attacks, 0 false positives with `GUARDIAN_DISABLE_SEMANTIC=true`).
+
 ### Closed — 71/100 review headline gaps (verified 2026-05-19)
 - **PI request-path recall** — 32/32 prompt-injection corpus blocked via `scanToolCallArguments` before YAML rules (`GUARDIAN_DISABLE_SEMANTIC=true` eval pass).
 - **Async audit hot path** — `persistCallRecord` → `enqueueAuditWrite`; block-learning deferred off deny path; proxy tier c=1 p95 &lt; 150 ms.

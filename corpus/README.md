@@ -43,9 +43,13 @@ Each JSON file:
 pnpm build
 pnpm eval
 # or: pnpm exec tsx corpus/run-eval.ts
+# CI gate (regex-only semantic path):
+GUARDIAN_DISABLE_SEMANTIC=true ./scripts/verify-corpus-parity.sh
 ```
 
 Writes `corpus-eval-report.json` at repo root. Exits non-zero if any attack expected `block` is not blocked, or any benign expected `pass` is blocked.
+
+**Canonical evaluator:** TypeScript `corpus/run-eval.ts` + `PolicyEngine` — not external Python harnesses. Attack count: **154** fixtures (32 prompt-injection, 27 sql-nosql, 26 ssrf-url, 26 shell-obfuscation, 24 credential-exfil, 16 cross-tool-chain, plus edge-case attacks).
 
 ## Regenerate corpus
 

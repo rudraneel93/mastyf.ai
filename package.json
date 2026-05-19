@@ -66,6 +66,7 @@
     "live:tui-demo": "node scripts/run-live-tui-demo.cjs --stream",
     "doctor": "node dist/cli.js doctor --policy default-policy.yaml",
     "eval": "tsx corpus/run-eval.ts",
+    "verify:corpus": "bash scripts/verify-corpus-parity.sh",
     "dashboard:build": "npm run build --prefix deploy/dashboard-spa",
     "dashboard:dev": "npm run dev --prefix deploy/dashboard-spa",
     "eval:full": "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY tsx corpus/run-eval.ts",
