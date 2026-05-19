@@ -26,6 +26,8 @@ export interface AgentIdentity {
   issuer: string;
   /** Token expiry timestamp */
   expiresAt?: number;
+  /** Tenant id from JWT claim (GUARDIAN_JWT_TENANT_CLAIM, default tenant_id) */
+  tenantId?: string;
 }
 
 export interface AuthValidationResult {

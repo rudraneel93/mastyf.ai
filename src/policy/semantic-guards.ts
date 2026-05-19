@@ -1,21 +1,19 @@
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
-import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
-import { isFpWhitelisted } from '../ai/fp-whitelist.js';
-import { evaluatePathGuard, extractPathArgumentValues } from './path-guard.js';
-import {
-  evaluateUrlGuard,
-  extractHttpUrlsFromLeaves,
-  extractUrlArgumentValues,
-} from './url-guard.js';
+import { deobfuscateRecursive, detectShellInBase64Blobs } from '../utils/payload-normalizer.js';
+import { walkStringLeaves } from './arg-leaf-walker.js';
+import { evaluatePathGuard } from './path-guard.js';
+import { evaluateUrlGuard, extractHttpUrlsFromLeaves } from './url-guard.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 
-const SQL_ARG_FIELDS = new Set(['sql', 'query']);
 const REPO_ARG_FIELDS = new Set(['repo', 'repository', 'owner']);
 
+const SQL_SENSITIVE_TABLES =
+  'accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords';
+
 const SQL_EXFIL_PATTERNS: RegExp[] = [
-  /\bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b/i,
+  new RegExp(`\\bselect\\b.+\\bfrom\\b.+\\b(?:${SQL_SENSITIVE_TABLES})\\b`, 'i'),
+  new RegExp(`\\bselect\\s+\\*\\s+from\\b.+\\b(?:${SQL_SENSITIVE_TABLES})\\b`, 'i'),
   /\b(?:drop|truncate)\s+(?:table|database)\b/i,
-  /\bdelete\s+from\b.+\bwhere\s+1\s*=\s*1\b/i,
+  /\bdelete\s+from\b/i,
   /\bunion\b.+\bselect\b/i,
   /\bload_file\s*\(/i,
   /\bsleep\s*\(/i,
@@ -23,14 +21,26 @@ const SQL_EXFIL_PATTERNS: RegExp[] = [
   /"\$where"\s*:/i,
   /"\$gt"\s*:/i,
   /"\$regex"\s*:/i,
+  /"\$ne"\s*:/i,
   /\$where\b/i,
   /\$gt\b/i,
   /\$regex\b/i,
+  /\$ne\b/i,
   /__schema\b/i,
   /\bintrospection\b/i,
+  /\*\)\s*\(\s*uid\s*=/i,
   /\*\)\s*\(/,
-  /\|\s*\(/,
+  /admin\)\s*\(&/i,
+  /\|\s*\(\s*\|/i,
+  /\)\s*\(\s*\|/i,
   /\)\s*\)\s*\(/,
+];
+
+const BASE64_SHELL_PATTERNS: RegExp[] = [
+  /\bbase64\s+(?:-d|--decode)\b.+\|\s*(?:sh|bash|zsh)\b/i,
+  /\|\s*base64\s+(?:-d|--decode)\b.+\|\s*(?:sh|bash|zsh)\b/i,
+  /\becho\s+['"]?[A-Za-z0-9+/]{12,}={0,2}['"]?\s*\|\s*base64\s+(?:-d|--decode)\b/i,
+  /\bbase64\s+(?:-d|--decode)\b\s*<<<?\s*['"]?[A-Za-z0-9+/]{8,}/i,
 ];
 
 const POWERSHELL_PATTERNS: RegExp[] = [
@@ -53,24 +63,22 @@ const MULTILINE_INJECTION_PATTERNS: RegExp[] = [
   /<\|(?:endoftext|im_start|im_end)\|>/i,
 ];
 
-function extractFieldValues(args: Record<string, unknown> | undefined, fields: Set<string>): string[] {
-  if (!args) return [];
+/** Heuristic: string leaf may be a filesystem path. */
+const PATH_LIKE = /(?:^|[\s"'`])(?:~\/|\/|\.\/|\.\.|\\|\.kube|\.ssh|\.env|id_rsa)/i;
+
+function extractFieldValues(args: Record<string, unknown>, fields: Set<string>): string[] {
   const out: string[] = [];
-  for (const [key, val] of Object.entries(args)) {
-    if (!fields.has(key.toLowerCase())) continue;
-    if (typeof val === 'string') out.push(val);
+  for (const { path, value } of walkStringLeaves(args)) {
+    const key = path.split(/[.[\]]/).filter(Boolean).pop()?.toLowerCase() ?? '';
+    if (fields.has(key)) out.push(value);
   }
   return out;
 }
 
-function extractAllLeafStrings(obj: unknown): string[] {
-  if (typeof obj === 'string') return [obj];
-  if (obj === null || obj === undefined) return [];
-  if (Array.isArray(obj)) return obj.flatMap(extractAllLeafStrings);
-  if (typeof obj === 'object') {
-    return Object.values(obj as Record<string, unknown>).flatMap(extractAllLeafStrings);
-  }
-  return [];
+function extractPathLikeLeaves(args: Record<string, unknown>): string[] {
+  return walkStringLeaves(args)
+    .map((l) => l.value)
+    .filter((v) => PATH_LIKE.test(v));
 }
 
 function githubAllowedRepos(): string[] | null {
@@ -91,37 +99,55 @@ function repoAllowed(repo: string, allowed: string[]): boolean {
 }
 
 /**
- * Semantic abuse checks (paths, SQL exfil, GitHub repo scope, prompt injection, PowerShell).
- * Runs on normalized arguments before per-rule regex evaluation.
+ * Semantic abuse checks (paths, SQL exfil, GitHub repo scope, PowerShell, SSTI).
+ * All guards scan every string leaf via `walkStringLeaves`. Prompt injection on
+ * requests is handled in PolicyEngine via `scanToolCallArguments` (full rule set).
  */
 export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null {
   const args = ctx.arguments ?? {};
 
-  const pathCheck = evaluatePathGuard(extractPathArgumentValues(args));
+  const pathCheck = evaluatePathGuard(extractPathLikeLeaves(args));
   if (pathCheck.block) {
     return { action: 'block', rule: 'semantic-path-guard', reason: pathCheck.reason! };
   }
 
-  const urlCandidates = [
-    ...extractUrlArgumentValues(args, ctx.toolName),
-    ...extractHttpUrlsFromLeaves(args),
-  ];
+  const urlCandidates = extractHttpUrlsFromLeaves(args);
   const urlCheck = evaluateUrlGuard([...new Set(urlCandidates)]);
   if (urlCheck.block) {
     return { action: 'block', rule: 'semantic-url-guard', reason: urlCheck.reason! };
   }
 
-  for (const sql of extractFieldValues(args, SQL_ARG_FIELDS)) {
-    const decodedSql = deobfuscateRecursive(sql);
+  for (const { value } of walkStringLeaves(args)) {
+    const decodedSql = deobfuscateRecursive(value);
     for (const pattern of SQL_EXFIL_PATTERNS) {
       if (pattern.test(decodedSql)) {
         return {
           action: 'block',
           rule: 'semantic-sql-guard',
-          reason: `SQL pattern blocked in tool '${ctx.toolName}'`,
+          reason: `SQL/NoSQL/LDAP pattern blocked in tool '${ctx.toolName}'`,
         };
       }
     }
+  }
+
+  const argsBlob = deobfuscateRecursive(
+    walkStringLeaves(args).map((l) => l.value).join('\n'),
+  );
+  for (const pattern of BASE64_SHELL_PATTERNS) {
+    if (pattern.test(argsBlob)) {
+      return {
+        action: 'block',
+        rule: 'semantic-shell-guard',
+        reason: 'Base64-decode piped to shell detected in arguments',
+      };
+    }
+  }
+  if (detectShellInBase64Blobs(argsBlob)) {
+    return {
+      action: 'block',
+      rule: 'semantic-shell-guard',
+      reason: 'Base64 blob decodes to shell/downloader command in arguments',
+    };
   }
 
   const allowedRepos = githubAllowedRepos();
@@ -147,7 +173,6 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
     }
   }
 
-  const argsBlob = deobfuscateRecursive(JSON.stringify(args));
   for (const pattern of POWERSHELL_PATTERNS) {
     if (pattern.test(argsBlob)) {
       return {
@@ -168,13 +193,7 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
     }
   }
 
-  const injectionTextFields = new Set([
-    'query', 'body', 'title', 'description', 'message', 'content', 'prompt', 'instruction', 'text',
-  ]);
-  const injectionBlob = Object.entries(args)
-    .filter(([k]) => injectionTextFields.has(k.toLowerCase()))
-    .flatMap(([, v]) => extractAllLeafStrings(v).map((s) => deobfuscateRecursive(s)))
-    .join('\n');
+  const injectionBlob = walkStringLeaves(args).map((l) => deobfuscateRecursive(l.value)).join('\n');
   if (injectionBlob.trim()) {
     for (const pattern of MULTILINE_INJECTION_PATTERNS) {
       if (pattern.test(injectionBlob)) {
@@ -182,19 +201,6 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
           action: 'block',
           rule: 'semantic-prompt-injection',
           reason: 'Multi-line prompt injection pattern in arguments',
-        };
-      }
-    }
-    const criticalInjection = detectPromptInjection(ctx.toolName, injectionBlob)
-      .filter((f) => f.severity === 'critical');
-    if (criticalInjection.length > 0) {
-      const rule = 'semantic-prompt-injection';
-      const patternId = criticalInjection[0].patternId;
-      if (!isFpWhitelisted(rule, patternId)) {
-        return {
-          action: 'block',
-          rule,
-          reason: `Prompt injection in arguments: ${patternId}`,
         };
       }
     }

@@ -3,6 +3,7 @@ import { createRedisClient, getRedisConnectionLabel } from '../utils/redis-clien
 import { AgentIdentity } from './auth-types.js';
 import { SessionCache, SessionEntry } from './session-cache.js';
 import { Logger } from '../utils/logger.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 /**
  * Redis-backed session cache for multi-replica HA deployments.
@@ -14,50 +15,56 @@ export class RedisSessionCache extends SessionCache {
   private readonly prefix = 'mcp_guardian:session:';
   private readonly noncePrefix = 'mcp_guardian:nonce:';
 
+  private redisSessionKey(tenantId: string, token: string): string {
+    return `${this.prefix}tenant:${tenantId || DEFAULT_TENANT_ID}:${token}`;
+  }
+
+  private redisNonceKey(tenantId: string, nonce: string): string {
+    return `${this.noncePrefix}tenant:${tenantId || DEFAULT_TENANT_ID}:${nonce}`;
+  }
+
   constructor(sessionTtlMs: number = 5 * 60 * 1000, nonceTtlMs: number = 10 * 60 * 1000) {
     super(sessionTtlMs, nonceTtlMs);
     this.redis = createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
     Logger.info(`[redis-session-cache] Connected (${getRedisConnectionLabel()})`);
   }
 
-  override createSession(identity: AgentIdentity, jwtNonce?: string): SessionEntry {
-    const entry = super.createSession(identity, jwtNonce);
+  override createSession(
+    identity: AgentIdentity,
+    jwtNonce?: string,
+    tenantId: string = DEFAULT_TENANT_ID,
+  ): SessionEntry {
+    const entry = super.createSession(identity, jwtNonce, tenantId);
 
-    // Store in Redis with TTL
     const ttlSeconds = Math.ceil((entry.expiresAt - Date.now()) / 1000);
     this.redis.setex(
-      `${this.prefix}${entry.token}`,
+      this.redisSessionKey(tenantId, entry.token),
       ttlSeconds,
-      JSON.stringify(entry)
+      JSON.stringify(entry),
     ).catch(err => Logger.error(`[redis-session-cache] Failed to store session: ${err?.message}`));
 
-    // Store nonce with longer TTL
     if (entry.nonce) {
       const nonceTtlSeconds = Math.ceil(this.sessionTtlMs / 1000) * 2;
-      this.redis.setex(`${this.noncePrefix}${entry.nonce}`, nonceTtlSeconds, '1')
+      this.redis.setex(this.redisNonceKey(tenantId, entry.nonce), nonceTtlSeconds, '1')
         .catch(err => Logger.error(`[redis-session-cache] Failed to store nonce: ${err?.message}`));
     }
 
     return entry;
   }
 
-  override validateSession(token: string): AgentIdentity | null {
-    // Check local cache first, then Redis
-    const local = super.validateSession(token);
+  override validateSession(token: string, tenantId: string = DEFAULT_TENANT_ID): AgentIdentity | null {
+    const local = super.validateSession(token, tenantId);
     if (local) return local;
-
-    // Fallback to Redis for cross-replica sessions
-    // Note: async validateSession would require refactoring proxy-server
     return null;
   }
 
-  async validateSessionAsync(token: string): Promise<AgentIdentity | null> {
-    const raw = await this.redis.get(`${this.prefix}${token}`);
+  async validateSessionAsync(token: string, tenantId: string = DEFAULT_TENANT_ID): Promise<AgentIdentity | null> {
+    const raw = await this.redis.get(this.redisSessionKey(tenantId, token));
     if (!raw) return null;
     try {
       const entry: SessionEntry = JSON.parse(raw);
       if (Date.now() > entry.expiresAt) {
-        this.redis.del(`${this.prefix}${token}`);
+        this.redis.del(this.redisSessionKey(tenantId, token));
         return null;
       }
       return entry.identity;
@@ -66,13 +73,13 @@ export class RedisSessionCache extends SessionCache {
     }
   }
 
-  async isNonceUsedAsync(nonce: string): Promise<boolean> {
-    const exists = await this.redis.exists(`${this.noncePrefix}${nonce}`);
+  async isNonceUsedAsync(nonce: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    const exists = await this.redis.exists(this.redisNonceKey(tenantId, nonce));
     return exists === 1;
   }
 
-  async revokeSessionAsync(token: string): Promise<void> {
-    await this.redis.del(`${this.prefix}${token}`);
+  async revokeSessionAsync(token: string, tenantId: string = DEFAULT_TENANT_ID): Promise<void> {
+    await this.redis.del(this.redisSessionKey(tenantId, token));
   }
 
   async cleanup(): Promise<void> {

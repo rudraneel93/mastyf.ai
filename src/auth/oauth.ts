@@ -8,6 +8,7 @@
 import * as jose from 'jose';
 import { AuthConfig, AuthValidationResult, AgentIdentity, OIDCDiscovery } from './auth-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+import { extractTenantFromJwtPayload } from '../tenant/jwt-tenant-binding.js';
 
 export class OAuthValidator {
   private config: AuthConfig;
@@ -79,12 +80,14 @@ export class OAuthValidator {
       if (!payload.sub) {
         return { valid: false, error: 'JWT missing required sub claim' };
       }
+      const payloadRecord = payload as Record<string, unknown>;
       const identity: AgentIdentity = {
         sub: payload.sub,
-        clientId: (payload as any).client_id || (payload as any).azp,
-        scopes: (payload as any).scope ? String((payload as any).scope).split(' ') : undefined,
+        clientId: (payloadRecord.client_id as string) || (payloadRecord.azp as string),
+        scopes: payloadRecord.scope ? String(payloadRecord.scope).split(' ') : undefined,
         issuer: payload.iss || this.config.issuer,
         expiresAt: payload.exp ? payload.exp * 1000 : undefined,
+        tenantId: extractTenantFromJwtPayload(payloadRecord),
       };
 
       return { valid: true, identity };

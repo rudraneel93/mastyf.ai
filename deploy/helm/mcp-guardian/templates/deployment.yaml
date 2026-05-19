@@ -90,6 +90,14 @@ spec:
             - name: GUARDIAN_REQUIRE_DPOP
               value: "true"
             {{- end }}
+            {{- if .Values.multiTenant.enabled }}
+            - name: GUARDIAN_MULTI_TENANT_ENABLED
+              value: "true"
+            {{- end }}
+            {{- if .Values.multiTenant.tenantId }}
+            - name: GUARDIAN_TENANT_ID
+              value: {{ .Values.multiTenant.tenantId | quote }}
+            {{- end }}
             {{- range $key, $val := .Values.config.env }}
             - name: {{ $key }}
               value: {{ $val | quote }}

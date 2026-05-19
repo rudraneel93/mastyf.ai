@@ -82,6 +82,15 @@ policy:
         - field: target
           patterns:
             - '^(?:file|javascript|data):'
+        - field: message
+          patterns:
+            - 'https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+        - field: body
+          patterns:
+            - 'https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
+        - field: link
+          patterns:
+            - '^https?://(?:localhost|127\\.0\\.0\\.1|169\\.254\\.|10\\.|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.)'
     - name: block-sensitive-paths
       description: Block reads/lists of credentials, SSH, env files, and filesystem root
       action: block
@@ -102,6 +111,9 @@ policy:
             - '\\.git-credentials'
             - '\\.vault-token'
             - 'service-account.*\\.json'
+            - '\\.kube/config'
+            - '/root/\\.kube/config'
+            - '/etc/kubernetes/admin\\.conf'
         - field: file
           patterns:
             - '^/$'
@@ -116,6 +128,8 @@ policy:
             - '\\.git-credentials'
             - '\\.vault-token'
             - 'service-account.*\\.json'
+            - '\\.kube/config'
+            - '/root/\\.kube/config'
         - field: directory
           patterns:
             - '^/$'
@@ -127,19 +141,34 @@ policy:
       argPatterns:
         - field: sql
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|admin_users|passwords)\b
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
-            - \bdrop\s+table\b
+            - \bdelete\s+from\b
+            - \b(?:drop|truncate)\s+table\b
             - \bload_file\s*\(
             - \bsleep\s*\(
             - \bbenchmark\s*\(
             - '\\$where'
+            - '\\$ne'
+            - '\\$gt'
+            - '\\$regex'
             - __schema
             - introspection
+            - admin\)\(&
         - field: query
           patterns:
-            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|admin_users|passwords)\b
+            - \bselect\b.+\bfrom\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
+            - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
+            - \bdelete\s+from\b
+            - '\\$where'
+            - '\\$ne'
+        - field: body
+          patterns:
+            - \bdelete\s+from\b
+            - \bselect\s+\*\s+from\b.+\b(payments|transactions|credentials|users)\b
+            - '\\$ne'
     - name: block-path-traversal
       description: Block tool calls with path traversal attempts
       action: block

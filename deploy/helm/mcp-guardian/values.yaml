@@ -152,6 +152,11 @@ mtls:
 dpop:
   require: false
 
+# Multi-tenant shared gateway mode (default false — single-tenant backward compatible).
+# When enabled, clients must send X-Guardian-Tenant or X-Tenant-Id; pod GUARDIAN_TENANT_ID is the fallback.
+multiTenant:
+  enabled: false
+
 backup:
   enabled: false
   schedule: "0 2 * * *"

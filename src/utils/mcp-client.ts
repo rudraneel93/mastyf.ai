@@ -25,8 +25,14 @@ export interface McpProbeResult {
 }
 
 export class McpClient {
-  private static HANDSHAKE_TIMEOUT_MS = 15000;
-  private static SSE_TIMEOUT_MS = 15000;
+  private static handshakeTimeoutMs(): number {
+    const n = parseInt(process.env['GUARDIAN_HEALTH_PROBE_TIMEOUT_MS'] || '15000', 10);
+    return Number.isFinite(n) && n > 0 ? n : 15000;
+  }
+
+  private static sseTimeoutMs(): number {
+    return McpClient.handshakeTimeoutMs();
+  }
 
   static async probe(server: McpServerConfig): Promise<McpProbeResult> {
     if (server.transport === 'stdio' && server.command) {
@@ -53,7 +59,7 @@ export class McpClient {
       } catch (err: any) {
         return resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: `Spawn failed: ${err?.message}` });
       }
-      const timeout = setTimeout(() => { try { child.kill(); } catch {} resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: 'Handshake timeout' }); }, McpClient.HANDSHAKE_TIMEOUT_MS);
+      const timeout = setTimeout(() => { try { child.kill(); } catch {} resolve({ success: false, authRequired: false, latencyMs: Date.now() - start, error: 'Handshake timeout' }); }, McpClient.handshakeTimeoutMs());
       let handled = false;
       const done = (r: McpProbeResult) => { if (handled) return; handled = true; clearTimeout(timeout); try { child.kill(); } catch {} resolve(r); };
       const rl = createInterface({ input: child.stdout! });
@@ -120,7 +126,7 @@ export class McpClient {
     const parsed = new URL(baseUrl);
     const isHttps = parsed.protocol === 'https:';
     const httpModule = isHttps ? https : http;
-    const overallTimeout = McpClient.SSE_TIMEOUT_MS;
+    const overallTimeout = McpClient.sseTimeoutMs();
 
     // Step 1: Multi-path SSE discovery with per-path timeout
     const sessionId = await McpClient.discoverSessionId(parsed, httpModule);

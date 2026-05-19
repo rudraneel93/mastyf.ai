@@ -78,7 +78,13 @@ export class ShellTokenizer {
     'kill', 'pkill', 'reboot', 'shutdown', 'halt',
     'tcpdump', 'nmap', 'traceroute',
     'invoke-expression', 'iex',
+    'base64',
   ]);
+
+  private readonly BASE64_PIPE_SHELL = [
+    /\bbase64\s+(?:-d|--decode)\b.+\|\s*(?:sh|bash|zsh)\b/i,
+    /\|\s*base64\s+(?:-d|--decode)\b.+\|\s*(?:sh|bash|zsh)\b/i,
+  ];
 
   /** PowerShell-specific dangerous patterns (checked on full input string). */
   private readonly POWERSHELL_DANGEROUS = [
@@ -369,6 +375,16 @@ export class ShellTokenizer {
     for (const pattern of this.POWERSHELL_DANGEROUS) {
       if (pattern.test(input)) {
         return `PowerShell dangerous pattern detected: ${pattern.source}`;
+      }
+    }
+    return null;
+  }
+
+  /** Detect base64-decode piped to shell (echo … | base64 -d | sh). */
+  detectBase64PipeShell(input: string): string | null {
+    for (const pattern of this.BASE64_PIPE_SHELL) {
+      if (pattern.test(input)) {
+        return 'Base64 decode piped to shell detected';
       }
     }
     return null;

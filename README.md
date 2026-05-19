@@ -319,7 +319,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview
 - **Fleet aggregation (v2.7)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`)
 - **Detector Plugin SDK (v2.8)** — [`@mcp-guardian/plugin-sdk`](https://www.npmjs.com/package/@mcp-guardian/plugin-sdk) on npm (`PLUGIN_SDK_VERSION` 3.0.0); `createDetectorPlugin` + lifecycle hooks; monorepo `workspace:*` — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md), [packages/plugin-sdk/](packages/plugin-sdk/)
-- **Tenant isolation** — `GUARDIAN_TENANT_ID`, admin API routes on dashboard
+- **Tenant isolation** — per-tenant circuit breakers, rate limits, sessions, attack learning, and audit scoping; see [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md)
 - **Policy audit trail** — `POLICY_AUDIT_ENABLED` JSONL change log
 - **Compliance pack** — [docs/COMPLIANCE.md](docs/COMPLIANCE.md), [docs/PEN_TEST_SCOPE.md](docs/PEN_TEST_SCOPE.md)
 - **Helm chart** — Redis subchart, ServiceMonitor, ExternalSecrets, PDB, backup CronJob
@@ -641,7 +641,8 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `DASHBOARD_JWT_SECRET` | — | HMAC session tokens |
 | `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` | — | Dashboard login |
 | `DASHBOARD_ALLOWED_ORIGINS` | localhost | CORS allowlist |
-| `GUARDIAN_TENANT_ID` | `default` | Tenant label for audit/rate limits |
+| `GUARDIAN_TENANT_ID` | `default` | Default tenant when no `X-Guardian-Tenant` / `X-Tenant-Id` header |
+| `GUARDIAN_MULTI_TENANT_ENABLED` | `false` | Shared gateway mode — clients send tenant headers |
 | `GUARDIAN_REQUIRE_DPOP` | `false` | Reject requests without valid DPoP proof (RFC 9449) |
 | `MCP_TLS_ENABLED` | `false` | Enable client cert to upstream MCP |
 | `MCP_TLS_CA` | — | CA bundle to verify upstream |

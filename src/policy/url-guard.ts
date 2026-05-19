@@ -1,9 +1,21 @@
 /**
  * URL guard — blocks SSRF-prone, local, and dangerous-scheme URLs in tool arguments.
  */
+import { walkStringLeaves } from './arg-leaf-walker.js';
 import { isTrustedDomainSquat } from '../utils/registrable-domain.js';
 
-const URL_ARG_FIELDS = new Set(['url', 'href', 'target', 'webhook', 'callback']);
+const URL_ARG_FIELDS = new Set(['url', 'href', 'target', 'webhook', 'callback', 'link']);
+
+/** Freetext fields that may embed http(s) URLs (SSRF in message/body, not only dedicated url keys). */
+const FREETEXT_URL_ARG_FIELDS = new Set([
+  ...URL_ARG_FIELDS,
+  'message',
+  'query',
+  'body',
+  'content',
+  'text',
+  'prompt',
+]);
 
 const PUPPETEER_TOOLS = new Set(['puppeteer_navigate', 'puppeteer_screenshot']);
 
@@ -141,7 +153,7 @@ export function extractUrlArgumentValues(
 
   for (const [key, val] of Object.entries(args)) {
     const keyLower = key.toLowerCase();
-    if (URL_ARG_FIELDS.has(keyLower)) {
+    if (FREETEXT_URL_ARG_FIELDS.has(keyLower)) {
       if (typeof val === 'string') values.push(val);
     } else if (scanAllLeaves && typeof val === 'string') {
       values.push(val);
@@ -153,29 +165,15 @@ export function extractUrlArgumentValues(
 
 export function extractHttpUrlsFromLeaves(obj: unknown): string[] {
   const urls: string[] = [];
-  const walk = (node: unknown): void => {
-    if (typeof node === 'string') {
-      for (const m of node.matchAll(HTTP_URL_IN_TEXT)) {
-        urls.push(m[0]);
-      }
-      return;
+  for (const { path, value } of walkStringLeaves(obj)) {
+    const key = path.split(/[.[\]]/).filter(Boolean).pop()?.toLowerCase() ?? '';
+    if (FREETEXT_URL_ARG_FIELDS.has(key)) {
+      urls.push(value);
     }
-    if (node === null || node === undefined) return;
-    if (Array.isArray(node)) {
-      node.forEach(walk);
-      return;
+    for (const m of value.matchAll(HTTP_URL_IN_TEXT)) {
+      urls.push(m[0]);
     }
-    if (typeof node === 'object') {
-      for (const [key, val] of Object.entries(node as Record<string, unknown>)) {
-        const kl = key.toLowerCase();
-        if (URL_ARG_FIELDS.has(kl) && typeof val === 'string') {
-          urls.push(val);
-        }
-        walk(val);
-      }
-    }
-  };
-  walk(obj);
+  }
   return urls;
 }
 
@@ -184,8 +182,19 @@ export interface UrlGuardResult {
   reason?: string;
 }
 
-export function evaluateUrlGuard(urls: string[]): UrlGuardResult {
+function expandUrlCandidates(urls: string[]): string[] {
+  const expanded: string[] = [];
   for (const raw of urls) {
+    expanded.push(raw);
+    for (const m of raw.matchAll(HTTP_URL_IN_TEXT)) {
+      expanded.push(m[0]);
+    }
+  }
+  return expanded;
+}
+
+export function evaluateUrlGuard(urls: string[]): UrlGuardResult {
+  for (const raw of expandUrlCandidates(urls)) {
     if (isTrustedDomainSquat(raw)) {
       return {
         block: true,

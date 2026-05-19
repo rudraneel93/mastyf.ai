@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Package indexes modeled scenarios, not production MCP proxy captures.
+
 # LIVE PROXY ATTACK SIMULATION - COMPLETE ANALYSIS PACKAGE
 
 ## 📊 PACKAGE CONTENTS & QUICK NAVIGATION

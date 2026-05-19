@@ -140,4 +140,6 @@ export interface ProxyCallRecord {
   blockReason?: string;
   /** Whether token counts came from provider API usage or local estimate */
   tokenSource?: 'api' | 'estimated';
+  /** Multi-tenant isolation label */
+  tenantId?: string;
 }

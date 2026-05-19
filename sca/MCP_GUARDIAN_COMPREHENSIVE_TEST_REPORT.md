@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Results reflect automated test suites and modeled enterprise scenarios, not live adversary campaigns.
+
 # MCP Guardian - Comprehensive Enterprise Test Analysis Report
 **Generated:** May 18, 2026  
 **Project:** MCP Guardian - Full-Stack Security Proxy for Model Context Protocol  

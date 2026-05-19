@@ -18,14 +18,17 @@ import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import { ProxyRequestContextStore } from './proxy-request-context.js';
-import { resolveTenantId } from '../tenant/resolve-tenant.js';
+import { resolveTenantContext, DEFAULT_TENANT_ID, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
+import { JwtTenantRequiredError, resolveProxyTenantId } from '../tenant/jwt-tenant-binding.js';
+import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
+import { AsyncSerialQueue } from '../utils/async-serial-queue.js';
+import type { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import {
   isSemanticLlmConfigured,
   isSemanticStrictMode,
   reportSemanticDegradation,
 } from '../utils/semantic-layer.js';
 import { isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
-import { LRUCache } from 'lru-cache';
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { isProxyEntropyCheckEnabled, scanArgumentEntropy } from '../utils/arg-entropy.js';
@@ -49,6 +52,12 @@ const MAX_PAYLOAD_BYTES = parseInt(
   process.env['MCP_GUARDIAN_MAX_PAYLOAD_BYTES'] ?? '10485760', // 10 MB default
 );
 
+function proxyMaxInflight(): number {
+  const raw = process.env['GUARDIAN_PROXY_MAX_INFLIGHT'] ?? '50';
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 50;
+}
+
 const RESTART_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000]; // Exponential
 
 /**
@@ -68,17 +77,12 @@ export class McpProxyServer {
   private currentRequestId: string | number | null = null;
   private readonly requestContexts = new ProxyRequestContextStore();
   private serverName: string;
-  private tenantId: string;
+  private defaultTenantId: string;
   private policyEngine: PolicyEngine | null;
+  private tenantPolicyRegistry: TenantPolicyRegistry | null;
   private authValidator: OAuthValidator | null;
   private sessionCache: GuardianSessionCache | null;
-  private circuitBreaker: ReturnType<typeof getCircuitBreaker>;
-  /** Per-client rate limit counters — LRU-backed to prevent memory leaks */
-  private clientRateCounters: LRUCache<string, { count: number; resetAt: number }> = new LRUCache({
-    max: 10000,
-    ttl: 60000,
-    updateAgeOnGet: false,
-  });
+  private readonly clientInputQueue = new AsyncSerialQueue();
   private stopMemoryMonitor: (() => void) | null = null;
 
   /** P0 Week 2: SHA-256 fingerprint of the tools/list response at session init.
@@ -108,13 +112,14 @@ export class McpProxyServer {
     authValidator?: OAuthValidator,
     requestTimeoutMs: number = 30000,
     maxRestarts: number = 5,
+    tenantPolicyRegistry?: TenantPolicyRegistry,
   ) {
     this.serverName = serverName || command.split('/').pop() || command;
-    this.tenantId = resolveTenantId();
+    this.defaultTenantId = resolveTenantContext().tenantId;
     this.policyEngine = policyEngine || null;
+    this.tenantPolicyRegistry = tenantPolicyRegistry ?? null;
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
-    this.circuitBreaker = getCircuitBreaker(this.tenantId, this.serverName);
     this.requestTimeoutMs = requestTimeoutMs;
     this.maxRestarts = maxRestarts;
     this.spawnCommand = command;
@@ -147,9 +152,14 @@ export class McpProxyServer {
       serverName: this.serverName,
       blockingMode: this.policyEngine ? this.policyEngine.getMode() : 'audit',
       authEnabled: this.authValidator ? this.authValidator.getConfig().required : false,
-      circuitBreaker: this.circuitBreaker.getState(),
+      circuitBreaker: this.breakerFor(this.defaultTenantId).getState(),
+      tenantId: this.defaultTenantId,
       requestTimeoutMs: this.requestTimeoutMs,
     });
+  }
+
+  private breakerFor(tenantId: string = DEFAULT_TENANT_ID): ReturnType<typeof getCircuitBreaker> {
+    return getCircuitBreaker(tenantId || this.defaultTenantId, this.serverName);
   }
 
   private spawnChild(): void {
@@ -257,12 +267,14 @@ export class McpProxyServer {
             timestamp: new Date().toISOString(),
             tokenSource: counts.tokenSource,
             model,
+            tenantId: reqCtx.tenantId || this.defaultTenantId,
           };
           persistCallRecord(this.db, record, reqMsg, this.spawnEnv, this.spawnArgs).catch((err) =>
             Logger.debug(`Proxy: failed to store call record: ${err?.message}`)
           );
-          this.circuitBreaker.recordSuccess();
-          Metrics.circuitBreakerState.set({ server_name: this.serverName }, this.circuitBreaker.getState() === 'CLOSED' ? 0 : this.circuitBreaker.getState() === 'OPEN' ? 1 : 2);
+          const tenantBreaker = this.breakerFor(reqCtx.tenantId || this.defaultTenantId);
+          tenantBreaker.recordSuccess();
+          Metrics.circuitBreakerState.set({ server_name: this.serverName }, tenantBreaker.getState() === 'CLOSED' ? 0 : tenantBreaker.getState() === 'OPEN' ? 1 : 2);
           Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, proxyLatencyMs);
           Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: 'true' });
           if (this.sessionCache) Metrics.activeSessions.set(this.sessionCache.size);
@@ -416,8 +428,8 @@ export class McpProxyServer {
       const reqCtx = this.requestContexts.get(requestId);
       const durationMs = Date.now() - (reqCtx?.requestStartTime ?? Date.now());
       const reason = `Upstream request timed out after ${this.requestTimeoutMs}ms`;
-      this.recordDeniedCall(toolName, reqCtx?.requestTokens ?? 0, durationMs, 'request-timeout', reason);
-      this.circuitBreaker.recordFailure();
+      this.recordDeniedCall(toolName, reqCtx?.requestTokens ?? 0, durationMs, 'request-timeout', reason, undefined, reqCtx?.tenantId);
+      this.breakerFor(reqCtx?.tenantId || this.defaultTenantId).recordFailure();
       Metrics.blockedRequestsTotal.inc({
         server_name: this.serverName,
         block_reason: 'request_timeout',
@@ -449,7 +461,9 @@ export class McpProxyServer {
     blockRule: string,
     blockReason: string,
     requestArguments?: Record<string, unknown>,
+    tenantId?: string,
   ): void {
+    const tid = tenantId || this.defaultTenantId;
     const record: ProxyCallRecord = {
       serverName: this.serverName,
       toolName,
@@ -461,6 +475,7 @@ export class McpProxyServer {
       blocked: true,
       blockRule,
       blockReason,
+      tenantId: tid,
     };
     persistCallRecord(this.db, record, undefined, this.spawnEnv, this.spawnArgs).catch((err) =>
       Logger.debug(`Proxy: failed to store denied call record: ${err?.message}`)
@@ -473,6 +488,7 @@ export class McpProxyServer {
         serverName: this.serverName,
         argsFingerprint: fingerprintArgs(requestArguments),
         argSnippets: redactArgSnippets(requestArguments),
+        tenantId: tid,
       },
       { db: this.db as HistoryDatabase },
     );
@@ -483,6 +499,10 @@ export class McpProxyServer {
    * Pipeline: Payload guard → Auth → Circuit Breaker → Policy + RBAC → Forward.
    */
   async handleClientInput(raw: string): Promise<void> {
+    return this.clientInputQueue.enqueue(() => this.processClientInput(raw));
+  }
+
+  private async processClientInput(raw: string): Promise<void> {
     // ── Payload size guard ──────────────────────────────────
     if (Buffer.byteLength(raw, 'utf8') > MAX_PAYLOAD_BYTES) {
       Logger.warn(
@@ -534,6 +554,16 @@ export class McpProxyServer {
 
         this.currentRequestId = msg.id;
         const toolName = msg.params?.name || 'unknown';
+        let requestTenantId = this.defaultTenantId;
+        try {
+          requestTenantId = resolveTenantContext({ meta: msg.params?._meta }).tenantId;
+        } catch (err) {
+          if (err instanceof InvalidTenantIdError) {
+            this.sendError(msg.id, -32602, `Invalid tenant id: ${err.message}`);
+            return;
+          }
+          throw err;
+        }
         const requestModel =
           extractModelFromPayload(msg) || resolveModelId();
         const reqEstimate =
@@ -543,6 +573,23 @@ export class McpProxyServer {
         const audioTokens = countAudioTokensInPayload(msg.params?.arguments);
         const requestTokens = reqEstimate + imageTokens + audioTokens;
         const requestArguments = msg.params?.arguments;
+
+        const maxInflight = proxyMaxInflight();
+        if (this.requestContexts.size >= maxInflight) {
+          this.sendError(
+            msg.id,
+            -32005,
+            `MCP Guardian: proxy overloaded (${this.requestContexts.size}/${maxInflight} in flight)`,
+            { rule: 'proxy-max-inflight' },
+          );
+          Metrics.requestsTotal.inc({
+            server_name: this.serverName,
+            decision: 'block',
+            authn_success: 'false',
+          });
+          return;
+        }
+
         this.requestContexts.set(msg.id, {
           requestStartTime: proxyStartTime,
           requestToolName: toolName,
@@ -550,6 +597,7 @@ export class McpProxyServer {
           requestRaw: raw,
           requestModel,
           requestArguments,
+          tenantId: requestTenantId,
         });
 
         // ── P0 Week 3: DLP on tool call arguments (runtime exfiltration) ──
@@ -637,7 +685,7 @@ export class McpProxyServer {
           } else {
             let result: AuthValidationResult = await this.authValidator.validate(token);
             if (!result.valid && this.sessionCache) {
-              const sessionIdentity = await validateSessionToken(this.sessionCache, token);
+              const sessionIdentity = await validateSessionToken(this.sessionCache, token, requestTenantId);
               if (sessionIdentity) {
                 result = { valid: true, identity: sessionIdentity };
               }
@@ -658,6 +706,22 @@ export class McpProxyServer {
                 return;
               }
             } else {
+              try {
+                requestTenantId = resolveProxyTenantId({
+                  meta: msg.params?._meta,
+                  jwtTenantId: agentIdentity?.tenantId,
+                  authenticated: true,
+                });
+                const ctxEntry = this.requestContexts.get(msg.id);
+                if (ctxEntry) ctxEntry.tenantId = requestTenantId;
+              } catch (err) {
+                if (err instanceof JwtTenantRequiredError || err instanceof InvalidTenantIdError) {
+                  this.sendError(msg.id, -32003, err.message);
+                  return;
+                }
+                throw err;
+              }
+
               const dpopProof = extractDpopProof({
                 metaAuth: msg.params?._meta?.auth as Record<string, unknown> | undefined,
                 messageDpop: typeof msg.DPoP === 'string' ? msg.DPoP : undefined,
@@ -668,6 +732,8 @@ export class McpProxyServer {
                 'POST',
                 dpopUri,
                 token,
+                requestTenantId,
+                this.policyEngine?.getMode(),
               );
               if (!dpopCheck.valid) {
                 this.sendError(msg.id, -32004, dpopCheck.error || 'DPoP validation failed');
@@ -675,7 +741,7 @@ export class McpProxyServer {
               }
 
               if (this.sessionCache && result.identity) {
-                const session = this.sessionCache.createSession(result.identity);
+                const session = this.sessionCache.createSession(result.identity, undefined, requestTenantId);
                 StructuredLogger.info({
                   event: 'auth_success',
                   requestId,
@@ -727,16 +793,18 @@ export class McpProxyServer {
         }
 
         // ── Circuit breaker check ───────────────────────────
-        if (!this.circuitBreaker.allowRequest()) {
+        const tenantBreaker = this.breakerFor(requestTenantId);
+        if (!tenantBreaker.allowRequest()) {
           StructuredLogger.info({
             event: 'circuit_open',
             requestId,
             serverName: this.serverName,
             toolName,
-            state: this.circuitBreaker.getState(),
+            tenantId: requestTenantId,
+            state: tenantBreaker.getState(),
           });
           this.sendError(msg.id, -32005, `Upstream MCP server '${this.serverName}' unavailable — circuit breaker open`);
-          this.circuitBreaker.recordFailure();
+          tenantBreaker.recordFailure();
           return;
         }
 
@@ -744,10 +812,14 @@ export class McpProxyServer {
         let authzAllowed = true;
         let blockReason: string | undefined;
 
-        if (this.policyEngine) {
-          const tenantId = resolveTenantId({
-            meta: msg.params?._meta,
-          });
+        const engine =
+          this.tenantPolicyRegistry?.getEngine(requestTenantId) ?? this.policyEngine;
+
+        if (engine) {
+          const tenantId = requestTenantId;
+          const idempotencyKey = idempotencyKeyFromRequest(
+            msg.params?._meta as Record<string, unknown> | undefined,
+          );
           const context: CallContext = {
             serverName: this.serverName,
             toolName,
@@ -757,9 +829,10 @@ export class McpProxyServer {
             timestamp: new Date().toISOString(),
             tenantId,
             agentIdentity,
+            idempotencyKey,
           };
 
-          const decision = await this.policyEngine.evaluateAsync(context);
+          const decision = await engine.evaluateAsync(context);
 
           ingestPolicyDecision({
             requestId,
@@ -781,14 +854,22 @@ export class McpProxyServer {
             context,
           });
 
-          const policyMode = this.policyEngine.getMode();
+          const policyMode = engine.getMode();
           const shouldDeny = decision.action === 'block'
             || (decision.action === 'flag' && policyMode === 'block');
 
           if (shouldDeny) {
             authzAllowed = false;
             blockReason = `policy:${decision.rule}:${decision.reason}`;
-            this.recordDeniedCall(toolName, requestTokens, Date.now() - proxyStartTime, decision.rule, decision.reason);
+            this.recordDeniedCall(
+              toolName,
+              requestTokens,
+              Date.now() - proxyStartTime,
+              decision.rule,
+              decision.reason,
+              requestArguments,
+              requestTenantId,
+            );
 
             StructuredLogger.logBlocked({
               event: 'tool_blocked',
@@ -842,36 +923,6 @@ export class McpProxyServer {
           }
 
           enqueueSemanticAudit(buildSemanticAuditJob(context, decision));
-
-          // Per-client rate limiting
-          if (agentIdentity) {
-            const tenant = tenantId;
-            const clientKey = agentIdentity.clientId || agentIdentity.sub;
-            const rateKey = `${tenant}:${this.serverName}:${toolName}:${clientKey}`;
-            const now = Date.now();
-            let counter = this.clientRateCounters.get(rateKey);
-            if (!counter || now > counter.resetAt) {
-              counter = { count: 1, resetAt: now + 60000 };
-            } else {
-              counter.count++;
-            }
-            this.clientRateCounters.set(rateKey, counter);
-            const perClientLimit = this.checkPerClientRateLimit(agentIdentity, toolName, counter.count);
-            if (perClientLimit) {
-              StructuredLogger.info({
-                event: 'request_denied',
-                requestId,
-                serverName: this.serverName,
-                toolName,
-                authnSuccess,
-                authzAllowed: false,
-                blockReason: perClientLimit,
-                proxyLatencyMs: Date.now() - proxyStartTime,
-              });
-              this.sendError(msg.id, -32004, `Rate limit exceeded for agent '${agentIdentity.sub}': ${perClientLimit}`);
-              return;
-            }
-          }
         }
 
         // ── Log successful forwarding ───────────────────────
@@ -903,19 +954,6 @@ export class McpProxyServer {
     }
 
     this.child.stdin?.write(raw + '\n');
-  }
-
-  /**
-   * Check per-client rate limits against RBAC rules.
-   * Returns block reason string or null.
-   */
-  private checkPerClientRateLimit(identity: AgentIdentity, _toolName: string, currentCount: number): string | null {
-    if (!this.policyEngine) return null;
-    const scopes = identity.scopes || [];
-    if (scopes.length === 0 && currentCount > 100) {
-      return `Per-client rate limit exceeded: ${currentCount}/100 calls per minute (agent: ${identity.sub})`;
-    }
-    return null;
   }
 
   /** Atomically swap the active policy engine (used by hot-reload) */

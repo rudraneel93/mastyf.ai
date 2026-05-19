@@ -45,12 +45,12 @@ export function createHttpProxy(
     const rawBody = Buffer.concat(chunks).toString();
 
     let parsed: any;
-    try { parsed = JSON.parse(rawBody); } catch {
-      // Not JSON — forward
+    try { parsed = JSON.parse(rawBody);     } catch {
+      // Not JSON — forward with original method
       const upstream = new URL(target + (clientReq.url ?? '/'));
       const opts: http.RequestOptions = {
         hostname: upstream.hostname, port: upstream.port || 80,
-        path: upstream.pathname + upstream.search, method: 'POST',
+        path: upstream.pathname + upstream.search, method: clientReq.method || 'POST',
         headers: { ...clientReq.headers, host: upstream.hostname, 'content-length': String(rawBody.length) },
       };
       const upstreamReq = http.request(opts, upstreamRes => {
@@ -124,11 +124,11 @@ export function createHttpProxy(
       upstreamReq.write(rawBody);
       upstreamReq.end();
     } else {
-      // Forward non-tools/call
+      // Forward non-tools/call — preserve client HTTP method
       const upstream = new URL(target + (clientReq.url ?? '/'));
       const opts: http.RequestOptions = {
         hostname: upstream.hostname, port: upstream.port || 80,
-        path: upstream.pathname + upstream.search, method: 'POST',
+        path: upstream.pathname + upstream.search, method: clientReq.method || 'POST',
         headers: { ...clientReq.headers, host: upstream.hostname, 'content-length': String(rawBody.length) },
       };
       const upstreamReq = http.request(opts, upstreamRes => {

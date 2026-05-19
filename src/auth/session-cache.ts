@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { LRUCache } from 'lru-cache';
 import { AgentIdentity } from './auth-types.js';
 import { Logger } from '../utils/logger.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 /**
  * Session cache for replay protection.
@@ -60,18 +61,27 @@ export class SessionCache {
     this.usedNonces.clear();
   }
 
+  protected scopedSessionKey(tenantId: string, token: string): string {
+    return `tenant:${tenantId || DEFAULT_TENANT_ID}:session:${token}`;
+  }
+
+  protected scopedNonceKey(tenantId: string, nonce: string): string {
+    return `tenant:${tenantId || DEFAULT_TENANT_ID}:nonce:${nonce}`;
+  }
+
   /**
    * Create a session after successful JWT validation.
    * Returns a session token the client must use for subsequent calls.
    */
-  createSession(identity: AgentIdentity, jwtNonce?: string): SessionEntry {
+  createSession(identity: AgentIdentity, jwtNonce?: string, tenantId: string = DEFAULT_TENANT_ID): SessionEntry {
     const nonce = jwtNonce || `${identity.sub}:${Date.now()}:${randomUUID()}`;
+    const nonceKey = this.scopedNonceKey(tenantId, nonce);
 
-    if (this.usedNonces.has(nonce)) {
-      Logger.warn(`[session-cache] Replay detected: nonce ${nonce}`);
+    if (this.usedNonces.has(nonceKey)) {
+      Logger.warn(`[session-cache] Replay detected: nonce ${nonce} (tenant=${tenantId})`);
       throw new Error('Nonce replay detected');
     }
-    this.usedNonces.set(nonce, Date.now());
+    this.usedNonces.set(nonceKey, Date.now());
 
     const token = `mcp_guardian_session_${randomUUID()}`;
     const now = Date.now();
@@ -83,7 +93,7 @@ export class SessionCache {
       expiresAt: now + this.sessionTtlMs,
     };
 
-    this.sessions.set(token, entry);
+    this.sessions.set(this.scopedSessionKey(tenantId, token), entry);
     return entry;
   }
 
@@ -91,24 +101,24 @@ export class SessionCache {
    * Validate a session token.
    * Returns the agent identity if valid, null if expired/not found.
    */
-  validateSession(token: string): AgentIdentity | null {
-    const entry = this.sessions.get(token);
+  validateSession(token: string, tenantId: string = DEFAULT_TENANT_ID): AgentIdentity | null {
+    const entry = this.sessions.get(this.scopedSessionKey(tenantId, token));
     if (!entry) return null;
     if (Date.now() > entry.expiresAt) {
-      this.sessions.delete(token);
+      this.sessions.delete(this.scopedSessionKey(tenantId, token));
       return null;
     }
     return entry.identity;
   }
 
   /** Check if a JWT nonce has been used (replay detection). */
-  isNonceUsed(nonce: string): boolean {
-    return this.usedNonces.has(nonce);
+  isNonceUsed(nonce: string, tenantId: string = DEFAULT_TENANT_ID): boolean {
+    return this.usedNonces.has(this.scopedNonceKey(tenantId, nonce));
   }
 
   /** Revoke a session (e.g., on logout or suspicious activity). */
-  revokeSession(token: string): void {
-    this.sessions.delete(token);
+  revokeSession(token: string, tenantId: string = DEFAULT_TENANT_ID): void {
+    this.sessions.delete(this.scopedSessionKey(tenantId, token));
   }
 
   protected cleanup(): void {

@@ -110,3 +110,20 @@ export function createRedisClient(options?: RedisClientOptions): Redis | Cluster
   Logger.info(`[redis] URL mode: ${url}`);
   return new Redis(url, opts);
 }
+
+let sharedClient: Redis | Cluster | null = null;
+
+/** Singleton Redis client for idempotency, block-learning locks, etc. */
+export function getSharedRedisClient(): Redis | Cluster {
+  if (!sharedClient) {
+    sharedClient = createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });
+  }
+  return sharedClient;
+}
+
+export function resetSharedRedisClientForTests(): void {
+  if (sharedClient) {
+    void (sharedClient as Redis).quit?.();
+  }
+  sharedClient = null;
+}

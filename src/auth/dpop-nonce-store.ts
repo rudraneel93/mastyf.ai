@@ -1,11 +1,12 @@
 import type { Redis, Cluster } from 'ioredis';
 import { Logger } from '../utils/logger.js';
 import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from '../utils/redis-client.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 /** Pluggable DPoP jti replay store (in-memory single instance or Redis HA). */
 export interface DPoPNonceStore {
   /** Returns true if this jti is the first use; false if replay. */
-  claim(jti: string): Promise<boolean>;
+  claim(jti: string, tenantId?: string): Promise<boolean>;
   cleanupExpired?(): void;
 }
 
@@ -15,20 +16,25 @@ export class InMemoryDPoPNonceStore implements DPoPNonceStore {
 
   constructor(private readonly ttlMs: number) {}
 
+  private scopedKey(tenantId: string, jti: string): string {
+    return `tenant:${tenantId || DEFAULT_TENANT_ID}:${jti}`;
+  }
+
   cleanupExpired(): void {
     const now = Date.now();
     if (now - this.lastCleanup < 60_000) return;
     const expiry = now - this.ttlMs;
-    for (const [jti, ts] of this.used) {
-      if (ts < expiry) this.used.delete(jti);
+    for (const [key, ts] of this.used) {
+      if (ts < expiry) this.used.delete(key);
     }
     this.lastCleanup = now;
   }
 
-  async claim(jti: string): Promise<boolean> {
+  async claim(jti: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
     this.cleanupExpired();
-    if (this.used.has(jti)) return false;
-    this.used.set(jti, Date.now());
+    const key = this.scopedKey(tenantId, jti);
+    if (this.used.has(key)) return false;
+    this.used.set(key, Date.now());
     return true;
   }
 }
@@ -46,9 +52,11 @@ export async function claimDpopJtiOnRedis(
   keyPrefix: string,
   jti: string,
   ttlSeconds: number,
+  tenantId: string = DEFAULT_TENANT_ID,
 ): Promise<boolean> {
-  const lockKey = `${keyPrefix}lock:${jti}`;
-  const dataKey = `${keyPrefix}${jti}`;
+  const scopedPrefix = `${keyPrefix}tenant:${tenantId || DEFAULT_TENANT_ID}:`;
+  const lockKey = `${scopedPrefix}lock:${jti}`;
+  const dataKey = `${scopedPrefix}${jti}`;
 
   for (let attempt = 0; attempt < DPOP_LOCK_MAX_ATTEMPTS; attempt++) {
     const locked = await redis.set(lockKey, '1', 'EX', 1, 'NX');
@@ -80,8 +88,8 @@ export class RedisDPoPNonceStore implements DPoPNonceStore {
     Logger.info(`[dpop] Redis nonce store (${getRedisConnectionLabel()})`);
   }
 
-  async claim(jti: string): Promise<boolean> {
-    return claimDpopJtiOnRedis(this.redis, this.prefix, jti, this.ttlSeconds);
+  async claim(jti: string, tenantId: string = DEFAULT_TENANT_ID): Promise<boolean> {
+    return claimDpopJtiOnRedis(this.redis, this.prefix, jti, this.ttlSeconds, tenantId);
   }
 
   async close(): Promise<void> {

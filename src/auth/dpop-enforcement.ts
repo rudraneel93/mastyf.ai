@@ -15,9 +15,18 @@ export function resetDpopEnforcementForTests(): void {
   sharedValidator = null;
 }
 
+/** Legacy bypass for deployments that cannot send DPoP yet. */
+export function isDpopLegacyBypass(): boolean {
+  return process.env['GUARDIAN_LEGACY_NO_DPOP'] === 'true';
+}
+
 /** When true, proxy rejects requests without a valid DPoP proof (RFC 9449). */
-export function isDpopRequired(): boolean {
-  return process.env['GUARDIAN_REQUIRE_DPOP'] === 'true';
+export function isDpopRequired(policyMode?: 'audit' | 'warn' | 'block'): boolean {
+  if (isDpopLegacyBypass()) return false;
+  if (process.env['GUARDIAN_REQUIRE_DPOP'] === 'true') return true;
+  if (process.env['GUARDIAN_BLOCKING_MODE'] === 'true') return true;
+  if (policyMode === 'block') return true;
+  return false;
 }
 
 /**
@@ -29,8 +38,10 @@ export async function validateRequiredDpop(
   httpMethod: string,
   httpUri: string,
   accessToken?: string,
+  tenantId?: string,
+  policyMode?: 'audit' | 'warn' | 'block',
 ): Promise<{ valid: boolean; error?: string }> {
-  if (!isDpopRequired()) {
+  if (!isDpopRequired(policyMode)) {
     return { valid: true };
   }
 
@@ -56,6 +67,7 @@ export async function validateRequiredDpop(
       httpMethod,
       httpUri,
       accessToken,
+      tenantId,
     );
 
     if (!result.valid) {

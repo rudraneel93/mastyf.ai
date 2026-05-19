@@ -93,72 +93,118 @@ export class PostgresDatabase implements IDatabase {
     }
   }
 
-  async getRecentSuccessRate(serverName: string): Promise<number | null> {
-    const result = await this.pool.query(
-      `SELECT AVG(success) as avg FROM (
-         SELECT success FROM health_checks
-         WHERE server_name = $1
-         ORDER BY timestamp DESC
-         LIMIT 10
-       ) AS recent`,
-      [serverName]
-    );
+  async getRecentSuccessRate(serverName: string, tenantId?: string): Promise<number | null> {
+    const result = tenantId
+      ? await this.pool.query(
+        `SELECT AVG(success) as avg FROM (
+           SELECT success FROM health_checks
+           WHERE server_name = $1 AND tenant_id = $2
+           ORDER BY timestamp DESC
+           LIMIT 10
+         ) AS recent`,
+        [serverName, tenantId],
+      )
+      : await this.pool.query(
+        `SELECT AVG(success) as avg FROM (
+           SELECT success FROM health_checks
+           WHERE server_name = $1
+           ORDER BY timestamp DESC
+           LIMIT 10
+         ) AS recent`,
+        [serverName],
+      );
     if (result.rows.length > 0 && result.rows[0].avg !== null) {
       return Number(result.rows[0].avg);
     }
     return null;
   }
 
-  async addSecurityScan(serverName: string, score: number, cveCount: number, details: unknown): Promise<void> {
+  async addSecurityScan(
+    serverName: string,
+    score: number,
+    cveCount: number,
+    details: unknown,
+    tenantId = 'default',
+  ): Promise<void> {
     await this.pool.query(
-      'INSERT INTO security_scans (server_name, score, cve_count, details) VALUES ($1, $2, $3, $4)',
-      [serverName, score, cveCount, JSON.stringify(details)]
+      'INSERT INTO security_scans (server_name, score, cve_count, details, tenant_id) VALUES ($1, $2, $3, $4, $5)',
+      [serverName, score, cveCount, JSON.stringify(details), tenantId],
     );
   }
 
-  async getLatestSecurityScan(serverName: string): Promise<unknown | null> {
-    const result = await this.pool.query(
-      'SELECT * FROM security_scans WHERE server_name = $1 ORDER BY id DESC LIMIT 1',
-      [serverName]
-    );
+  async getLatestSecurityScan(serverName: string, tenantId?: string): Promise<unknown | null> {
+    const result = tenantId
+      ? await this.pool.query(
+        'SELECT * FROM security_scans WHERE server_name = $1 AND tenant_id = $2 ORDER BY id DESC LIMIT 1',
+        [serverName, tenantId],
+      )
+      : await this.pool.query(
+        'SELECT * FROM security_scans WHERE server_name = $1 ORDER BY id DESC LIMIT 1',
+        [serverName],
+      );
     return result.rows.length > 0 ? result.rows[0] : null;
   }
 
-  async getDistinctScannedServers(): Promise<string[]> {
-    const result = await this.pool.query(
-      'SELECT DISTINCT server_name FROM security_scans ORDER BY server_name'
-    );
-    return result.rows.map((r: any) => r.server_name);
-  }
-
-  async getDistinctActiveServers(): Promise<string[]> {
-    const result = await this.pool.query(
-      `SELECT DISTINCT server_name FROM (
-         SELECT server_name FROM security_scans
-         UNION
-         SELECT server_name FROM call_records
-       ) AS active ORDER BY server_name`,
-    );
+  async getDistinctScannedServers(tenantId?: string): Promise<string[]> {
+    const result = tenantId
+      ? await this.pool.query(
+        'SELECT DISTINCT server_name FROM security_scans WHERE tenant_id = $1 ORDER BY server_name',
+        [tenantId],
+      )
+      : await this.pool.query(
+        'SELECT DISTINCT server_name FROM security_scans ORDER BY server_name',
+      );
     return result.rows.map((r: { server_name: string }) => r.server_name);
   }
 
-  async addCostRecord(serverName: string, tokens: number, cost: number): Promise<void> {
+  async getDistinctActiveServers(tenantId?: string): Promise<string[]> {
+    const result = tenantId
+      ? await this.pool.query(
+        `SELECT DISTINCT server_name FROM (
+           SELECT server_name FROM security_scans WHERE tenant_id = $1
+           UNION
+           SELECT server_name FROM call_records WHERE tenant_id = $1
+         ) AS active ORDER BY server_name`,
+        [tenantId, tenantId],
+      )
+      : await this.pool.query(
+        `SELECT DISTINCT server_name FROM (
+           SELECT server_name FROM security_scans
+           UNION
+           SELECT server_name FROM call_records
+         ) AS active ORDER BY server_name`,
+      );
+    return result.rows.map((r: { server_name: string }) => r.server_name);
+  }
+
+  async addCostRecord(
+    serverName: string,
+    tokens: number,
+    cost: number,
+    tenantId = 'default',
+  ): Promise<void> {
     await this.pool.query(
-      'INSERT INTO cost_records (server_name, tokens_used, cost_usd) VALUES ($1, $2, $3)',
-      [serverName, tokens, cost]
+      'INSERT INTO cost_records (server_name, tokens_used, cost_usd, tenant_id) VALUES ($1, $2, $3, $4)',
+      [serverName, tokens, cost, tenantId],
     );
   }
 
-  async addHealthCheck(serverName: string, latency: number, success: boolean, toolCount: number): Promise<void> {
+  async addHealthCheck(
+    serverName: string,
+    latency: number,
+    success: boolean,
+    toolCount: number,
+    tenantId = 'default',
+  ): Promise<void> {
     await this.pool.query(
-      'INSERT INTO health_checks (server_name, latency_ms, success, tool_count) VALUES ($1, $2, $3, $4)',
-      [serverName, latency, success ? 1 : 0, toolCount]
+      'INSERT INTO health_checks (server_name, latency_ms, success, tool_count, tenant_id) VALUES ($1, $2, $3, $4, $5)',
+      [serverName, latency, success ? 1 : 0, toolCount, tenantId],
     );
   }
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
     await this.pool.query(
-      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
       [
         record.serverName,
         record.toolName,
@@ -173,15 +219,25 @@ export class PostgresDatabase implements IDatabase {
         record.costUsd ?? null,
         record.pricingSource ?? null,
         record.tokenSource ?? null,
-      ]
+        record.tenantId ?? 'default',
+      ],
     );
   }
 
-  async getCallRecordsForServer(serverName: string): Promise<ProxyCallRecord[]> {
-    const result = await this.pool.query(
-      'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source FROM call_records WHERE server_name = $1',
-      [serverName]
-    );
+  async getCallRecordsForServer(
+    serverName: string,
+    _limit?: number,
+    tenantId?: string,
+  ): Promise<ProxyCallRecord[]> {
+    const result = tenantId
+      ? await this.pool.query(
+        'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id FROM call_records WHERE server_name = $1 AND tenant_id = $2',
+        [serverName, tenantId],
+      )
+      : await this.pool.query(
+        'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id FROM call_records WHERE server_name = $1',
+        [serverName],
+      );
     return result.rows.map((row: any) => ({
       serverName: row.server_name,
       toolName: row.tool_name,
@@ -199,6 +255,7 @@ export class PostgresDatabase implements IDatabase {
       tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
         ? row.token_source
         : undefined,
+      tenantId: row.tenant_id ?? 'default',
     }));
   }
 

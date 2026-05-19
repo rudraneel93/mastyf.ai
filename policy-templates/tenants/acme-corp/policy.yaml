@@ -1,0 +1,10 @@
+version: "1.0"
+policy:
+  mode: block
+  rules:
+    - name: acme-tenant-scope
+      description: ACME tenant RBAC scope
+      action: block
+      rbac:
+        tenants:
+          - acme-corp

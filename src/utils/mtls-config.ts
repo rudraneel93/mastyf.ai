@@ -16,9 +16,94 @@
  * Certificate rotation requires process/pod restart until hot-reload ships
  * (see docs/MTLS.md and src/utils/mtls-watcher.ts).
  */
-import { readFileSync } from 'fs';
+import { readFileSync, mkdtempSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { request as httpRequest } from 'http';
 import { Agent as HttpsAgent } from 'https';
 import { Logger } from './logger.js';
+import { applyCertPinToAgentOptions } from './upstream-cert-pin.js';
+
+let spiffeLoaded = false;
+
+export function resetSpiffeSvidCacheForTests(): void {
+  spiffeLoaded = false;
+  delete process.env['MCP_TLS_CA'];
+  delete process.env['MCP_TLS_CERT'];
+  delete process.env['MCP_TLS_KEY'];
+}
+
+/**
+ * Fetch X.509 SVID from SPIFFE Workload API (HTTP over Unix socket).
+ * Sets MCP_TLS_CA, MCP_TLS_CERT, MCP_TLS_KEY when successful.
+ */
+export async function fetchSpiffeSvidFromWorkloadApi(): Promise<boolean> {
+  const socketPath = process.env['GUARDIAN_SPIFFE_SOCKET_PATH']?.trim();
+  if (!socketPath || spiffeLoaded) return spiffeLoaded;
+
+  return new Promise((resolve) => {
+    const req = httpRequest(
+      {
+        socketPath,
+        path: '/v1/agent/x509',
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data) as {
+              svids?: Array<{ x509_svid?: string; private_key?: string }>;
+              federated_bundles?: Record<string, string>;
+            };
+            const svid = parsed.svids?.[0];
+            if (!svid?.x509_svid || !svid.private_key) {
+              Logger.warn('[spiffe] Workload API returned no SVID');
+              resolve(false);
+              return;
+            }
+            process.env['MCP_TLS_CERT'] = writeTempPem('cert', svid.x509_svid);
+            process.env['MCP_TLS_KEY'] = writeTempPem('key', svid.private_key);
+            const bundle = Object.values(parsed.federated_bundles || {})[0];
+            if (bundle) {
+              process.env['MCP_TLS_CA'] = writeTempPem('ca', bundle);
+            }
+            process.env['MCP_TLS_ENABLED'] = 'true';
+            spiffeLoaded = true;
+            Logger.info('[spiffe] Loaded SVID from workload API');
+            resolve(true);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            Logger.warn(`[spiffe] Failed to parse workload API response: ${message}`);
+            resolve(false);
+          }
+        });
+      },
+    );
+    req.on('error', (err) => {
+      Logger.warn(`[spiffe] Workload API unreachable: ${err.message}`);
+      resolve(false);
+    });
+    req.end();
+  });
+}
+
+function writeTempPem(kind: string, pemBody: string): string {
+  const dir = mkdtempSync(join(tmpdir(), `guardian-spiffe-${kind}-`));
+  const filePath = join(dir, `${kind}.pem`);
+  let normalized = pemBody;
+  if (!pemBody.includes('BEGIN')) {
+    if (kind === 'key') {
+      normalized = `-----BEGIN PRIVATE KEY-----\n${pemBody}\n-----END PRIVATE KEY-----`;
+    } else {
+      normalized = `-----BEGIN CERTIFICATE-----\n${pemBody}\n-----END CERTIFICATE-----`;
+    }
+  }
+  writeFileSync(filePath, normalized);
+  return filePath;
+}
 
 export interface MtlsConfig {
   enabled: boolean;
@@ -33,6 +118,9 @@ export interface MtlsConfig {
  */
 export function loadMtlsConfig(): MtlsConfig {
   resolveMtlsEnvFromMounts();
+  if (process.env['GUARDIAN_SPIFFE_SOCKET_PATH'] && !spiffeLoaded) {
+    Logger.info('[spiffe] GUARDIAN_SPIFFE_SOCKET_PATH set — call fetchSpiffeSvidFromWorkloadApi() before loadMtlsConfig in async bootstrap');
+  }
   const enabled = process.env['MCP_TLS_ENABLED'] === 'true';
 
   if (!enabled) {
@@ -76,9 +164,18 @@ export function loadMtlsConfig(): MtlsConfig {
  * Create an HTTPS Agent configured with mTLS client certificate and CA.
  */
 export function createMtlsAgent(config: MtlsConfig): HttpsAgent | undefined {
-  if (!config.enabled) return undefined;
+  if (!config.enabled) {
+    const pinOnly = process.env['GUARDIAN_UPSTREAM_CERT_PIN_SHA256']?.trim();
+    if (!pinOnly) return undefined;
+    const opts = applyCertPinToAgentOptions({
+      rejectUnauthorized: true,
+      keepAlive: true,
+      keepAliveMsecs: 30000,
+    });
+    return new HttpsAgent(opts);
+  }
 
-  return new HttpsAgent({
+  const opts = applyCertPinToAgentOptions({
     ca: config.ca,
     cert: config.cert,
     key: config.key,
@@ -86,6 +183,7 @@ export function createMtlsAgent(config: MtlsConfig): HttpsAgent | undefined {
     keepAlive: true,
     keepAliveMsecs: 30000,
   });
+  return new HttpsAgent(opts);
 }
 
 /**

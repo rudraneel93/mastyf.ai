@@ -347,6 +347,32 @@ export function deobfuscateRecursive(input: string, maxDepth = 5, unicodeStrict 
   return getNormalizer(unicodeStrict).deobfuscateRecursive(input, maxDepth);
 }
 
+const BASE64_SHELL_DECODE_RE =
+  /\b(?:curl|wget|bash|sh\s|\/bin\/sh|rm\s+-rf|eval\s|exec\s|powershell|pwsh)\b/i;
+
+const INLINE_BASE64_BLOB_RE = /(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{16,}={0,2})/g;
+
+/**
+ * Light scan: decode inline base64 blobs (capped) and flag shell/downloader text.
+ * Used as belt-and-suspenders before regex policy rules.
+ */
+export function detectShellInBase64Blobs(input: string, maxBlobLen = 4096): boolean {
+  if (!input || input.length > maxBlobLen * 4) return false;
+  for (const match of input.matchAll(INLINE_BASE64_BLOB_RE)) {
+    const b64 = match[1];
+    if (!b64 || b64.length > maxBlobLen) continue;
+    try {
+      const decoded = Buffer.from(b64, 'base64').toString('utf-8');
+      if (decoded.length >= 4 && BASE64_SHELL_DECODE_RE.test(decoded)) {
+        return true;
+      }
+    } catch {
+      // ignore invalid base64
+    }
+  }
+  return false;
+}
+
 /** Singleton instance for policy engine integration */
 let defaultInstance: PayloadNormalizer | null = null;
 let defaultUnicodeStrict = true;

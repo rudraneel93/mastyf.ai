@@ -7,6 +7,8 @@ import { isAiLearningEnabled } from '../utils/ai-enabled.js';
 import { Logger } from '../utils/logger.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import type { McpServerConfig } from '../types.js';
+import { isRedisConfigured, getSharedRedisClient } from '../utils/redis-client.js';
+import { tenantRateLimitKey } from '../tenant/resolve-tenant.js';
 
 export interface PolicyBlockContext {
   block_rule: string;
@@ -18,6 +20,7 @@ export interface PolicyBlockContext {
 export interface BlockLearningEvent extends PolicyBlockContext {
   block_reason: string;
   argSnippets?: string[];
+  tenantId?: string;
 }
 
 const DEFAULT_DEBOUNCE_MS = 30_000;
@@ -26,6 +29,7 @@ const SENSITIVE_ARG_KEYS = /password|secret|token|api[_-]?key|credential|private
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingContext: PolicyBlockContext | null = null;
+let pendingTenantId: string | undefined;
 let pendingDb: HistoryDatabase | undefined;
 let pendingServers: McpServerConfig[] = [];
 
@@ -118,6 +122,7 @@ export function onPolicyBlock(
   opts?: { db?: HistoryDatabase; servers?: McpServerConfig[] },
 ): void {
   pendingContext = context;
+  pendingTenantId = (context as BlockLearningEvent).tenantId;
   if (opts?.db) pendingDb = opts.db;
   if (opts?.servers?.length) pendingServers = opts.servers;
 
@@ -136,10 +141,36 @@ export function onPolicyBlock(
   }, ms);
 }
 
+function blockLearningLockTtlMs(): number {
+  const n = parseInt(process.env.GUARDIAN_AI_BLOCK_DEBOUNCE_MS || String(DEFAULT_DEBOUNCE_MS), 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DEBOUNCE_MS;
+}
+
+async function acquireBlockLearningLock(tenantId: string): Promise<boolean> {
+  if (!isRedisConfigured()) return true;
+  const key = tenantRateLimitKey(tenantId || 'default', 'block-learning:lock');
+  try {
+    const redis = getSharedRedisClient();
+    const ok = await redis.set(key, '1', 'PX', blockLearningLockTtlMs(), 'NX');
+    return ok === 'OK';
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    Logger.warn(`[block-learning] Redis lock unavailable, proceeding locally: ${message}`);
+    return true;
+  }
+}
+
 async function flushBlockLearning(): Promise<void> {
   const ctx = pendingContext;
   pendingContext = null;
   if (!ctx || !isAiLearningEnabled()) return;
+
+  const lockTenant = pendingTenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+  pendingTenantId = undefined;
+  if (!(await acquireBlockLearningLock(lockTenant))) {
+    Logger.debug(`[block-learning] Skipping cycle — another pod holds lock (tenant=${lockTenant})`);
+    return;
+  }
 
   Logger.debug(
     `[block-learning] Triggering learning cycle after block rule=${ctx.block_rule} tool=${ctx.toolName} fp=${ctx.argsFingerprint}`,
@@ -160,4 +191,5 @@ export function resetBlockLearningDebounce(): void {
     debounceTimer = null;
   }
   pendingContext = null;
+  pendingTenantId = undefined;
 }

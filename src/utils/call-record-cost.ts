@@ -4,7 +4,7 @@ import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
 import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from './metrics.js';
 import { broadcastDashboardEvent } from './dashboard-events.js';
-import { withSqliteBusyRetry } from './sqlite-busy-retry.js';
+import { enqueueAuditWrite, initAuditWriteQueue } from '../database/audit-write-queue.js';
 
 export async function enrichCallRecord(
   record: ProxyCallRecord,
@@ -46,8 +46,20 @@ export async function persistCallRecord(
   serverEnv?: Record<string, string>,
   serverArgs?: string[],
 ): Promise<ProxyCallRecord> {
+  initAuditWriteQueue(db);
   const enriched = await enrichCallRecord(record, msg, serverEnv, serverArgs);
-  await withSqliteBusyRetry(() => db.addCallRecord(enriched));
+  const costJob =
+    enriched.costUsd && enriched.costUsd > 0
+      ? {
+          serverName: enriched.serverName,
+          tokens: enriched.totalTokens,
+          costUsd: enriched.costUsd,
+          tenantId: enriched.tenantId ?? 'default',
+        }
+      : undefined;
+
+  enqueueAuditWrite({ record: enriched, costRecord: costJob });
+
   broadcastDashboardEvent({
     type: enriched.blocked ? 'policy-block' : 'audit:decision',
     serverName: enriched.serverName,
@@ -61,11 +73,8 @@ export async function persistCallRecord(
     },
     timestamp: Date.now(),
   });
+
   if (enriched.costUsd && enriched.costUsd > 0) {
-    const costUsd = enriched.costUsd;
-    await withSqliteBusyRetry(() =>
-      db.addCostRecord(enriched.serverName, enriched.totalTokens, costUsd),
-    );
     Metrics.tokenCostUsd.observe(
       { server_name: enriched.serverName, model: enriched.model || 'unknown' },
       enriched.costUsd,

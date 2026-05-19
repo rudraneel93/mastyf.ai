@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Metrics and timelines below are from modeled scenarios, not production MCP proxy traffic.
+
 # LIVE PROXY ATTACK SIMULATION - COMPREHENSIVE ENTERPRISE ANALYSIS
 
 **Report Date:** May 18, 2026  

@@ -107,43 +107,47 @@ export class AuditTrailSync {
   /** Sync call records from local SQLite to unified_audit_trail */
   private async syncCallRecords(): Promise<void> {
     try {
-      const servers = await this.localDb.getDistinctScannedServers();
-      for (const serverName of servers) {
-        const records = await this.localDb.getCallRecordsForServer(serverName);
-        if (records.length === 0) continue;
+      const tenants = this.localDb.getDistinctAuditTenants();
+      for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
+        const servers = this.localDb.getDistinctServersForTenant(tenantId);
+        for (const serverName of servers) {
+          const records = await this.localDb.getCallRecordsForServer(serverName, this.config.batchSize, tenantId);
+          if (records.length === 0) continue;
 
-        const client = await this.pgPool.connect();
-        try {
-          await client.query('BEGIN');
-          for (const record of records) {
-            // ProxyCallRecord lacks action/severity fields — call records are
-            // informational and default to 'pass'/'info'; policy decisions use
-            // recordPolicyDecision() which stores real action/severity values.
-            await client.query(
-              `INSERT INTO unified_audit_trail
-               (instance_id, server_name, tool_name, action, request_tokens, response_tokens, total_tokens, duration_ms, severity)
-               VALUES ($1, $2, $3, 'pass', $4, $5, $6, $7, 'info')
+          const client = await this.pgPool.connect();
+          try {
+            await client.query('BEGIN');
+            for (const record of records) {
+              // ProxyCallRecord lacks action/severity fields — call records are
+              // informational and default to 'pass'/'info'; policy decisions use
+              // recordPolicyDecision() which stores real action/severity values.
+              await client.query(
+                `INSERT INTO unified_audit_trail
+               (instance_id, server_name, tool_name, action, request_tokens, response_tokens, total_tokens, duration_ms, severity, tenant_id)
+               VALUES ($1, $2, $3, 'pass', $4, $5, $6, $7, 'info', $8)
                ON CONFLICT (id) DO NOTHING`,
-              [
-                this.config.instanceId,
-                record.serverName,
-                record.toolName,
-                record.requestTokens,
-                record.responseTokens,
-                record.totalTokens,
-                record.durationMs,
-              ]
-            );
+                [
+                  this.config.instanceId,
+                  record.serverName,
+                  record.toolName,
+                  record.requestTokens,
+                  record.responseTokens,
+                  record.totalTokens,
+                  record.durationMs,
+                  record.tenantId || 'default',
+                ],
+              );
+            }
+            await client.query('COMMIT');
+            if (records.length > 0) {
+              Logger.debug(`[AuditTrailSync] Synced ${records.length} call records for ${serverName} (tenant=${tenantId})`);
+            }
+          } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+          } finally {
+            client.release();
           }
-          await client.query('COMMIT');
-          if (records.length > 0) {
-            Logger.debug(`[AuditTrailSync] Synced ${records.length} call records for ${serverName}`);
-          }
-        } catch (err) {
-          await client.query('ROLLBACK');
-          throw err;
-        } finally {
-          client.release();
         }
       }
     } catch (err: any) {
@@ -154,29 +158,33 @@ export class AuditTrailSync {
   /** Sync security scans to unified_security_scans */
   private async syncSecurityScans(): Promise<void> {
     try {
-      const servers = await this.localDb.getDistinctScannedServers();
-      for (const serverName of servers) {
-        const scan = await this.localDb.getLatestSecurityScan(serverName);
-        if (!scan) continue;
+      const tenants = this.localDb.getDistinctAuditTenants();
+      for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
+        const servers = this.localDb.getDistinctServersForTenant(tenantId);
+        for (const serverName of servers) {
+          const scan = await this.localDb.getLatestSecurityScan(serverName, tenantId);
+          if (!scan) continue;
 
-        const s = scan as any;
-        const client = await this.pgPool.connect();
-        try {
-          await client.query(
-            `INSERT INTO unified_security_scans
-             (instance_id, server_name, score, cve_count, details)
-             VALUES ($1, $2, $3, $4, $5)
+          const s = scan as any;
+          const client = await this.pgPool.connect();
+          try {
+            await client.query(
+              `INSERT INTO unified_security_scans
+             (instance_id, server_name, score, cve_count, details, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (id) DO NOTHING`,
-            [
-              this.config.instanceId,
-              serverName,
-              s.score || 0,
-              s.cve_count || 0,
-              JSON.stringify(s.details || {}),
-            ]
-          );
-        } finally {
-          client.release();
+              [
+                this.config.instanceId,
+                serverName,
+                s.score || 0,
+                s.cve_count ?? s.cves_found ?? 0,
+                JSON.stringify(s.details || {}),
+                tenantId,
+              ],
+            );
+          } finally {
+            client.release();
+          }
         }
       }
     } catch (err: any) {
@@ -187,37 +195,38 @@ export class AuditTrailSync {
   /** Sync cost records to unified_cost_records */
   private async syncCostRecords(): Promise<void> {
     try {
-      // Cost records are stored in the cost_records table via addCostRecord
-      // The HistoryDatabase doesn't expose a direct query for cost records,
-      // so we track them through the unified audit trail which captures token usage
-      const servers = await this.localDb.getDistinctScannedServers();
-      for (const serverName of servers) {
-        const records = await this.localDb.getCallRecordsForServer(serverName);
-        if (records.length === 0) continue;
+      const tenants = this.localDb.getDistinctAuditTenants();
+      for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
+        const servers = this.localDb.getDistinctServersForTenant(tenantId);
+        for (const serverName of servers) {
+          const records = await this.localDb.getCallRecordsForServer(serverName, this.config.batchSize, tenantId);
+          if (records.length === 0) continue;
 
-        // Aggregate cost data per server from call records
-        const totalTokens = records.reduce((s, r) => s + r.totalTokens, 0);
-        const inputTokens = records.reduce((s, r) => s + r.requestTokens, 0);
-        const outputTokens = records.reduce((s, r) => s + r.responseTokens, 0);
+          // Aggregate cost data per server from call records
+          const totalTokens = records.reduce((s, r) => s + r.totalTokens, 0);
+          const inputTokens = records.reduce((s, r) => s + r.requestTokens, 0);
+          const outputTokens = records.reduce((s, r) => s + r.responseTokens, 0);
 
-        const client = await this.pgPool.connect();
-        try {
-          await client.query(
-            `INSERT INTO unified_cost_records
-             (instance_id, server_name, tokens_used, input_tokens, output_tokens, cost_usd)
-             VALUES ($1, $2, $3, $4, $5, $6)
+          const client = await this.pgPool.connect();
+          try {
+            await client.query(
+              `INSERT INTO unified_cost_records
+             (instance_id, server_name, tokens_used, input_tokens, output_tokens, cost_usd, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (id) DO NOTHING`,
-            [
-              this.config.instanceId,
-              serverName,
-              totalTokens,
-              inputTokens,
-              outputTokens,
-              0, // Cost computed by central cost auditor via PricingClient
-            ]
-          );
-        } finally {
-          client.release();
+              [
+                this.config.instanceId,
+                serverName,
+                totalTokens,
+                inputTokens,
+                outputTokens,
+                0, // Cost computed by central cost auditor via PricingClient
+                tenantId,
+              ],
+            );
+          } finally {
+            client.release();
+          }
         }
       }
     } catch (err: any) {
@@ -228,32 +237,36 @@ export class AuditTrailSync {
   /** Sync health checks to unified_health_checks */
   private async syncHealthChecks(): Promise<void> {
     try {
-      const servers = await this.localDb.getDistinctScannedServers();
-      for (const serverName of servers) {
-        const successRate = await this.localDb.getRecentSuccessRate(serverName);
-        if (successRate === null) continue;
+      const tenants = this.localDb.getDistinctAuditTenants();
+      for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
+        const servers = this.localDb.getDistinctServersForTenant(tenantId);
+        for (const serverName of servers) {
+          const successRate = await this.localDb.getRecentSuccessRate(serverName, tenantId);
+          if (successRate === null) continue;
 
-        const client = await this.pgPool.connect();
-        try {
-          // latency_ms and tool_count are placeholders (0) — HistoryDatabase
-          // doesn't currently persist latency/tool-count per server; these
-          // fields are populated when real metrics become available.
-          await client.query(
-            `INSERT INTO unified_health_checks
-             (instance_id, server_name, latency_ms, success, success_rate, tool_count)
-             VALUES ($1, $2, $3, $4, $5, $6)
+          const client = await this.pgPool.connect();
+          try {
+            // latency_ms and tool_count are placeholders (0) — HistoryDatabase
+            // doesn't currently persist latency/tool-count per server; these
+            // fields are populated when real metrics become available.
+            await client.query(
+              `INSERT INTO unified_health_checks
+             (instance_id, server_name, latency_ms, success, success_rate, tool_count, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
              ON CONFLICT (id) DO NOTHING`,
-            [
-              this.config.instanceId,
-              serverName,
-              0, // latency_ms: placeholder (no per-server latency data available)
-              successRate > 0.5,
-              successRate,
-              0, // tool_count: placeholder (no per-server tool count available)
-            ]
-          );
-        } finally {
-          client.release();
+              [
+                this.config.instanceId,
+                serverName,
+                0, // latency_ms: placeholder (no per-server latency data available)
+                successRate > 0.5,
+                successRate,
+                0, // tool_count: placeholder (no per-server tool count available)
+                tenantId,
+              ],
+            );
+          } finally {
+            client.release();
+          }
         }
       }
     } catch (err: any) {
@@ -295,6 +308,7 @@ export class AuditTrailSync {
     authSuccess?: boolean;
     severity?: 'info' | 'warn' | 'critical' | 'emergency';
     metadata?: Record<string, unknown>;
+    tenantId?: string;
   }): Promise<void> {
     try {
       const client = await this.pgPool.connect();
@@ -303,8 +317,8 @@ export class AuditTrailSync {
           `INSERT INTO unified_audit_trail
            (instance_id, server_name, tool_name, action, rule_name, reason,
             request_tokens, response_tokens, total_tokens, duration_ms,
-            estimated_cost_usd, model, client_ip, auth_success, severity, metadata)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+            estimated_cost_usd, model, client_ip, auth_success, severity, metadata, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
           [
             this.config.instanceId,
             decision.serverName,
@@ -322,6 +336,7 @@ export class AuditTrailSync {
             decision.authSuccess ?? null,
             decision.severity || 'info',
             JSON.stringify(decision.metadata || {}),
+            decision.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default',
           ]
         );
       } finally {
@@ -439,8 +454,8 @@ export class AuditTrailSync {
     }
   }
 
-  /** Get aggregated metrics across all instances */
-  async getAggregatedMetrics(): Promise<{
+  /** Get aggregated metrics across all instances (optional tenant filter via unified tables). */
+  async getAggregatedMetrics(tenantId?: string): Promise<{
     totalInstances: number;
     activeInstances: number;
     totalRequests: number;
@@ -451,18 +466,47 @@ export class AuditTrailSync {
     try {
       const client = await this.pgPool.connect();
       try {
-        const [instances, metrics] = await Promise.all([
-          client.query('SELECT * FROM guardian_instances WHERE last_heartbeat > NOW() - INTERVAL \'5 minutes\''),
-          client.query(
-            `SELECT
-              COUNT(DISTINCT instance_id) as total_instances,
-              SUM(total_requests) as total_requests,
-              SUM(blocked_requests) as total_blocked,
-              SUM(total_cost_usd) as total_cost
-             FROM aggregated_metrics
-             WHERE timestamp > NOW() - INTERVAL '1 hour'`
-          ),
-        ]);
+        const instances = await client.query(
+          'SELECT * FROM guardian_instances WHERE last_heartbeat > NOW() - INTERVAL \'5 minutes\'',
+        );
+
+        if (tenantId) {
+          const [audit, cost] = await Promise.all([
+            client.query(
+              `SELECT
+                COUNT(DISTINCT instance_id) as total_instances,
+                COUNT(*) as total_requests,
+                COUNT(*) FILTER (WHERE action = 'block') as total_blocked
+               FROM unified_audit_trail
+               WHERE timestamp > NOW() - INTERVAL '1 hour' AND tenant_id = $1`,
+              [tenantId],
+            ),
+            client.query(
+              `SELECT COALESCE(SUM(cost_usd), 0) as total_cost
+               FROM unified_cost_records
+               WHERE timestamp > NOW() - INTERVAL '1 hour' AND tenant_id = $1`,
+              [tenantId],
+            ),
+          ]);
+          return {
+            totalInstances: audit.rows[0]?.total_instances || 0,
+            activeInstances: instances.rows.length,
+            totalRequests: Number(audit.rows[0]?.total_requests) || 0,
+            totalBlocked: Number(audit.rows[0]?.total_blocked) || 0,
+            totalCost: Number(cost.rows[0]?.total_cost) || 0,
+            instances: instances.rows,
+          };
+        }
+
+        const metrics = await client.query(
+          `SELECT
+            COUNT(DISTINCT instance_id) as total_instances,
+            SUM(total_requests) as total_requests,
+            SUM(blocked_requests) as total_blocked,
+            SUM(total_cost_usd) as total_cost
+           FROM aggregated_metrics
+           WHERE timestamp > NOW() - INTERVAL '1 hour'`,
+        );
         return {
           totalInstances: metrics.rows[0]?.total_instances || 0,
           activeInstances: instances.rows.length,
@@ -477,6 +521,59 @@ export class AuditTrailSync {
     } catch (err: any) {
       Logger.warn(`[AuditTrailSync] Get metrics failed: ${err?.message}`);
       return { totalInstances: 0, activeInstances: 0, totalRequests: 0, totalBlocked: 0, totalCost: 0, instances: [] };
+    }
+  }
+
+  /** Paginated unified cost records for a tenant. */
+  async getUnifiedCostRecords(
+    tenantId: string,
+    opts: { serverName?: string; limit?: number; offset?: number } = {},
+  ): Promise<any[]> {
+    return this.queryUnifiedTable('unified_cost_records', tenantId, opts);
+  }
+
+  /** Paginated unified security scans for a tenant. */
+  async getUnifiedSecurityScans(
+    tenantId: string,
+    opts: { serverName?: string; limit?: number; offset?: number } = {},
+  ): Promise<any[]> {
+    return this.queryUnifiedTable('unified_security_scans', tenantId, opts);
+  }
+
+  /** Paginated unified health checks for a tenant. */
+  async getUnifiedHealthChecks(
+    tenantId: string,
+    opts: { serverName?: string; limit?: number; offset?: number } = {},
+  ): Promise<any[]> {
+    return this.queryUnifiedTable('unified_health_checks', tenantId, opts);
+  }
+
+  private async queryUnifiedTable(
+    table: 'unified_cost_records' | 'unified_security_scans' | 'unified_health_checks',
+    tenantId: string,
+    opts: { serverName?: string; limit?: number; offset?: number },
+  ): Promise<any[]> {
+    try {
+      const { serverName, limit = 50, offset = 0 } = opts;
+      const client = await this.pgPool.connect();
+      try {
+        let query = `SELECT * FROM ${table} WHERE tenant_id = $1`;
+        const params: unknown[] = [tenantId];
+        let paramIdx = 2;
+        if (serverName) {
+          query += ` AND server_name = $${paramIdx++}`;
+          params.push(serverName);
+        }
+        query += ` ORDER BY timestamp DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+        params.push(limit, offset);
+        const result = await client.query(query, params);
+        return result.rows;
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      Logger.warn(`[AuditTrailSync] Query ${table} failed: ${err?.message}`);
+      return [];
     }
   }
 
@@ -528,17 +625,22 @@ export class AuditTrailSync {
     serverName?: string;
     action?: string;
     severity?: string;
+    tenantId?: string;
     limit?: number;
     offset?: number;
   } = {}): Promise<any[]> {
     try {
-      const { serverName, action, severity, limit = 50, offset = 0 } = options;
+      const { serverName, action, severity, tenantId, limit = 50, offset = 0 } = options;
       const client = await this.pgPool.connect();
       try {
         let query = 'SELECT * FROM unified_audit_trail WHERE 1=1';
         const params: any[] = [];
         let paramIdx = 1;
 
+        if (tenantId) {
+          query += ` AND tenant_id = $${paramIdx++}`;
+          params.push(tenantId);
+        }
         if (serverName) {
           query += ` AND server_name = $${paramIdx++}`;
           params.push(serverName);

@@ -4,6 +4,70 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Stdio stdin serial queue** — CLI and `McpProxyServer` serialize `handleClientInput` via `AsyncSerialQueue` (no `currentRequestId` races on rapid lines).
+- **Circuit breaker HALF_OPEN** — single in-flight probe (`probing` flag); concurrent callers rejected until probe completes.
+- **OPA LRU cache** — `(tenantId, serverName, toolName, argsHash)` with `GUARDIAN_OPA_CACHE_TTL_MS` (default 5000 ms, max 1000 entries); only block decisions cached.
+- **Policy shadow / dry-run** — `GUARDIAN_POLICY_SHADOW_PATH` evaluates shadow YAML in parallel; logs `shadow_would_block` without enforcing.
+- **tools/call idempotency** — `params._meta.idempotencyKey` or header; Redis/memory dedupe in block mode (`GUARDIAN_IDEMPOTENCY_TTL_MS`).
+- **Upstream cert pinning** — `GUARDIAN_UPSTREAM_CERT_PIN_SHA256` SPKI SHA-256 pins on HTTPS agents (`src/utils/upstream-cert-pin.ts`).
+- **WebSocket proxy parity** — OAuth/DPoP, circuit breaker, secret scan, rug-pull fingerprint, response PI block, `persistCallRecord`, structured logs.
+- **Streamable HTTP proxy (MVP)** — `StreamableHttpProxyServer` `POST /mcp` batch handler (`src/proxy/streamable-http-proxy-server.ts`).
+- **Stdio connection pool** — `GUARDIAN_STDIO_POOL_SIZE` (2–4) round-robin workers via `StdioConnectionPool`.
+- **Redis block-learning lock** — `SET NX` per tenant when `REDIS_URL` set; prevents duplicate learning cycles across pods.
+- **SPIFFE workload API** — `GUARDIAN_SPIFFE_SOCKET_PATH` fetches SVID into mTLS env; [docs/SPIFFE.md](docs/SPIFFE.md).
+- **JWT-authoritative tenant** — when `GUARDIAN_MULTI_TENANT_ENABLED=true` and authenticated, tenant must come from `GUARDIAN_JWT_TENANT_CLAIM`; header/meta mismatch rejected.
+- **DPoP in block mode** — required when policy `mode: block`, `GUARDIAN_BLOCKING_MODE=true`, or `GUARDIAN_REQUIRE_DPOP=true`; legacy bypass `GUARDIAN_LEGACY_NO_DPOP`.
+- **Request-path prompt injection** — `scanToolCallArguments()` walks all argument string leaves with full critical/high/medium regex set; wired in `PolicyEngine.evaluate` before YAML rules (`request-prompt-injection`).
+- **Shared arg leaf walker** — `src/policy/arg-leaf-walker.ts` used by PI, SQL/SSRF, path, and base64 guards (no duplicate recursion).
+- **Async audit write queue** — `src/database/audit-write-queue.ts`; `persistCallRecord` enqueues only (`GUARDIAN_AUDIT_QUEUE_MAX`, `GUARDIAN_AUDIT_QUEUE_BATCH`); SIGTERM flush via shutdown hooks.
+- **Enterprise multi-tenancy (full)** — JWT tenant claim binding (`GUARDIAN_JWT_TENANT_CLAIM`), `TenantPolicyRegistry` + `policy-templates/tenants/{id}/policy.yaml`, RBAC `tenants: [...]` in policy rules.
+- **SCA synthetic labeling** — banners on executive/live simulation docs under `sca/`.
+- **SSE proxy HTTP+SSE lifecycle** — `SseProxyServer.start()` serves `GET /sse` + `POST /message?sessionId=` with upstream session bridging; `ProxyManager` logs local listen URL.
+- **CVE API disk cache** — OSV/NVD responses cached under `~/.mcp-guardian/cve-cache` (`GUARDIAN_CVE_CACHE_DIR`, `GUARDIAN_CVE_CACHE_TTL_MS`); stale cache on failure + structured `cve_lookup_degraded` log.
+- **Proxy concurrency cap** — `GUARDIAN_PROXY_MAX_INFLIGHT` (default 50) fail-fast on stdio proxy when too many pending `tools/call`.
+- **`pnpm version:check`** — `scripts/verify-version-alignment.ts` fails CI if root vs `packages/{core,server,cli}` drift.
+- **Transport docs** — [docs/TRANSPORT.md](docs/TRANSPORT.md) (stdio, SSE, HTTP, WebSocket MVP limits).
+- **Real-life scenario README** — [scenarios/real-life/README.md](scenarios/real-life/README.md) env + `GUARDIAN_SCAN_STRICT` CI mode.
+- **Multi-tenancy (substantial)** — validated tenant resolution (`X-Guardian-Tenant`, `X-Tenant-Id`, `GUARDIAN_TENANT_ID`, `_meta.tenantId`); per-tenant circuit breakers, Redis rate-limit keys (`tenant:{id}:...`), session/DPoP namespacing, attack-learning state paths (`~/.mcp-guardian/tenants/{id}/`), SQLite `call_records.tenant_id`, PG migration `004-tenant-scoping.sql`, tenant-scoped GDPR erase, Helm `multiTenant.enabled`, [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
+- **Multi-tenancy audit tables** — `tenant_id` on SQLite and PostgreSQL `cost_records`, `security_scans`, `health_checks` (migration `005-tenant-cost-security-health.sql`); tenant-scoped reads/writes, GDPR erase, and `AuditTrailSync` aggregation.
+- **Multi-tenancy batch & dashboard scoping** — CLI `--tenant` on `scan`/`audit`/`health`/`report`; tenant-scoped `getDistinctScannedServers` / `getDistinctActiveServers`; dashboard/TUI list APIs filter by resolved tenant; `AuditTrailSync.getUnified*Records(tenantId)` and tenant-aware `getAggregatedMetrics(tenantId)`.
+
+### Fixed
+- **Per-client rate limit dead path** — removed broken `checkPerClientRateLimit` from stdio proxy; rate limits use `PolicyEngine.evaluateAsync` / Redis only.
+- **Policy hot path** — static imports for OPA and Redis rate limiter in `evaluateAsync` (removed per-call dynamic `import()`).
+- **Security detection recall** — SQL/NoSQL/LDAP patterns (`DELETE FROM`, `SELECT *` on sensitive tables, `$ne`/`$regex`, LDAP `admin)(&`); SSRF scans freetext `message`/`body`/`link` keys; base64-decode-to-shell chains; k8s `.kube/config` paths; prompt-injection heuristics for “turn off safety filters” / inverse-instructions phrasing.
+- **HTTP proxy method forwarding** — `packages/server/src/http-proxy.ts` preserves client HTTP method for non-JSON and non-`tools/call` bodies (GET/stream regression).
+- **Cost auditor empty DB** — distinguishes no `call_records` for server vs empty database; points to `run-live-proxy-test.mjs`.
+- **Health probes** — `GUARDIAN_HEALTH_PROBE_RETRIES` (default 2 retries) + `GUARDIAN_HEALTH_PROBE_TIMEOUT_MS` for `McpClient.probe`.
+
+### Changed
+- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.8.4** with root; `@mcp-guardian/plugin-sdk` remains **3.0.0** (independent semver).
+
+### Environment
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GUARDIAN_PROXY_MAX_INFLIGHT` | `50` | Max concurrent pending `tools/call` per stdio proxy |
+| `GUARDIAN_SSE_PROXY_PORT` | `0` | Fixed local port for SSE proxy (or per-server `env`) |
+| `GUARDIAN_CVE_CACHE_DIR` | `~/.mcp-guardian/cve-cache` | Disk cache for OSV/NVD |
+| `GUARDIAN_CVE_CACHE_TTL_MS` | `900000` | Fresh TTL for CVE cache entries |
+| `GUARDIAN_SCAN_STRICT` | `false` | CI: fail on degraded CVE lookup, missing auth, typo-squat |
+| `GUARDIAN_HEALTH_PROBE_RETRIES` | `2` | Extra health probe attempts after first failure |
+| `GUARDIAN_HEALTH_PROBE_TIMEOUT_MS` | `15000` | Per-probe timeout for stdio/SSE handshake |
+| `GUARDIAN_MULTI_TENANT_ENABLED` | `false` | Shared gateway — clients send tenant headers |
+| `X-Guardian-Tenant` / `X-Tenant-Id` | — | Request-scoped tenant (HTTP/SSE/dashboard) |
+| `GUARDIAN_JWT_TENANT_CLAIM` | `tenant_id` | JWT claim matched to request tenant |
+| `GUARDIAN_AUDIT_QUEUE_MAX` | `5000` | Max in-memory audit write queue depth |
+| `GUARDIAN_AUDIT_QUEUE_BATCH` | `32` | Audit queue drain batch size |
+| `GUARDIAN_OPA_CACHE_TTL_MS` | `5000` | OPA block-decision cache TTL (0 disables) |
+| `GUARDIAN_POLICY_SHADOW_PATH` | — | Shadow policy YAML for dry-run logging |
+| `GUARDIAN_IDEMPOTENCY_TTL_MS` | `300000` | Idempotency key dedupe window |
+| `GUARDIAN_UPSTREAM_CERT_PIN_SHA256` | — | Comma-separated upstream SPKI SHA-256 pins |
+| `GUARDIAN_STDIO_POOL_SIZE` | `1` | Stdio worker pool size (max 4) |
+| `GUARDIAN_BLOCKING_MODE` | `false` | Require DPoP on authenticated HTTP/SSE/WS |
+| `GUARDIAN_LEGACY_NO_DPOP` | `false` | Disable DPoP requirement for legacy clients |
+| `GUARDIAN_SPIFFE_SOCKET_PATH` | — | SPIFFE Workload API Unix socket |
+
 ## [2.8.4] - 2026-05-19
 
 Enterprise hardening, tiered concurrent benchmarks, and proxy/SSE/WebSocket improvements (see `172abcd`).

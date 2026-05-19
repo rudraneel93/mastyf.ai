@@ -36,6 +36,8 @@
 
 **Wall clock:** 101 ms total (~9,901 eval/s for the burst).
 
+**Note:** In-process policy-only benchmark — not end-to-end proxy latency. Stdio proxy uses `GUARDIAN_PROXY_MAX_INFLIGHT` (default 50) to fail fast under overload; do not extrapolate sub-150 ms at 1k concurrent real MCP tool calls.
+
 ## SLO pass/fail
 
 | SLO | Target | Measured | Status |
@@ -87,7 +89,7 @@ Run `pnpm benchmark:multi-proxy` (default K=10, 1000 total calls) after `pnpm be
 | Benchmark | Command | Concurrency | Correctness | p50 | p95 | p99 | Wall | SLO gate | SLO |
 |-----------|---------|-------------|-------------|-----|-----|-----|------|----------|-----|
 | Policy-only | `benchmark:concurrent` | 1000 parallel `evaluateAsync` | 100% | 96 ms | 100 ms | 101 ms | 101 ms | p95 &lt; 500 ms | **PASS** |
-| Proxy tiers | `benchmark:proxy-tiers` | 1 / 10 / 25 / 50 in-flight | 100% each | 155 / 368 / 1418 / 2336 ms | 155 / 420 / 1953 / 2906 ms | — | — | tiered p95 gates | **1,25 FAIL; 10,50 PASS** |
+| Proxy tiers | `benchmark:proxy-tiers` | 1 / 10 / 25 / 50 in-flight | 100% each | 138 / 407 / 1340 / 2611 ms | 138 / 477 / 1689 / 3249 ms | — | — | tiered p95 gates | **1,10 PASS; 25,50 FAIL** (2026-05-19, async audit queue) |
 | Multi-proxy | `benchmark:multi-proxy` | 10×100 (1000 total) | 100% | 10.0 s | 11.7 s | 13.8 s | 16.9 s | (vs 1k burst) | **~3× lower p95 than single** |
 | Proxy 1k burst | `benchmark:concurrent-proxy` | 1000 parallel `tools/call` | 100% | 27.0 s | 37.0 s | 38.1 s | 54.0 s | p95 &lt; 5000 ms | **FAIL** (latency) |
 | Proxy pipelined | `benchmark:proxy-slo` | 100 pipelined RTT (blocking policy) | — | 2.4 s | 3.6 s | 4.3 s | ~14 s | p95 &lt; 150 ms | **FAIL** |

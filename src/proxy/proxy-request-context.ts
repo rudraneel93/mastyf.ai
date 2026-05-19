@@ -8,6 +8,8 @@ export interface ProxyRequestContext {
   requestRaw: string;
   requestModel?: string;
   requestArguments?: Record<string, unknown>;
+  /** Resolved tenant for per-tenant circuit breaker / audit isolation */
+  tenantId?: string;
 }
 
 export class ProxyRequestContextStore {

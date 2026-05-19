@@ -4,17 +4,33 @@ import { McpClient, McpProbeResult } from '../utils/mcp-client.js';
 
 export class HealthMonitor {
   private db: IDatabase;
+  private tenantId?: string;
 
-  constructor(db: IDatabase) {
+  constructor(db: IDatabase, tenantId?: string) {
     this.db = db;
+    this.tenantId = tenantId;
   }
 
-  async checkServer(server: McpServerConfig): Promise<HealthReport> {
+  async checkServer(server: McpServerConfig, tenantId?: string): Promise<HealthReport> {
+    const tid = tenantId ?? this.tenantId;
     const start = Date.now();
-    const probe: McpProbeResult = await McpClient.probe(server);
+    const maxAttempts = Math.max(
+      1,
+      parseInt(process.env['GUARDIAN_HEALTH_PROBE_RETRIES'] || '2', 10) + 1,
+    );
+
+    let probe: McpProbeResult = { success: false, authRequired: false, latencyMs: 0, error: 'No attempts' };
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      probe = await McpClient.probe(server);
+      if (probe.success) break;
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 250 * attempt));
+      }
+    }
+
     const latency = probe.latencyMs ?? (Date.now() - start);
 
-    const historicalRate = await this.db.getRecentSuccessRate(server.name);
+    const historicalRate = await this.db.getRecentSuccessRate(server.name, tid);
     const successRate = probe.success
       ? (historicalRate !== null ? Math.max(historicalRate, 0.5) : 1.0)
       : (historicalRate !== null ? Math.min(historicalRate, 0.3) : 0.0);

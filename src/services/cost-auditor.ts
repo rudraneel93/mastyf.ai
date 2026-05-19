@@ -22,23 +22,26 @@ export function getDailyBudgetCapUsd(): number {
 export class CostAuditor {
   private tokenCounter: TokenCounter;
   private db: IDatabase | undefined;
+  private tenantId?: string;
 
-  constructor(_pricingClient?: unknown, db?: IDatabase, _pricingModel?: string) {
+  constructor(_pricingClient?: unknown, db?: IDatabase, _pricingModel?: string, tenantId?: string) {
     this.tokenCounter = new TokenCounter();
     this.db = db;
+    this.tenantId = tenantId;
   }
 
   /** Sum costUsd for all servers since UTC midnight. */
-  async getDailySpendUsd(): Promise<number> {
+  async getDailySpendUsd(tenantId?: string): Promise<number> {
     if (!this.db) return 0;
+    const tid = tenantId ?? this.tenantId;
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
     const cutoff = startOfDay.getTime();
     let total = 0;
     try {
-      const names = await this.db.getDistinctActiveServers();
+      const names = await this.db.getDistinctActiveServers(tid);
       for (const name of names) {
-        const records = await this.db.getCallRecordsForServer(name);
+        const records = await this.db.getCallRecordsForServer(name, 5000, tid);
         for (const r of records) {
           const ts = Date.parse(r.timestamp);
           if (!Number.isNaN(ts) && ts >= cutoff) {
@@ -73,10 +76,11 @@ export class CostAuditor {
     return resolveModelId() || 'no model detected';
   }
 
-  async auditServer(server: McpServerConfig): Promise<CostReport> {
+  async auditServer(server: McpServerConfig, tenantId?: string): Promise<CostReport> {
+    const tid = tenantId ?? this.tenantId;
     if (this.db) {
       try {
-        const records = await this.db.getCallRecordsForServer(server.name);
+        const records = await this.db.getCallRecordsForServer(server.name, 5000, tid);
         if (records.length > 0) {
           const report = await this.buildReportFromRecords(server.name, records, server);
           return {
@@ -98,10 +102,26 @@ export class CostAuditor {
    * report list rates only (zero measured cost) unless GUARDIAN_COST_ALLOW_ESTIMATES=true.
    */
   private async auditWithoutProxyRecords(server: McpServerConfig): Promise<CostReport> {
+    const tid = this.tenantId;
     const modelId = resolveModelIdForServer(server.name, server.env, server.args);
     const provider = detectProvider(modelId);
     const rates = await resolveModelListRates(modelId);
     const untrackedSse = server.transport === 'sse' || (!!server.url && !server.command);
+
+    let proxyDataHint: string | null = null;
+    if (this.db) {
+      try {
+        const activeNames = await this.db.getDistinctActiveServers(tid);
+        if (activeNames.length === 0) {
+          proxyDataHint =
+            'No call_records in database — run `mcp-guardian proxy` and send tools/call (see scenarios/real-life/run-live-proxy-test.mjs)';
+        } else if (!activeNames.includes(server.name)) {
+          proxyDataHint = `No call_records for "${server.name}" — proxy traffic exists for: ${activeNames.join(', ')}`;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
 
     if (!server.command && !server.url) {
       return this.emptyReport(server.name, 'No command or URL configured — cannot probe server.', {
@@ -140,6 +160,7 @@ export class CostAuditor {
       toolCount > 0
         ? `${toolCount} tool(s) reachable via tools/list — $0 measured (no proxy traffic)`
         : 'Server reachable — no tools listed',
+      proxyDataHint,
       'Run \`mcp-guardian proxy\` for measured token and USD costs from real tools/call traffic',
       untrackedSse ? 'SSE IDE traffic is untracked unless clients use Guardian proxy/wrap' : null,
       allowsCostEstimates()

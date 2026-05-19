@@ -2,13 +2,23 @@ import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
+import {
+  readCveDiskCache,
+  writeCveDiskCache,
+  isCveCacheFresh,
+  getCveCacheTtlMs,
+} from '../utils/cve-api-disk-cache.js';
+
 const osvLimiter = new RateLimiter({ tokensPerInterval: 10, interval: 60_000 });
+const CACHE_PREFIX = 'osv:';
 
 export type CveLookupStatus = 'ok' | 'degraded' | 'unavailable';
 
 export interface OsvCheckResult {
   findings: CveFinding[];
   status: CveLookupStatus;
+  /** True when served from disk cache after live API failure */
+  stale?: boolean;
 }
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
@@ -44,6 +54,12 @@ export class OsvClient {
    * @returns Array of CVE findings
    */
   async check(packageName: string, version?: string): Promise<OsvCheckResult> {
+    const cacheKey = `${CACHE_PREFIX}${packageName}@${version ?? 'latest'}`;
+    const disk = readCveDiskCache<OsvCheckResult>(cacheKey);
+    if (disk && isCveCacheFresh(disk)) {
+      return disk.data;
+    }
+
     try {
       const response = await withRetry(async () => {
         await osvLimiter.acquire();
@@ -51,7 +67,7 @@ export class OsvClient {
         return axios.post(`${this.baseUrl}/query`, { package: { purl } }, { timeout: 10000 });
       });
       const vulns = (response.data?.vulns ?? []) as Array<Record<string, unknown>>;
-      return {
+      const result: OsvCheckResult = {
         status: 'ok',
         findings: vulns.map((v) => ({
           id: String(v.id ?? 'unknown'),
@@ -61,14 +77,18 @@ export class OsvClient {
             ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
         })),
       };
+      writeCveDiskCache(cacheKey, result);
+      return result;
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;
       const msg = error instanceof Error ? error.message : String(error);
       Logger.warn(`OSV lookup failed for ${packageName}: ${msg}`);
-      return {
-        findings: [],
-        status: status === 403 || status === 429 ? 'unavailable' : 'degraded',
-      };
+      const failStatus: CveLookupStatus =
+        status === 403 || status === 429 ? 'unavailable' : 'degraded';
+      if (disk) {
+        return { ...disk.data, status: failStatus === 'unavailable' ? 'unavailable' : 'degraded', stale: true };
+      }
+      return { findings: [], status: failStatus };
     }
   }
 
@@ -100,6 +120,12 @@ export class OsvClient {
 
   /** Check with explicit ecosystem (for Python/uvx MCP servers). */
   async checkEcosystem(packageName: string, ecosystem: 'npm' | 'pypi', version?: string): Promise<OsvCheckResult> {
+    const cacheKey = `${CACHE_PREFIX}${ecosystem}:${packageName}@${version ?? 'latest'}`;
+    const disk = readCveDiskCache<OsvCheckResult>(cacheKey);
+    if (disk && isCveCacheFresh(disk, getCveCacheTtlMs())) {
+      return disk.data;
+    }
+
     try {
       const response = await withRetry(async () => {
         await osvLimiter.acquire();
@@ -107,7 +133,7 @@ export class OsvClient {
         return axios.post(`${this.baseUrl}/query`, { package: { purl } }, { timeout: 10000 });
       });
       const vulns = (response.data?.vulns ?? []) as Array<Record<string, unknown>>;
-      return {
+      const result: OsvCheckResult = {
         status: 'ok',
         findings: vulns.map((v) => ({
           id: String(v.id ?? 'unknown'),
@@ -117,14 +143,18 @@ export class OsvClient {
             ?.ranges?.[0]?.events?.find((e) => e.fixed)?.fixed,
         })),
       };
+      writeCveDiskCache(cacheKey, result);
+      return result;
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;
       const msg = error instanceof Error ? error.message : String(error);
       Logger.warn(`OSV lookup failed for ${packageName} (${ecosystem}): ${msg}`);
-      return {
-        findings: [],
-        status: status === 403 || status === 429 ? 'unavailable' : 'degraded',
-      };
+      const failStatus: CveLookupStatus =
+        status === 403 || status === 429 ? 'unavailable' : 'degraded';
+      if (disk) {
+        return { ...disk.data, status: failStatus, stale: true };
+      }
+      return { findings: [], status: failStatus };
     }
   }
 

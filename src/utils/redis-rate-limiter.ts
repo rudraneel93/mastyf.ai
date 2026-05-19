@@ -2,6 +2,9 @@ import type { Redis, Cluster } from 'ioredis';
 import { Logger } from './logger.js';
 import { getGuardianRegion } from './region.js';
 import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from './redis-client.js';
+import { DEFAULT_TENANT_ID, tenantRateLimitKey } from '../tenant/resolve-tenant.js';
+
+export { tenantRateLimitKey };
 
 /**
  * Redis-backed rate limit counters for multi-replica HA.
@@ -65,16 +68,19 @@ export class RedisRateLimiter {
 
   /**
    * Check and increment a rate limit counter (atomic INCR across replicas).
+   * Pass tenantId to namespace keys as tenant:{tenantId}:...
    */
   async checkAndIncrement(
     key: string,
     maxRequests: number,
     windowMs: number = 60000,
+    tenantId: string = DEFAULT_TENANT_ID,
   ): Promise<{ allowed: boolean; count: number }> {
-    const redisKey = `${this.prefix}${key}`;
+    const scopedKey = tenantRateLimitKey(tenantId, key);
+    const redisKey = `${this.prefix}${scopedKey}`;
 
     try {
-      const hasLock = await this.acquireWindowLock(key, windowMs);
+      const hasLock = await this.acquireWindowLock(scopedKey, windowMs);
       if (!hasLock) {
         return { allowed: false, count: maxRequests + 1 };
       }
@@ -85,13 +91,13 @@ export class RedisRateLimiter {
       }
 
       const now = Date.now();
-      let localCounter = this.local.get(key);
+      let localCounter = this.local.get(scopedKey);
       if (!localCounter || now > localCounter.resetAt) {
         localCounter = { count: 1, resetAt: now + windowMs };
       } else {
         localCounter.count++;
       }
-      this.local.set(key, localCounter);
+      this.local.set(scopedKey, localCounter);
 
       return { allowed: count <= maxRequests, count };
     } catch (err: unknown) {
@@ -103,13 +109,13 @@ export class RedisRateLimiter {
       const message = err instanceof Error ? err.message : String(err);
       Logger.debug(`[redis-rate-limiter] Redis error, using local: ${message}`);
       const now = Date.now();
-      let localCounter = this.local.get(key);
+      let localCounter = this.local.get(scopedKey);
       if (!localCounter || now > localCounter.resetAt) {
         localCounter = { count: 1, resetAt: now + windowMs };
       } else {
         localCounter.count++;
       }
-      this.local.set(key, localCounter);
+      this.local.set(scopedKey, localCounter);
       return { allowed: localCounter.count <= maxRequests, count: localCounter.count };
     }
   }

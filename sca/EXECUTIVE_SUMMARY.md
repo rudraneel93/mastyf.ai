@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Aggregate test metrics below are from CI/lab runs, not unaudited production traffic.
+
 # MCP Guardian - Executive Summary & Quick Start Guide
 
 **Analysis Date:** May 18, 2026  

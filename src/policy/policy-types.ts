@@ -39,12 +39,14 @@ export interface PolicyRule {
   maxTokens?: number;
   /** Max calls per minute per server */
   maxCallsPerMinute?: number;
-  /** v0.5.1: RBAC — scope and client_id constraints */
+  /** v0.5.1: RBAC — scope, client_id, and tenant constraints */
   rbac?: {
     /** Required scopes the agent must have */
     scopes?: string[];
     /** Allowed client IDs (regex patterns supported) */
     clientIds?: string[];
+    /** Request must be scoped to one of these tenant ids (multi-tenant gateway) */
+    tenants?: string[];
   };
 }
 
@@ -79,4 +81,6 @@ export interface CallContext {
   tenantId?: string;
   /** v0.5.1: Agent identity from OAuth (for RBAC) */
   agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
+  /** Optional idempotency key from params._meta or HTTP header */
+  idempotencyKey?: string;
 }

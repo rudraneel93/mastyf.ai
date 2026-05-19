@@ -17,6 +17,8 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+import { resolveTenantContext, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+import { validateJwtTenantBinding } from '../tenant/jwt-tenant-binding.js';
 
 export interface AuthResult {
   authenticated: boolean;
@@ -110,6 +112,7 @@ export class DashboardAuth {
     headers?: Record<string, string | string[] | undefined>;
     method?: string;
   }): AuthResult {
+    const requestTenantId = resolveTenantContext({ headers: req.headers }).tenantId;
     if (!this.config.enabled) {
       return { authenticated: true, identity: 'anonymous' };
     }
@@ -157,6 +160,11 @@ export class DashboardAuth {
 
         // Check if it's a valid session token
         if (this.isActiveSession(token)) {
+          const sessionTenant = this.getSessionTenantId(token);
+          const bind = validateJwtTenantBinding(requestTenantId, sessionTenant);
+          if (!bind.ok) {
+            return { authenticated: false, reason: bind.reason };
+          }
           return { authenticated: true, identity: 'session' };
         }
       }
@@ -166,6 +174,11 @@ export class DashboardAuth {
     const cookies = this.parseCookies(headers['cookie']);
     const sessionCookie = cookies[SESSION_COOKIE_NAME];
     if (sessionCookie && this.isActiveSession(sessionCookie)) {
+      const sessionTenant = this.getSessionTenantId(sessionCookie);
+      const bind = validateJwtTenantBinding(requestTenantId, sessionTenant);
+      if (!bind.ok) {
+        return { authenticated: false, reason: bind.reason };
+      }
       return { authenticated: true, identity: 'session' };
     }
 
@@ -198,10 +211,12 @@ export class DashboardAuth {
 
     // ── Rate limit login attempts ──
     const ip = req.ip || 'unknown';
-    if (!this.checkLoginRate(ip)) {
+    const tenantId = resolveTenantContext({ headers: req.headers }).tenantId;
+    if (!this.checkLoginRate(ip, tenantId)) {
       StructuredLogger.info({
         event: 'dashboard_login_rate_limited',
         ip,
+        tenantId,
       });
       return { success: false, error: 'Too many login attempts. Try again later.' };
     }
@@ -215,7 +230,7 @@ export class DashboardAuth {
 
     // Check API key shortcut
     if (body.api_key && this.config.apiKey && this.timingSafeCompare(body.api_key, this.config.apiKey)) {
-      const token = this.createSessionToken();
+      const token = this.createSessionToken(tenantId);
       Logger.info(`[dashboard-auth] Login via API key from ${ip}`);
       return { success: true, token };
     }
@@ -234,11 +249,12 @@ export class DashboardAuth {
       this.timingSafeCompare(body.username, expectedUsername) &&
       this.timingSafeCompare(body.password, expectedPassword)
     ) {
-      const token = this.createSessionToken();
+      const token = this.createSessionToken(tenantId);
       StructuredLogger.info({
         event: 'dashboard_login',
         ip,
         identity: body.username,
+        tenantId,
       });
       return { success: true, token };
     }
@@ -410,10 +426,11 @@ ${csrfField}
   /**
    * Create a signed HMAC session token (fresh jti on every login).
    */
-  private createSessionToken(): string {
+  private createSessionToken(tenantId: string = DEFAULT_TENANT_ID): string {
     const payload = Buffer.from(JSON.stringify({
       iat: Math.floor(Date.now() / 1000),
       jti: randomBytes(16).toString('hex'),
+      tenant_id: tenantId,
     })).toString('base64url');
 
     const signature = createHmac('sha256', this.config.jwtSecret || randomBytes(32).toString('hex'))
@@ -446,6 +463,19 @@ ${csrfField}
 
   private isActiveSession(token: string): boolean {
     return this.activeTokens.has(token);
+  }
+
+  private getSessionTenantId(token: string): string | undefined {
+    try {
+      const [payloadB64] = token.split('.');
+      if (!payloadB64) return undefined;
+      const json = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as {
+        tenant_id?: string;
+      };
+      return json.tenant_id;
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -487,12 +517,17 @@ ${csrfField}
     });
   }
 
-  private checkLoginRate(ip: string): boolean {
+  private loginRateKey(tenantId: string, ip: string): string {
+    return `tenant:${tenantId || DEFAULT_TENANT_ID}:login:${ip}`;
+  }
+
+  private checkLoginRate(ip: string, tenantId: string = DEFAULT_TENANT_ID): boolean {
+    const key = this.loginRateKey(tenantId, ip);
     const now = Date.now();
-    let entry = this.loginRateMap.get(ip);
+    let entry = this.loginRateMap.get(key);
     if (!entry || now > entry.resetAt) {
       entry = { count: 1, resetAt: now + 60000 };
-      this.loginRateMap.set(ip, entry);
+      this.loginRateMap.set(key, entry);
       return true;
     }
     entry.count++;

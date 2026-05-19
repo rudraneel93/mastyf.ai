@@ -11,8 +11,8 @@ export interface IHistoryDb {
   addHealthCheck(serverName: string, latencyMs: number, success: boolean, toolCount: number): Promise<void>;
   getCallRecordsForServer(serverName: string): Promise<Record<string, unknown>[]>;
   getLatestSecurityScan(serverName: string): Promise<Record<string, unknown> | null>;
-  getDistinctScannedServers(): Promise<string[]>;
-  getDistinctActiveServers?(): Promise<string[]>;
+  getDistinctScannedServers(tenantId?: string): Promise<string[]>;
+  getDistinctActiveServers?(tenantId?: string): Promise<string[]>;
   close(): void;
 }
 

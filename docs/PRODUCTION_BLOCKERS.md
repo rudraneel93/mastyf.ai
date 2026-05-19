@@ -2,7 +2,9 @@
 
 Status as of **2.8.0** (production hardening bundle). Each item was verified with automated tests and Helm defaults.
 
-**2.8.4+ enterprise fixes:** SSE `evaluateAsync`, shared attack-learning PG (`GUARDIAN_AUDIT_SYNC_ENABLED` + `DATABASE_URL`), `GUARDIAN_SEMANTIC_STRICT`, migration runner (`schema_migrations`), `GUARDIAN_TENANT_ID` for multi-tenant isolation.
+**2.8.4+ enterprise fixes:** SSE HTTP+SSE lifecycle (`GET /sse`, `POST /message`), `evaluateAsync`, shared attack-learning PG (`GUARDIAN_AUDIT_SYNC_ENABLED` + `DATABASE_URL`), `GUARDIAN_SEMANTIC_STRICT`, migration runner (`schema_migrations`), per-tenant isolation (circuit breakers, rate limits, sessions, attack learning, audit). See [MULTI_TENANCY.md](./MULTI_TENANCY.md).
+
+**Unreleased full-stack review:** stdin serial queue, HALF_OPEN single probe, JWT-authoritative tenant, DPoP in block mode (`GUARDIAN_LEGACY_NO_DPOP` escape hatch), WebSocket parity, OPA cache, policy shadow, idempotency, cert pinning, streamable HTTP MVP, SPIFFE socket — see [TRANSPORT.md](./TRANSPORT.md) and [SPIFFE.md](./SPIFFE.md).
 
 | # | Blocker | Priority | Was | Now | Evidence |
 |---|---------|----------|-----|-----|----------|

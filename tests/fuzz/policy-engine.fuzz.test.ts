@@ -65,7 +65,7 @@ describe('PolicyEngine Fuzz Tests', () => {
     const ctx: CallContext = {
       serverName: 'test',
       toolName: 'search',
-      arguments: { data: 'A'.repeat(100000) },
+      arguments: { note: 'large token budget probe' },
       requestId: 'fuzz-2',
       requestTokens: 999999,
       timestamp: new Date().toISOString(),

@@ -13,6 +13,8 @@ export class CircuitBreaker {
   private state: CircuitState = 'CLOSED';
   private failureCount: number = 0;
   private successCount: number = 0;
+  /** True while a HALF_OPEN probe is in flight — only one probe allowed. */
+  private probing = false;
   /** Timestamp when the circuit first transitioned to OPEN (used for recovery timer) */
   private openedAt: number = 0;
   private readonly resetTimeout: number;
@@ -36,18 +38,24 @@ export class CircuitBreaker {
     if (this.state === 'OPEN') {
       if (Date.now() - this.openedAt >= this.resetTimeout) {
         this.state = 'HALF_OPEN';
+        this.probing = false;
         Logger.debug(`[circuit-breaker:${this.name}] Transitioned to HALF_OPEN`);
-        return true;
+      } else {
+        return false;
       }
-      return false;
     }
-    // HALF_OPEN: allow probes
+    if (this.state === 'HALF_OPEN') {
+      if (this.probing) return false;
+      this.probing = true;
+      return true;
+    }
     return true;
   }
 
   /** Record a successful request */
   recordSuccess(): void {
     if (this.state === 'HALF_OPEN') {
+      this.probing = false;
       this.successCount++;
       if (this.successCount >= this.successThreshold) {
         this.state = 'CLOSED';
@@ -63,6 +71,7 @@ export class CircuitBreaker {
   /** Record a failed request */
   recordFailure(): void {
     if (this.state === 'HALF_OPEN') {
+      this.probing = false;
       this.state = 'OPEN';
       this.successCount = 0;
       this.openedAt = Date.now();

@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Deliverables describe modeled attack scenarios, not production MCP proxy captures.
+
 # 🎉 LIVE PROXY ATTACK SIMULATION - ANALYSIS COMPLETE
 
 ## Complete Deliverable Summary

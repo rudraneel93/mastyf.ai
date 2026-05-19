@@ -50,7 +50,14 @@ export class DPoPValidator {
    * Validate a DPoP proof JWT.
    * Checks: signature (JWK), htm, htu, iat freshness (60s window), ath (if access token provided), nonce replay.
    */
-  async validate(proofToken: string, jwk: jose.JWK, httpMethod: string, httpUri: string, accessToken?: string): Promise<{ valid: boolean; error?: string }> {
+  async validate(
+    proofToken: string,
+    jwk: jose.JWK,
+    httpMethod: string,
+    httpUri: string,
+    accessToken?: string,
+    tenantId?: string,
+  ): Promise<{ valid: boolean; error?: string }> {
     try {
       // Verify the proof JWT is signed by the client's private key matching the JWK
       const alg = this.inferAlgorithm(jwk);
@@ -85,7 +92,7 @@ export class DPoPValidator {
         this.nonceStore.cleanupExpired();
       }
 
-      if (!(await this.nonceStore.claim(proof.jti))) {
+      if (!(await this.nonceStore.claim(proof.jti, tenantId))) {
         Logger.warn(`[dpop] Replay detected: jti ${proof.jti}`);
         return { valid: false, error: 'DPoP: nonce already used (replay detected)' };
       }

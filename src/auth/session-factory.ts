@@ -17,14 +17,15 @@ export function createSessionCache(): GuardianSessionCache {
 export async function validateSessionToken(
   cache: GuardianSessionCache | null,
   token: string,
+  tenantId?: string,
 ): Promise<AgentIdentity | null> {
   if (!cache || !token) return null;
 
-  const local = cache.validateSession(token);
+  const local = cache.validateSession(token, tenantId);
   if (local) return local;
 
   if (cache instanceof RedisSessionCache) {
-    return cache.validateSessionAsync(token);
+    return cache.validateSessionAsync(token, tenantId);
   }
   return null;
 }

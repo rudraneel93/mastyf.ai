@@ -240,6 +240,20 @@ export class HistoryDatabase implements IDatabase {
         ON security_scans(server_name, created_at DESC);
     `);
     this.migrateCallRecordsColumns();
+    this.migrateTenantAuditColumns();
+  }
+
+  private migrateTenantAuditColumns(): void {
+    for (const table of ['cost_records', 'security_scans', 'health_checks'] as const) {
+      const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+      const names = new Set(cols.map((c) => c.name));
+      if (!names.has('tenant_id')) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`);
+        this.db.exec(
+          `CREATE INDEX IF NOT EXISTS idx_${table}_tenant ON ${table}(tenant_id, created_at DESC)`,
+        );
+      }
+    }
   }
 
   private migrateCallRecordsColumns(): void {
@@ -266,11 +280,15 @@ export class HistoryDatabase implements IDatabase {
     if (!names.has('token_source')) {
       this.db.exec('ALTER TABLE call_records ADD COLUMN token_source TEXT');
     }
+    if (!names.has('tenant_id')) {
+      this.db.exec("ALTER TABLE call_records ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'");
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_call_records_tenant ON call_records(tenant_id, created_at DESC)');
+    }
   }
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
     const stmt = this.db.prepare(
-      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source) VALUES (@serverName, @toolName, @requestTokens, @responseTokens, @totalTokens, @durationMs, @blocked, @blockRule, @blockReason, @model, @costUsd, @pricingSource, @tokenSource)'
+      'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id) VALUES (@serverName, @toolName, @requestTokens, @responseTokens, @totalTokens, @durationMs, @blocked, @blockRule, @blockReason, @model, @costUsd, @pricingSource, @tokenSource, @tenantId)'
     );
     stmt.run({
       serverName: record.serverName,
@@ -286,14 +304,23 @@ export class HistoryDatabase implements IDatabase {
       costUsd: record.costUsd ?? null,
       pricingSource: record.pricingSource ?? null,
       tokenSource: record.tokenSource ?? null,
+      tenantId: record.tenantId ?? 'default',
     });
   }
 
-  async getCallRecordsForServer(serverName: string, limit = 5000): Promise<ProxyCallRecord[]> {
-    const rows = this.db
-      .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC LIMIT ?')
-      .all(serverName, limit) as Array<Record<string, unknown>>;
-    return rows.map((row: any) => ({
+  async getCallRecordsForServer(
+    serverName: string,
+    limit = 5000,
+    tenantId?: string,
+  ): Promise<ProxyCallRecord[]> {
+    const rows = tenantId
+      ? this.db
+        .prepare('SELECT * FROM call_records WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT ?')
+        .all(serverName, tenantId, limit)
+      : this.db
+        .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC LIMIT ?')
+        .all(serverName, limit);
+    return (rows as Array<Record<string, unknown>>).map((row: any) => ({
       serverName: row.server_name ?? '',
       toolName: row.tool_name ?? '',
       requestTokens: row.request_tokens ?? 0,
@@ -310,6 +337,7 @@ export class HistoryDatabase implements IDatabase {
       tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
         ? row.token_source
         : undefined,
+      tenantId: row.tenant_id ?? 'default',
     }));
   }
 
@@ -326,34 +354,60 @@ export class HistoryDatabase implements IDatabase {
 
   async flush(): Promise<void> {}
 
-  async addSecurityScan(serverName: string, score: number, cvesFound: number, details: unknown): Promise<void> {
+  async addSecurityScan(
+    serverName: string,
+    score: number,
+    cvesFound: number,
+    details: unknown,
+    tenantId = 'default',
+  ): Promise<void> {
     this.db
-      .prepare('INSERT INTO security_scans (server_name, score, cves_found, details) VALUES (?, ?, ?, ?)')
-      .run(serverName, score, cvesFound, JSON.stringify(details));
+      .prepare(
+        'INSERT INTO security_scans (server_name, score, cves_found, details, tenant_id) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(serverName, score, cvesFound, JSON.stringify(details), tenantId);
   }
 
-  async getLatestSecurityScan(serverName: string): Promise<SecurityRecord | null> {
-    return (
-      (this.db
+  async getLatestSecurityScan(serverName: string, tenantId?: string): Promise<SecurityRecord | null> {
+    const row = (tenantId
+      ? this.db
+        .prepare(
+          'SELECT * FROM security_scans WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT 1',
+        )
+        .get(serverName, tenantId)
+      : this.db
         .prepare('SELECT * FROM security_scans WHERE server_name = ? ORDER BY id DESC LIMIT 1')
-        .get(serverName) as SecurityRecord | undefined) ?? null
-    );
+        .get(serverName)) as SecurityRecord | undefined;
+    return row ?? null;
   }
 
-  async getSecurityScanHistory(serverName: string, limit = 10): Promise<SecurityRecord[]> {
-    return this.db
-      .prepare('SELECT * FROM security_scans WHERE server_name = ? ORDER BY id DESC LIMIT ?')
-      .all(serverName, limit) as SecurityRecord[];
+  async getSecurityScanHistory(serverName: string, limit = 10, tenantId?: string): Promise<SecurityRecord[]> {
+    return (tenantId
+      ? this.db
+        .prepare(
+          'SELECT * FROM security_scans WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT ?',
+        )
+        .all(serverName, tenantId, limit)
+      : this.db
+        .prepare('SELECT * FROM security_scans WHERE server_name = ? ORDER BY id DESC LIMIT ?')
+        .all(serverName, limit)) as SecurityRecord[];
   }
 
-  async getDistinctScannedServers(): Promise<string[]> {
-    const rows = this.db
-      .prepare('SELECT DISTINCT server_name FROM security_scans ORDER BY server_name')
-      .all() as Array<{ server_name: string }>;
+  async getDistinctScannedServers(tenantId?: string): Promise<string[]> {
+    const rows = (tenantId
+      ? this.db.prepare(
+        'SELECT DISTINCT server_name FROM security_scans WHERE tenant_id = ? ORDER BY server_name',
+      ).all(tenantId)
+      : this.db.prepare(
+        'SELECT DISTINCT server_name FROM security_scans ORDER BY server_name',
+      ).all()) as Array<{ server_name: string }>;
     return rows.map((r) => r.server_name);
   }
 
-  async getDistinctActiveServers(): Promise<string[]> {
+  async getDistinctActiveServers(tenantId?: string): Promise<string[]> {
+    if (tenantId) {
+      return this.getDistinctServersForTenant(tenantId);
+    }
     const rows = this.db
       .prepare(
         `SELECT DISTINCT server_name FROM (
@@ -366,31 +420,61 @@ export class HistoryDatabase implements IDatabase {
     return rows.map((r) => r.server_name);
   }
 
-  async addCostRecord(serverName: string, tokensUsed: number, estimatedCostUSD: number): Promise<void> {
+  async addCostRecord(
+    serverName: string,
+    tokensUsed: number,
+    estimatedCostUSD: number,
+    tenantId = 'default',
+  ): Promise<void> {
     this.db
-      .prepare('INSERT INTO cost_records (server_name, tokens_used, estimated_cost_usd) VALUES (?, ?, ?)')
-      .run(serverName, tokensUsed, estimatedCostUSD);
+      .prepare(
+        'INSERT INTO cost_records (server_name, tokens_used, estimated_cost_usd, tenant_id) VALUES (?, ?, ?, ?)',
+      )
+      .run(serverName, tokensUsed, estimatedCostUSD, tenantId);
   }
 
-  async getLatestCostRecord(serverName: string): Promise<CostRecord | null> {
-    return (
-      (this.db
+  async getLatestCostRecord(serverName: string, tenantId?: string): Promise<CostRecord | null> {
+    const row = (tenantId
+      ? this.db
+        .prepare(
+          'SELECT * FROM cost_records WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT 1',
+        )
+        .get(serverName, tenantId)
+      : this.db
         .prepare('SELECT * FROM cost_records WHERE server_name = ? ORDER BY id DESC LIMIT 1')
-        .get(serverName) as CostRecord | undefined) ?? null
-    );
+        .get(serverName)) as CostRecord | undefined;
+    return row ?? null;
   }
 
-  async getCostHistory(serverName: string): Promise<CostRecord[]> {
-    return this.db
-      .prepare('SELECT * FROM cost_records WHERE server_name = ? ORDER BY id DESC')
-      .all(serverName) as CostRecord[];
+  async getCostHistory(serverName: string, tenantId?: string): Promise<CostRecord[]> {
+    return (tenantId
+      ? this.db
+        .prepare('SELECT * FROM cost_records WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC')
+        .all(serverName, tenantId)
+      : this.db
+        .prepare('SELECT * FROM cost_records WHERE server_name = ? ORDER BY id DESC')
+        .all(serverName)) as CostRecord[];
   }
 
-  async getTotalCost(serverName?: string): Promise<number | null> {
+  async getTotalCost(serverName?: string, tenantId?: string): Promise<number | null> {
+    if (serverName && tenantId) {
+      const row = this.db
+        .prepare(
+          'SELECT SUM(estimated_cost_usd) as total FROM cost_records WHERE server_name = ? AND tenant_id = ?',
+        )
+        .get(serverName, tenantId) as { total: number | null } | undefined;
+      return row?.total ?? null;
+    }
     if (serverName) {
       const row = this.db
         .prepare('SELECT SUM(estimated_cost_usd) as total FROM cost_records WHERE server_name = ?')
         .get(serverName) as { total: number | null } | undefined;
+      return row?.total ?? null;
+    }
+    if (tenantId) {
+      const row = this.db
+        .prepare('SELECT SUM(estimated_cost_usd) as total FROM cost_records WHERE tenant_id = ?')
+        .get(tenantId) as { total: number | null } | undefined;
       return row?.total ?? null;
     }
     const row = this.db
@@ -399,33 +483,84 @@ export class HistoryDatabase implements IDatabase {
     return row?.total ?? null;
   }
 
-  async addHealthCheck(serverName: string, latencyMs: number, success: boolean, toolCount: number): Promise<void> {
+  async addHealthCheck(
+    serverName: string,
+    latencyMs: number,
+    success: boolean,
+    toolCount: number,
+    tenantId = 'default',
+  ): Promise<void> {
     this.db
-      .prepare('INSERT INTO health_checks (server_name, latency_ms, success, tool_count) VALUES (?, ?, ?, ?)')
-      .run(serverName, latencyMs, success ? 1 : 0, toolCount);
-  }
-
-  async getLatestHealthCheck(serverName: string): Promise<HealthRecord | null> {
-    return (
-      (this.db
-        .prepare('SELECT * FROM health_checks WHERE server_name = ? ORDER BY id DESC LIMIT 1')
-        .get(serverName) as HealthRecord | undefined) ?? null
-    );
-  }
-
-  async getRecentSuccessRate(serverName: string): Promise<number | null> {
-    const row = this.db
       .prepare(
+        'INSERT INTO health_checks (server_name, latency_ms, success, tool_count, tenant_id) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(serverName, latencyMs, success ? 1 : 0, toolCount, tenantId);
+  }
+
+  async getLatestHealthCheck(serverName: string, tenantId?: string): Promise<HealthRecord | null> {
+    const row = (tenantId
+      ? this.db
+        .prepare(
+          'SELECT * FROM health_checks WHERE server_name = ? AND tenant_id = ? ORDER BY id DESC LIMIT 1',
+        )
+        .get(serverName, tenantId)
+      : this.db
+        .prepare('SELECT * FROM health_checks WHERE server_name = ? ORDER BY id DESC LIMIT 1')
+        .get(serverName)) as HealthRecord | undefined;
+    return row ?? null;
+  }
+
+  async getRecentSuccessRate(serverName: string, tenantId?: string): Promise<number | null> {
+    const row = (tenantId
+      ? this.db.prepare(
+        `SELECT AVG(success) as avg
+         FROM (
+           SELECT success FROM health_checks
+           WHERE server_name = ? AND tenant_id = ?
+           ORDER BY id DESC
+           LIMIT 10
+         )`,
+      ).get(serverName, tenantId)
+      : this.db.prepare(
         `SELECT AVG(success) as avg
          FROM (
            SELECT success FROM health_checks
            WHERE server_name = ?
            ORDER BY id DESC
            LIMIT 10
-         )`
-      )
-      .get(serverName) as { avg: number | null } | undefined;
+         )`,
+      ).get(serverName)) as { avg: number | null } | undefined;
     return row?.avg ?? null;
+  }
+
+  /** Distinct tenant ids present in audit tables (for PG sync). */
+  getDistinctAuditTenants(): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT tenant_id FROM (
+           SELECT tenant_id FROM call_records
+           UNION SELECT tenant_id FROM cost_records
+           UNION SELECT tenant_id FROM security_scans
+           UNION SELECT tenant_id FROM health_checks
+         ) ORDER BY tenant_id`,
+      )
+      .all() as Array<{ tenant_id: string }>;
+    return rows.map((r) => r.tenant_id);
+  }
+
+  /** Distinct server names for a tenant across audit tables. */
+  getDistinctServersForTenant(tenantId: string): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT DISTINCT server_name FROM (
+           SELECT server_name FROM call_records WHERE tenant_id = ?
+           UNION SELECT server_name FROM cost_records WHERE tenant_id = ?
+           UNION SELECT server_name FROM security_scans WHERE tenant_id = ?
+           UNION SELECT server_name FROM health_checks WHERE tenant_id = ?
+         ) ORDER BY server_name`,
+      )
+      .all(tenantId, tenantId, tenantId, tenantId) as Array<{ server_name: string }>;
+    return rows.map((r) => r.server_name);
   }
 
   private startPurgeInterval(): void {
@@ -447,10 +582,10 @@ export class HistoryDatabase implements IDatabase {
   }
 
   /**
-   * GDPR Article 17 — erase all audit data in this database file.
-   * Operator must also purge SIEM/log shipping destinations separately.
+   * GDPR Article 17 — erase audit data in this database file.
+   * When tenantId is provided, only that tenant's rows are removed.
    */
-  eraseAllAuditData(): {
+  eraseAllAuditData(tenantId?: string): {
     callRecords: number;
     costRecords: number;
     securityScans: number;
@@ -459,13 +594,23 @@ export class HistoryDatabase implements IDatabase {
     if (this.openedReadOnly) {
       throw new Error('[HistoryDb] Cannot erase audit data on a read-only connection');
     }
+    const whereTenant = tenantId ? ' WHERE tenant_id = ?' : '';
+    const bind = tenantId ? [tenantId] : [];
     const counts = {
-      callRecords: this.db.prepare('DELETE FROM call_records').run().changes,
-      costRecords: this.db.prepare('DELETE FROM cost_records').run().changes,
-      securityScans: this.db.prepare('DELETE FROM security_scans').run().changes,
-      healthChecks: this.db.prepare('DELETE FROM health_checks').run().changes,
+      callRecords: tenantId
+        ? this.db.prepare(`DELETE FROM call_records${whereTenant}`).run(...bind).changes
+        : this.db.prepare('DELETE FROM call_records').run().changes,
+      costRecords: tenantId
+        ? this.db.prepare(`DELETE FROM cost_records${whereTenant}`).run(...bind).changes
+        : this.db.prepare('DELETE FROM cost_records').run().changes,
+      securityScans: tenantId
+        ? this.db.prepare(`DELETE FROM security_scans${whereTenant}`).run(...bind).changes
+        : this.db.prepare('DELETE FROM security_scans').run().changes,
+      healthChecks: tenantId
+        ? this.db.prepare(`DELETE FROM health_checks${whereTenant}`).run(...bind).changes
+        : this.db.prepare('DELETE FROM health_checks').run().changes,
     };
-    Logger.info(`[HistoryDb] GDPR eraseAllAuditData: ${JSON.stringify(counts)}`);
+    Logger.info(`[HistoryDb] GDPR eraseAllAuditData${tenantId ? `(tenant=${tenantId})` : ''}: ${JSON.stringify(counts)}`);
     return counts;
   }
 

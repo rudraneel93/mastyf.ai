@@ -7,6 +7,16 @@ import { ShellTokenizer, CommandRisk } from './shell-tokenizer.js';
 import { LRUCache } from 'lru-cache';
 import { resolvePolicyPrecedence } from './policy-precedence.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
+import { evaluateOpaPolicy } from './opa-policy.js';
+import { evaluateShadowPolicy } from './shadow-policy.js';
+import {
+  hashIdempotentPayload,
+  isDuplicateIdempotentRequest,
+} from './idempotency-store.js';
+import { isRedisConfigured } from '../utils/redis-client.js';
+import { getSharedRedisRateLimiter } from '../utils/redis-rate-limiter.js';
+import { walkStringLeaves } from './arg-leaf-walker.js';
+import { scanToolCallArguments } from '../scanners/prompt-injection-detector.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -72,19 +82,8 @@ export class PolicyEngine {
   }
 
   /** Recursively extract all leaf string values from a nested argument object */
-  private extractLeafValues(obj: unknown, prefix = ''): string[] {
-    if (typeof obj === 'string') return [obj];
-    if (typeof obj === 'number' || typeof obj === 'boolean') return [String(obj)];
-    if (obj === null || obj === undefined) return [];
-    if (Array.isArray(obj)) {
-      return obj.flatMap((v, i) => this.extractLeafValues(v, `${prefix}[${i}]`));
-    }
-    if (typeof obj === 'object') {
-      return Object.entries(obj as Record<string, unknown>).flatMap(([k, v]) =>
-        this.extractLeafValues(v, prefix ? `${prefix}.${k}` : k)
-      );
-    }
-    return [String(obj)];
+  private extractLeafValues(obj: unknown): string[] {
+    return walkStringLeaves(obj).map((l) => l.value);
   }
 
   /**
@@ -94,25 +93,42 @@ export class PolicyEngine {
    * Pipeline: Normalize payload → Semantic shell analysis → Rule evaluation
    */
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
-    const { evaluateOpaPolicy } = await import('./opa-policy.js');
+    void evaluateShadowPolicy(context);
+
+    if (this.mode === 'block' && context.idempotencyKey) {
+      const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+      const cacheKey = hashIdempotentPayload(
+        tenant,
+        context.serverName,
+        context.toolName,
+        context.arguments,
+        context.idempotencyKey,
+      );
+      if (await isDuplicateIdempotentRequest(cacheKey, tenant)) {
+        return {
+          action: 'block',
+          rule: 'idempotency-replay',
+          reason: `Duplicate idempotency key '${context.idempotencyKey}' within TTL`,
+        };
+      }
+    }
+
     const opaDecision = await evaluateOpaPolicy(context);
 
     let yamlDecision: PolicyDecision;
-    const { isRedisConfigured } = await import('../utils/redis-client.js');
     let skipLocalRateLimit = false;
 
     if (isRedisConfigured()) {
       try {
-        const { getSharedRedisRateLimiter } = await import('../utils/redis-rate-limiter.js');
         const rl = getSharedRedisRateLimiter();
         for (const rule of this.rules) {
           if (!rule.maxCallsPerMinute) continue;
           const tenant = context.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
           const clientId = context.agentIdentity?.clientId || context.agentIdentity?.sub;
           const key = clientId
-            ? `${tenant}:${context.serverName}:${context.toolName}:${clientId}:${rule.name}`
-            : `${tenant}:${context.serverName}:${context.toolName}:${rule.name}`;
-          const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute);
+            ? `${context.serverName}:${context.toolName}:${clientId}:${rule.name}`
+            : `${context.serverName}:${context.toolName}:${rule.name}`;
+          const { allowed } = await rl.checkAndIncrement(key, rule.maxCallsPerMinute, 60000, tenant);
           if (!allowed) {
             yamlDecision = {
               action: this.resolveAction(rule.action),
@@ -150,6 +166,23 @@ export class PolicyEngine {
       arguments: normalizedArgs,
     };
 
+    // ── Request-path prompt injection (all severities, all argument leaves) ──
+    const piFindings = scanToolCallArguments(normalizedArgs);
+    if (piFindings.length > 0) {
+      const top = piFindings.sort((a, b) => {
+        const rank = { critical: 0, high: 1, medium: 2 };
+        return rank[a.severity] - rank[b.severity];
+      })[0];
+      const rule = 'request-prompt-injection';
+      if (!isFpWhitelisted(rule, top.patternId)) {
+        return {
+          action: this.resolveAction('block'),
+          rule,
+          reason: `Prompt injection in tool arguments: ${top.patternId} (${top.severity})`,
+        };
+      }
+    }
+
     // ── v1.2: Semantic shell analysis on argument strings ──
     const argsStr = JSON.stringify(normalizedArgs);
     const shellRisk: CommandRisk = argsStr.length > 0
@@ -163,6 +196,15 @@ export class PolicyEngine {
         action: this.resolveAction('block'),
         rule: 'semantic-shell-guard',
         reason: psReason,
+      };
+    }
+
+    const b64ShellReason = this.shellTokenizer.detectBase64PipeShell(argsStr);
+    if (b64ShellReason) {
+      return {
+        action: this.resolveAction('block'),
+        rule: 'semantic-shell-guard',
+        reason: b64ShellReason,
       };
     }
 
@@ -338,6 +380,16 @@ export class PolicyEngine {
           return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Client ID '${clientId}' not allowed. Allowed patterns: [${rule.rbac.clientIds.join(', ')}]` };
         }
       }
+      if (rule.rbac.tenants && rule.rbac.tenants.length > 0) {
+        const requestTenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
+        if (!rule.rbac.tenants.includes(requestTenant)) {
+          return {
+            action: this.resolveAction(rule.action),
+            rule: rule.name,
+            reason: `Tenant '${requestTenant}' not allowed for rule '${rule.name}'. Allowed: [${rule.rbac.tenants.join(', ')}]`,
+          };
+        }
+      }
     }
 
     // Rate limiting (LRU-backed, prevents memory leaks) — skipped when Redis cluster limiter is active
@@ -346,7 +398,7 @@ export class PolicyEngine {
       const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub;
       const key = clientId
         ? `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`
-        : `${ctx.serverName}:${ctx.toolName}`;
+        : `${tenant}:${ctx.serverName}:${ctx.toolName}`;
       const now = Date.now();
       let counter = this.callCounters.get(key);
       if (!counter || now > counter.resetAt) {

@@ -1,18 +1,22 @@
 import { IDatabase } from '../database/database-interface.js';
 import { McpProxyServer } from './proxy-server.js';
+import { StdioConnectionPool, stdioPoolSize } from './stdio-connection-pool.js';
 import { SseProxyServer } from './sse-proxy-server.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyWatcher } from '../policy/policy-watcher.js';
+import { TenantPolicyRegistry } from '../policy/tenant-policy-registry.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 
 export class ProxyManager {
   private stdioProxies: McpProxyServer[] = [];
+  private stdioPools: StdioConnectionPool[] = [];
   private sseProxies: Map<string, SseProxyServer> = new Map();
   private policyEngine: PolicyEngine | undefined;
+  private tenantPolicyRegistry: TenantPolicyRegistry | undefined;
 
   constructor(
     private db: IDatabase,
@@ -28,6 +32,9 @@ export class ProxyManager {
           for (const proxy of this.stdioProxies) {
             proxy.setPolicyEngine(newEngine);
           }
+          for (const pool of this.stdioPools) {
+            pool.getPrimary().setPolicyEngine(newEngine);
+          }
           Logger.info(`[proxy-manager] Policy hot-reloaded across ${this.stdioProxies.length} stdio + ${this.sseProxies.size} SSE proxy(s)`);
         }
       };
@@ -35,10 +42,27 @@ export class ProxyManager {
     } else {
       this.policyEngine = policyEngineOrWatcher ?? undefined;
     }
+    if (this.policyEngine) {
+      this.tenantPolicyRegistry = new TenantPolicyRegistry(this.policyEngine);
+    }
   }
 
   getProxies(): McpProxyServer[] {
+    if (this.stdioPools.length > 0) {
+      return this.stdioPools.map((p) => p.getPrimary());
+    }
     return this.stdioProxies;
+  }
+
+  /** Primary stdio handler — pool round-robin or single proxy. */
+  async dispatchStdioInput(raw: string): Promise<void> {
+    if (this.stdioPools.length === 1) {
+      await this.stdioPools[0]!.handleClientInput(raw);
+      return;
+    }
+    if (this.stdioProxies.length === 1) {
+      await this.stdioProxies[0]!.handleClientInput(raw);
+    }
   }
 
   /** Returns summary counts for the CLI proxy command output */
@@ -61,11 +85,27 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
           PATH: process.env['PATH'] || '',
           HOME: process.env['HOME'] || '',
         };
-        const proxy = new McpProxyServer(
-          config.command!, config.args || [], sanitizedEnv,
-          this.db, config.name, this.policyEngine, this.authValidator,
-        );
-        this.stdioProxies.push(proxy);
+        if (stdioPoolSize() > 1) {
+          const pool = new StdioConnectionPool(
+            config.command!,
+            config.args || [],
+            sanitizedEnv,
+            this.db,
+            config.name,
+            this.policyEngine,
+            this.authValidator,
+            this.tenantPolicyRegistry,
+          );
+          await pool.start();
+          this.stdioPools.push(pool);
+        } else {
+          const proxy = new McpProxyServer(
+            config.command!, config.args || [], sanitizedEnv,
+            this.db, config.name, this.policyEngine, this.authValidator,
+            30000, 5, this.tenantPolicyRegistry,
+          );
+          this.stdioProxies.push(proxy);
+        }
         stdioStarted++;
         Logger.info(`[proxy] stdio active for "${config.name}" → ${config.command}`);
       } catch (err: any) {
@@ -90,21 +130,23 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
           policy: this.policyEngine,
           db: this.db,
           authHeader,
+          listenPort: parseInt(config.env?.['GUARDIAN_SSE_PROXY_PORT'] || '0', 10) || 0,
         });
         sseProxy.on('blocked', ({ reason }) => {
           Logger.warn(`[proxy][${config.name}] BLOCKED: ${reason}`);
         });
+        const listenPort = await sseProxy.start();
         this.sseProxies.set(config.name, sseProxy);
         sseStarted++;
-        Metrics.sseUntrackedServers.set({ server_name: config.name }, 1);
-        StructuredLogger.warn({
-          event: 'sse_untracked',
+        Metrics.sseUntrackedServers.set({ server_name: config.name }, 0);
+        StructuredLogger.info({
+          event: 'sse_proxy_listening',
           serverName: config.name,
           upstreamUrl: url,
-          message:
-            'SSE/HTTP server registered — tools/call via interceptAndForward only; IDE must use Guardian proxy URL or wrap for full audit',
+          listenPort,
+          message: `Point MCP client at http://127.0.0.1:${listenPort}/sse (GET) + /message (POST)`,
         });
-        Logger.info(`[proxy] SSE active for "${config.name}" → ${url}`);
+        Logger.info(`[proxy] SSE active for "${config.name}" → ${url} (local :${listenPort})`);
       } catch (err: any) {
         Logger.error(`[proxy] FAILED SSE for "${config.name}": ${err?.message}`);
       }
@@ -158,14 +200,19 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
     );
   }
 
-  stopAll(): void {
+  async stopAll(): Promise<void> {
     for (const proxy of this.stdioProxies) {
       proxy.kill();
     }
     this.stdioProxies = [];
+    for (const pool of this.stdioPools) {
+      pool.kill();
+    }
+    this.stdioPools = [];
     for (const [name, sseProxy] of this.sseProxies) {
       Metrics.sseUntrackedServers.set({ server_name: name }, 0);
       sseProxy.removeAllListeners();
+      await sseProxy.stop();
     }
     this.sseProxies.clear();
     Logger.info('All proxies stopped');

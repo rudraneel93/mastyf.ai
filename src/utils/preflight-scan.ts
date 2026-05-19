@@ -3,6 +3,7 @@
  */
 import type { IDatabase } from '../database/database-interface.js';
 import type { McpServerConfig } from '../types.js';
+import { resolveTenantId } from '../tenant/resolve-tenant.js';
 import { Logger } from './logger.js';
 
 export function runPreflightScanAndHealth(servers: McpServerConfig[], db: IDatabase): void {
@@ -13,14 +14,21 @@ export function runPreflightScanAndHealth(servers: McpServerConfig[], db: IDatab
       const { SecurityScanner } = await import('../services/security-scanner.js');
       const { HealthMonitor } = await import('../services/health-monitor.js');
       const scanner = new SecurityScanner();
-      const healthMonitor = new HealthMonitor(db);
+      const tenantId = resolveTenantId();
+      const healthMonitor = new HealthMonitor(db, tenantId);
 
       for (const server of servers) {
         try {
           const report = await scanner.scanServer(server);
-          await db.addSecurityScan(server.name, report.score, report.cves.length, report);
-          const health = await healthMonitor.checkServer(server);
-          await db.addHealthCheck(server.name, health.latencyMs, health.successRate > 0.5, health.toolCount);
+          await db.addSecurityScan(server.name, report.score, report.cves.length, report, tenantId);
+          const health = await healthMonitor.checkServer(server, tenantId);
+          await db.addHealthCheck(
+            server.name,
+            health.latencyMs,
+            health.successRate > 0.5,
+            health.toolCount,
+            tenantId,
+          );
           const crit = report.cves.filter((c) => c.severity === 'CRITICAL').length;
           const high = report.cves.filter((c) => c.severity === 'HIGH').length;
           Logger.info(

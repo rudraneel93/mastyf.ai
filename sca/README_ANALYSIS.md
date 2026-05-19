@@ -1,3 +1,5 @@
+> **Synthetic simulation — not live adversary traffic against production.** Test and attack metrics in this folder are from lab runs and modeled scenarios unless explicitly tied to a dated production deployment.
+
 # MCP Guardian Test Analysis - README
 
 This directory contains comprehensive test analysis and enterprise validation results for the MCP Guardian security proxy.

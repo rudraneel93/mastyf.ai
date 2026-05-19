@@ -1,0 +1,9 @@
+{
+  "toolName": "search",
+  "arguments": {
+    "body": "DELETE FROM users"
+  },
+  "expected": "block",
+  "category": "sql-nosql",
+  "ruleHint": "delete-in-body"
+}

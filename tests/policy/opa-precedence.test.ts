@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import { PolicyConfig, CallContext } from '../../src/policy/policy-types.js';
 import { resolvePolicyPrecedence } from '../../src/policy/policy-precedence.js';
+import { resetOpaCacheForTests } from '../../src/policy/opa-policy.js';
 
 const yamlPolicy: PolicyConfig = {
   version: '1.0',
@@ -35,6 +36,7 @@ describe('OPA / YAML precedence', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    resetOpaCacheForTests();
   });
 
   afterEach(() => {

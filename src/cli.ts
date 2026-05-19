@@ -37,11 +37,14 @@ function cliVersion(): string {
   }
 }
 import { isAiLearningEnabled } from './utils/ai-enabled.js';
+import { resolveCliTenantId, InvalidTenantIdError } from './tenant/resolve-tenant.js';
+import { AsyncSerialQueue } from './utils/async-serial-queue.js';
 
 // ── Typed option interfaces ──────────────────────────────────────────
 interface ScanOptions {
   config?: string;
   all?: boolean;
+  tenant?: string;
   thresholdScore?: number;
   failOnCritical?: boolean;
   failOnSecrets?: boolean;
@@ -51,6 +54,7 @@ interface AuditOptions {
   config?: string;
   all?: boolean;
   server?: string;
+  tenant?: string;
   thresholdCost?: number;
 }
 
@@ -58,6 +62,7 @@ interface HealthOptions {
   config?: string;
   all?: boolean;
   server?: string;
+  tenant?: string;
   thresholdLatency?: number;
   failOnOverload?: boolean;
 }
@@ -65,6 +70,7 @@ interface HealthOptions {
 interface ReportOptions {
   config?: string;
   all?: boolean;
+  tenant?: string;
   format?: 'json' | 'markdown' | 'text';
   output?: string;
   thresholdScore?: number;
@@ -93,7 +99,40 @@ function loadConfigs(options: { all?: boolean; config?: string }): {
   return { servers: ConfigParser.parse(paths[0]), sourcePaths: [paths[0]] };
 }
 
+function cliTenantId(opts: { tenant?: string }): string {
+  try {
+    return resolveCliTenantId(opts);
+  } catch (err) {
+    if (err instanceof InvalidTenantIdError) {
+      console.error(chalk.red(err.message));
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
+function checkScanStrict(reports: SecurityReport[]): void {
+  if (process.env['GUARDIAN_SCAN_STRICT'] !== 'true') return;
+  const issues: string[] = [];
+  for (const r of reports) {
+    if (r.cveLookupStatus === 'degraded' || r.cveLookupStatus === 'unavailable') {
+      issues.push(`${r.serverName}: CVE lookup ${r.cveLookupStatus}`);
+    }
+    if (!r.authStatus.hasAuthentication) {
+      issues.push(`${r.serverName}: no authentication configured`);
+    }
+    if (r.typoSquatRisk.length > 0) {
+      issues.push(`${r.serverName}: typo-squat risk (${r.typoSquatRisk.map((t) => t.suspiciousName).join(', ')})`);
+    }
+  }
+  if (issues.length > 0) {
+    console.error(chalk.red('GUARDIAN_SCAN_STRICT failures:\n' + issues.map((i) => `  - ${i}`).join('\n')));
+    process.exit(1);
+  }
+}
+
 function checkAlertThresholds(reports: SecurityReport[], opts: ScanOptions | ReportOptions): void {
+  checkScanStrict(reports);
   if ('failOnCritical' in opts && opts.failOnCritical && reports.some((r) => r.cves.some((c) => c.severity === 'CRITICAL'))) {
     console.error(chalk.red('\n⚠ Critical CVE(s) detected'));
     process.exit(1);
@@ -126,6 +165,7 @@ program
   .option('--threshold-score <number>', 'Exit code 2 if any server score drops below threshold', parseInt)
   .option('--fail-on-critical', 'Exit code 1 if any critical CVE found')
   .option('--fail-on-secrets', 'Exit code 1 if any hardcoded secrets detected')
+  .option('--tenant <id>', 'Tenant id for stored scan rows (default: GUARDIAN_TENANT_ID)')
   .action(async (opts: ScanOptions) => {
     const { servers, sourcePaths } = loadConfigs(opts);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
@@ -136,9 +176,10 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
+    const tenantId = cliTenantId(opts);
     const container = await createContainer();
     const reports = await Promise.all(servers.map((s) => container.securityScanner.scanServer(s)));
-    await Promise.all(reports.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r)));
+    await Promise.all(reports.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r, tenantId)));
     await triggerLearningCycleIfEnabled(container.db, servers, { cliCommand: true }); // no-op unless GUARDIAN_AI_ON_CLI=true
     broadcastDashboardEvent({
       type: 'health-change',
@@ -158,15 +199,17 @@ program
   .option('-a, --all', 'Aggregate all discoverable config files')
   .option('-s, --server <name>', 'Filter to a specific server')
   .option('--threshold-cost <number>', 'Exit code 2 if total cost exceeds threshold (USD)', parseFloat)
+  .option('--tenant <id>', 'Tenant id for stored cost rows (default: GUARDIAN_TENANT_ID)')
   .action(async (opts: AuditOptions) => {
     const { servers } = loadConfigs(opts);
     const filtered = opts.server ? servers.filter((s) => s.name === opts.server) : servers;
     if (filtered.length === 0) { console.error(chalk.yellow('No servers found.')); process.exit(0); }
 
+    const tenantId = cliTenantId(opts);
     const container = await createContainer();
     const results = await Promise.all(filtered.map((s) => container.costAuditor.auditServer(s)));
     container.costAuditor.dispose();
-    await Promise.all(results.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)));
+    await Promise.all(results.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD, tenantId)));
     await triggerLearningCycleIfEnabled(container.db, filtered, { cliCommand: true }); // skipped unless GUARDIAN_AI_ON_CLI=true
     container.db.close();
 
@@ -190,14 +233,16 @@ program
   .option('-f, --format <format>', 'Output format: text (default) or json', 'text')
   .option('--threshold-latency <ms>', 'Exit code 2 if any server exceeds latency threshold', parseInt)
   .option('--fail-on-overload', 'Exit code 1 if any server has tool overload')
+  .option('--tenant <id>', 'Tenant id for stored health rows (default: GUARDIAN_TENANT_ID)')
   .action(async (opts: HealthOptions) => {
     const { servers } = loadConfigs(opts);
     const filtered = opts.server ? servers.filter((s) => s.name === opts.server) : servers;
     if (filtered.length === 0) { console.error(chalk.yellow('No servers found.')); process.exit(0); }
 
+    const tenantId = cliTenantId(opts);
     const container = await createContainer();
-    const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s)));
-    await Promise.all(results.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)));
+    const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s, tenantId)));
+    await Promise.all(results.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount, tenantId)));
     await triggerLearningCycleIfEnabled(container.db, filtered, { cliCommand: true }); // skipped unless GUARDIAN_AI_ON_CLI=true
     container.db.close();
 
@@ -224,6 +269,7 @@ program
   .option('-f, --format <format>', 'Output format: text (default), markdown, or json', 'text')
   .option('--output <path>', 'Save report to a file instead of stdout')
   .option('--threshold-score <number>', 'Exit code 2 if overall score drops below threshold', parseInt)
+  .option('--tenant <id>', 'Tenant id for stored report rows (default: GUARDIAN_TENANT_ID)')
   .action(async (opts: ReportOptions) => {
     const { servers, sourcePaths } = loadConfigs(opts);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
@@ -234,17 +280,18 @@ program
       console.error(chalk.dim(`Using config: ${sourcePaths[0] || 'auto-detected'}`));
     }
 
+    const tenantId = cliTenantId(opts);
     const container = await createContainer();
     const [security, costs, health] = await Promise.all([
       Promise.all(servers.map((s) => container.securityScanner.scanServer(s))),
       Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
-      Promise.all(servers.map((s) => container.healthMonitor.checkServer(s))),
+      Promise.all(servers.map((s) => container.healthMonitor.checkServer(s, tenantId))),
     ]);
     container.costAuditor.dispose();
     await Promise.all([
-      ...security.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r)),
-      ...costs.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD)),
-      ...health.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount)),
+      ...security.map((r) => container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r, tenantId)),
+      ...costs.map((r) => container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD, tenantId)),
+      ...health.map((r) => container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount, tenantId)),
     ]);
     await triggerLearningCycleIfEnabled(container.db, servers, { cliCommand: true }); // no-op unless GUARDIAN_AI_ON_CLI=true
     broadcastDashboardEvent({
@@ -604,7 +651,9 @@ program
 
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
     const cleanup = async () => {
-      manager.stopAll();
+      await manager.stopAll();
+      const { flushAuditWriteQueue } = await import('./database/audit-write-queue.js');
+      await flushAuditWriteQueue();
       await shutdownEnterprise();
       await closeDashboardServer();
       await shutdownMetrics();
@@ -622,6 +671,7 @@ program
     if (proxies.length === 1) {
       process.stdin.setEncoding('utf-8');
       let buffer = '';
+      const stdinQueue = new AsyncSerialQueue();
       process.stdin.on('data', (chunk: string) => {
         buffer += chunk;
         while (buffer.includes('\n')) {
@@ -629,7 +679,14 @@ program
           const line = buffer.slice(0, newlineIdx).trim();
           buffer = buffer.slice(newlineIdx + 1);
           if (!line) continue;
-          proxies[0].handleClientInput(line);
+          void stdinQueue.enqueue(async () => {
+            try {
+              await manager.dispatchStdioInput(line);
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.error(chalk.red(`Proxy stdin error: ${message}`));
+            }
+          });
         }
       });
     }

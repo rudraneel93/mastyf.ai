@@ -11,11 +11,12 @@ import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
-import { CircuitBreaker } from '../utils/circuit-breaker.js';
+import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import { MtlsConfig, createMtlsAgent } from '../utils/mtls-config.js';
 import * as Metrics from '../utils/metrics.js';
 import { Logger } from '../utils/logger.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
+import { resolveTenantContext, InvalidTenantIdError, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -27,7 +28,7 @@ export class HttpProxyServer {
   private policyEngine: PolicyEngine | null;
   private authValidator: OAuthValidator | null;
   private sessionCache: GuardianSessionCache | null;
-  private circuitBreaker: CircuitBreaker;
+  private defaultTenantId: string;
   private tokenCounter: TokenCounter;
   private db: HistoryDatabase;
   private port: number;
@@ -48,7 +49,7 @@ export class HttpProxyServer {
     this.policyEngine = policyEngine || null;
     this.authValidator = authValidator || null;
     this.sessionCache = authValidator ? createSessionCache() : null;
-    this.circuitBreaker = new CircuitBreaker(this.serverName, { resetTimeoutMs: 15000 });
+    this.defaultTenantId = resolveTenantContext().tenantId;
     this.tokenCounter = new TokenCounter();
     this.db = db || new HistoryDatabase(':memory:');
     this.port = port;
@@ -71,9 +72,29 @@ export class HttpProxyServer {
     });
   }
 
+  private breakerFor(tenantId: string = DEFAULT_TENANT_ID) {
+    return getCircuitBreaker(tenantId || this.defaultTenantId, this.serverName);
+  }
+
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const requestId = randomUUID();
     const start = Date.now();
+
+    let requestTenantId = this.defaultTenantId;
+    try {
+      requestTenantId = resolveTenantContext({
+        headers: req.headers as Record<string, string | string[] | undefined>,
+      }).tenantId;
+    } catch (err) {
+      if (err instanceof InvalidTenantIdError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      throw err;
+    }
+
+    const tenantBreaker = this.breakerFor(requestTenantId);
 
     // ── Auth check ───────────────────────────────────────────
     let agentIdentity: AgentIdentity | undefined;
@@ -92,7 +113,7 @@ export class HttpProxyServer {
       if (token) {
         let result: AuthValidationResult = await this.authValidator.validate(token);
         if (!result.valid && this.sessionCache) {
-          const sessionIdentity = await validateSessionToken(this.sessionCache, token);
+          const sessionIdentity = await validateSessionToken(this.sessionCache, token, requestTenantId);
           if (sessionIdentity) {
             result = { valid: true, identity: sessionIdentity };
           }
@@ -114,6 +135,7 @@ export class HttpProxyServer {
             req.method || 'POST',
             requestUrl,
             token,
+            requestTenantId,
           );
           if (!dpopCheck.valid) {
             res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -131,6 +153,8 @@ export class HttpProxyServer {
         dpopProof,
         req.method || 'POST',
         requestUrl,
+        undefined,
+        requestTenantId,
       );
       if (!dpopCheck.valid) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -140,7 +164,7 @@ export class HttpProxyServer {
     }
 
     // ── Circuit breaker ──────────────────────────────────────
-    if (!this.circuitBreaker.allowRequest()) {
+    if (!tenantBreaker.allowRequest()) {
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Service unavailable — circuit breaker open' }));
       Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
@@ -177,7 +201,7 @@ export class HttpProxyServer {
             requestId,
             requestTokens: tokens,
             timestamp: new Date().toISOString(),
-            tenantId: process.env['GUARDIAN_TENANT_ID'] || req.headers['x-tenant-id'] as string | undefined,
+            tenantId: requestTenantId,
             agentIdentity,
           };
 
@@ -224,19 +248,19 @@ export class HttpProxyServer {
         upstreamRes.pipe(res);
         // Record success on 'end', not when headers arrive — avoids false success on mid-stream drops
         upstreamRes.on('end', () => {
-          this.circuitBreaker.recordSuccess();
-          Metrics.circuitBreakerState.set({ server_name: this.serverName }, this.circuitBreaker.getState() === 'OPEN' ? 1 : 0);
+          tenantBreaker.recordSuccess();
+          Metrics.circuitBreakerState.set({ server_name: this.serverName }, tenantBreaker.getState() === 'OPEN' ? 1 : 0);
           Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, Date.now() - start);
           Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: String(authnSuccess) });
         });
         upstreamRes.on('error', () => {
-          this.circuitBreaker.recordFailure();
+          tenantBreaker.recordFailure();
           Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
         });
       });
 
       proxyReq.on('error', (err) => {
-        this.circuitBreaker.recordFailure();
+        tenantBreaker.recordFailure();
         Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
         if (!res.headersSent) {
           res.writeHead(502, { 'Content-Type': 'application/json' });
@@ -246,7 +270,7 @@ export class HttpProxyServer {
 
       proxyReq.on('timeout', () => {
         proxyReq.destroy();
-        this.circuitBreaker.recordFailure();
+        tenantBreaker.recordFailure();
         Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
         if (!res.headersSent) {
           res.writeHead(504, { 'Content-Type': 'application/json' });
@@ -257,7 +281,7 @@ export class HttpProxyServer {
       proxyReq.write(body);
       proxyReq.end();
     } catch (err: any) {
-      this.circuitBreaker.recordFailure();
+      tenantBreaker.recordFailure();
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: `Proxy error: ${err.message}` }));

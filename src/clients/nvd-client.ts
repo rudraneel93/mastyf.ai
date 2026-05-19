@@ -2,6 +2,13 @@ import axios from 'axios';
 import { CveFinding } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { RateLimiter } from '../utils/rate-limiter.js';
+import {
+  readCveDiskCache,
+  writeCveDiskCache,
+  isCveCacheFresh,
+} from '../utils/cve-api-disk-cache.js';
+
+const CACHE_PREFIX = 'nvd:';
 const nvdLimiter = new RateLimiter({ tokensPerInterval: 5, interval: 60_000 });
 const nvdApiKeyLimiter = new RateLimiter({ tokensPerInterval: 30, interval: 60_000 });
 
@@ -10,6 +17,7 @@ export type NvdLookupStatus = 'ok' | 'degraded' | 'unavailable';
 export interface NvdSearchResult {
   findings: CveFinding[];
   status: NvdLookupStatus;
+  stale?: boolean;
 }
 
 async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
@@ -45,6 +53,12 @@ export class NvdClient {
    * Returns up to 20 results.
    */
   async search(keyword: string): Promise<NvdSearchResult> {
+    const cacheKey = `${CACHE_PREFIX}${keyword}`;
+    const disk = readCveDiskCache<NvdSearchResult>(cacheKey);
+    if (disk && isCveCacheFresh(disk)) {
+      return disk.data;
+    }
+
     try {
       const response = await withRetry(async () => {
         const params: Record<string, string> = {
@@ -59,7 +73,7 @@ export class NvdClient {
       });
 
       const vulnerabilities = response.data?.vulnerabilities ?? [];
-      return {
+      const result: NvdSearchResult = {
         status: 'ok',
         findings: vulnerabilities.map((entry: { cve?: Record<string, unknown> }) => {
           const cve = entry.cve ?? {};
@@ -76,14 +90,18 @@ export class NvdClient {
           };
         }),
       };
+      writeCveDiskCache(cacheKey, result);
+      return result;
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status;
       const msg = error instanceof Error ? error.message : String(error);
       Logger.warn(`NVD search failed for "${keyword}": ${msg}`);
-      return {
-        findings: [],
-        status: status === 403 || status === 429 ? 'unavailable' : 'degraded',
-      };
+      const failStatus: NvdLookupStatus =
+        status === 403 || status === 429 ? 'unavailable' : 'degraded';
+      if (disk) {
+        return { ...disk.data, status: failStatus, stale: true };
+      }
+      return { findings: [], status: failStatus };
     }
   }
 

@@ -1,39 +1,50 @@
 import { homedir } from 'os';
 import { join } from 'path';
+import { DEFAULT_TENANT_ID, resolveTenantId } from '../tenant/resolve-tenant.js';
 
 const GUARDIAN_DIR = join(homedir(), '.mcp-guardian');
 
-export function resolveAiLearningStatePath(): string {
-  if (process.env.GUARDIAN_AI_STATE_PATH) {
-    return process.env.GUARDIAN_AI_STATE_PATH;
+function tenantDataDir(tenantId?: string): string {
+  const tid = tenantId || resolveTenantId();
+  if (tid === DEFAULT_TENANT_ID) {
+    return GUARDIAN_DIR;
   }
-  return join(GUARDIAN_DIR, '.ai-learning.json');
+  return join(GUARDIAN_DIR, 'tenants', tid);
 }
 
-export function resolveAiPendingSuggestionsPath(): string {
-  if (process.env.GUARDIAN_AI_SUGGESTIONS_PATH) {
-    return process.env.GUARDIAN_AI_SUGGESTIONS_PATH;
+function resolveTenantScopedPath(
+  envKey: string,
+  filename: string,
+  tenantId?: string,
+): string {
+  const tid = tenantId || resolveTenantId();
+  const envPath = process.env[envKey];
+  if (envPath && tid === DEFAULT_TENANT_ID) {
+    return envPath;
   }
-  return join(GUARDIAN_DIR, '.ai-pending-suggestions.json');
+  return join(tenantDataDir(tid), filename);
 }
 
-export function resolveAiReportPath(): string {
-  if (process.env.GUARDIAN_AI_REPORT_PATH) {
-    return process.env.GUARDIAN_AI_REPORT_PATH;
-  }
-  return join(GUARDIAN_DIR, '.ai-report.json');
+export function resolveAiLearningStatePath(tenantId?: string): string {
+  return resolveTenantScopedPath('GUARDIAN_AI_STATE_PATH', '.ai-learning.json', tenantId);
 }
 
-export function resolveAiBaselinesPath(): string {
-  if (process.env.GUARDIAN_AI_BASELINES_PATH) {
-    return process.env.GUARDIAN_AI_BASELINES_PATH;
-  }
-  return join(GUARDIAN_DIR, '.ai-baselines.json');
+export function resolveAiPendingSuggestionsPath(tenantId?: string): string {
+  return resolveTenantScopedPath('GUARDIAN_AI_SUGGESTIONS_PATH', '.ai-pending-suggestions.json', tenantId);
 }
 
-export function resolveAttackLearningStatePath(): string {
-  if (process.env.GUARDIAN_AI_ATTACK_STATE_PATH) {
-    return process.env.GUARDIAN_AI_ATTACK_STATE_PATH;
-  }
-  return join(GUARDIAN_DIR, '.attack-learning-state.json');
+export function resolveAiReportPath(tenantId?: string): string {
+  return resolveTenantScopedPath('GUARDIAN_AI_REPORT_PATH', '.ai-report.json', tenantId);
+}
+
+export function resolveAiBaselinesPath(tenantId?: string): string {
+  return resolveTenantScopedPath('GUARDIAN_AI_BASELINES_PATH', '.ai-baselines.json', tenantId);
+}
+
+export function resolveAttackLearningStatePath(tenantId?: string): string {
+  return resolveTenantScopedPath(
+    'GUARDIAN_AI_ATTACK_STATE_PATH',
+    '.attack-learning-state.json',
+    tenantId,
+  );
 }

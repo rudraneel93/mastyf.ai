@@ -19,6 +19,7 @@ import { createContainer } from './container.js';
 import { sanitizeConfigPath } from './utils/sanitize-config-path.js';
 import { resolveMcpServerDbPath } from './utils/guardian-db-path.js';
 import { readPackageVersion } from './utils/package-version.js';
+import { resolveTenantFromEnv } from './tenant/resolve-tenant.js';
 
 // ── DB path: separate from proxy history.db (Cline cannot set env in MCP JSON)
 if (!process.env['MCP_GUARDIAN_DB_PATH']) {
@@ -70,9 +71,10 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       // Get the most recent security scan from DB across all known servers dynamically
       const recentScans: unknown[] = [];
       // Query all known servers from the DB instead of a hardcoded list
-      const knownServers = await db.getDistinctScannedServers();
+      const tenantId = resolveTenantFromEnv();
+      const knownServers = await db.getDistinctScannedServers(tenantId);
       for (const srv of knownServers) {
-        const entry = await db.getLatestSecurityScan(srv);
+        const entry = await db.getLatestSecurityScan(srv, tenantId);
         if (entry) recentScans.push(entry);
       }
       if (recentScans.length > 0) {
@@ -235,11 +237,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  const tenantId = resolveTenantFromEnv();
+
   switch (name) {
     case 'scan_security': {
       const results = await Promise.all(servers.map((s) => container.securityScanner.scanServer(s)));
       for (const r of results) {
-        container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
+        container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r, tenantId);
       }
       return { content: [{ type: 'text', text: reporter.formatSecurityReports(results) }] };
     }
@@ -248,16 +252,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const filtered = args?.serverName ? servers.filter((s) => s.name === args.serverName) : servers;
       const results = await Promise.all(filtered.map((s) => container.costAuditor.auditServer(s)));
       for (const r of results) {
-        container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
+        container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD, tenantId);
       }
       return { content: [{ type: 'text', text: reporter.formatCostReports(results) }] };
     }
 
     case 'check_health': {
       const filtered = args?.serverName ? servers.filter((s) => s.name === args.serverName) : servers;
-      const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s)));
+      const results = await Promise.all(filtered.map((s) => container.healthMonitor.checkServer(s, tenantId)));
       for (const r of results) {
-        container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
+        container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount, tenantId);
       }
       return { content: [{ type: 'text', text: reporter.formatHealthReports(results) }] };
     }
@@ -266,7 +270,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const [security, costs, health] = await Promise.all([
         Promise.all(servers.map((s) => container.securityScanner.scanServer(s))),
         Promise.all(servers.map((s) => container.costAuditor.auditServer(s))),
-        Promise.all(servers.map((s) => container.healthMonitor.checkServer(s))),
+        Promise.all(servers.map((s) => container.healthMonitor.checkServer(s, tenantId))),
       ]);
       const costScores = costs.map(c => ({ estimatedCostUSD: c.estimatedCostUSD, pricingModel: c.pricingModel }));
       const overallScore = calculateOverallScore(security, health, costScores);
@@ -280,9 +284,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
 
       // Store results in DB
-      for (const r of security) container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r);
-      for (const r of costs) container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD);
-      for (const r of health) container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount);
+      for (const r of security) container.db.addSecurityScan(r.serverName, r.score, r.cves.length, r, tenantId);
+      for (const r of costs) container.db.addCostRecord(r.serverName, r.tokensUsed, r.estimatedCostUSD, tenantId);
+      for (const r of health) container.db.addHealthCheck(r.serverName, r.latencyMs, r.successRate > 0.5, r.toolCount, tenantId);
 
       const format = (args?.format as string) ?? 'text';
 

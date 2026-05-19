@@ -26,6 +26,7 @@ import {
 } from '../ai/ai-paths.js';
 import { computeBurnRatePerHour, computeProjectedMonthly } from '../utils/cost-metrics.js';
 import { isAiLearningEnabled } from '../utils/ai-enabled.js';
+import { resolveTenantFromEnv } from '../tenant/resolve-tenant.js';
 import { Logger } from '../utils/logger.js';
 import type { LearningState } from '../ai/self-improvement.js';
 import type { BaselineProfile } from '../ai/baseline-learner.js';
@@ -199,8 +200,9 @@ export class DataFetcher {
       if (this.dbReadOnly) {
         this.refreshReadOnlyConnection();
       }
-      const servers = await getAllActiveServerNames(this.db);
-      const allRecords = await loadAllCallRecords(this.db, servers);
+      const tenantId = resolveTenantFromEnv();
+      const servers = await getAllActiveServerNames(this.db, tenantId);
+      const allRecords = await loadAllCallRecords(this.db, servers, tenantId);
       const sum = summarizeRecords(allRecords);
       let totalRequests = sum.total;
       let blockedCount = sum.blocked;
@@ -225,7 +227,7 @@ export class DataFetcher {
 
       const secReports: any[] = []; let totalScore = 0; let activeThreats = 0; let lastScan = 'N/A';
       for (const srv of servers) {
-        const scan = await this.db.getLatestSecurityScan(srv);
+        const scan = await this.db.getLatestSecurityScan(srv, tenantId);
         if (scan) {
           const row = securityRowFromScan(scan as unknown as Record<string, unknown>, srv);
           secReports.push({ name: row.name, score: row.score, cves: row.cves, critical: row.critical, auth: row.auth });
@@ -264,8 +266,8 @@ export class DataFetcher {
       for (const srv of servers) {
         const srecs = allRecords.filter((r) => r.serverName === srv);
         const callLat = srecs.length > 0 ? Math.round(srecs.reduce((s, r) => s + (r.durationMs || 0), 0) / srecs.length) : 0;
-        const sr = await this.db.getRecentSuccessRate(srv);
-        const hc = await this.db.getLatestHealthCheck(srv);
+        const sr = await this.db.getRecentSuccessRate(srv, tenantId);
+        const hc = await this.db.getLatestHealthCheck(srv, tenantId);
         const latency = hc?.latency_ms ?? callLat;
         const tools = hc?.tool_count ?? 0;
         totalTools += tools;

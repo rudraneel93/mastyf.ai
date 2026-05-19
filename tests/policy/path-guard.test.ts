@@ -17,6 +17,12 @@ describe('evaluatePathGuard', () => {
     expect(evaluatePathGuard(['/home/user/.ssh/config']).block).toBe(true);
   });
 
+  it('blocks kubernetes kubeconfig paths', () => {
+    expect(evaluatePathGuard(['/root/.kube/config']).block).toBe(true);
+    expect(evaluatePathGuard(['.kube/config']).block).toBe(true);
+    expect(evaluatePathGuard(['/etc/kubernetes/admin.conf']).block).toBe(true);
+  });
+
   it('scopes to workspace when set', () => {
     process.env.GUARDIAN_WORKSPACE = '/workspace/app';
     expect(evaluatePathGuard(['/workspace/app/src/a.ts']).block).toBe(false);

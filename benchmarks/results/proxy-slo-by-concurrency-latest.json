@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-18T19:41:38.994Z",
+  "timestamp": "2026-05-19T13:18:07.815Z",
   "configuration": {
     "tiers": [
       1,
@@ -39,21 +39,21 @@
         "timeouts": 0
       },
       "latencyMs": {
-        "p50": 155.49170800000002,
-        "p95": 155.49170800000002,
-        "p99": 155.49170800000002,
-        "max": 155.49170800000002,
-        "avg": 155.49
+        "p50": 140.81795899999997,
+        "p95": 140.81795899999997,
+        "p99": 140.81795899999997,
+        "max": 140.81795899999997,
+        "avg": 140.82
       },
       "throughput": {
-        "wallMs": 156,
-        "callsPerSecond": 6
+        "wallMs": 141,
+        "callsPerSecond": 7
       },
       "sloResults": {
         "p95Ms": 150,
-        "p95Pass": false,
+        "p95Pass": true,
         "correctnessPass": true,
-        "overallPass": false
+        "overallPass": true
       },
       "errors": []
     },
@@ -72,21 +72,21 @@
         "timeouts": 0
       },
       "latencyMs": {
-        "p50": 368.140167,
-        "p95": 420.2830829999998,
-        "p99": 420.2830829999998,
-        "max": 420.2830829999998,
-        "avg": 356.85
+        "p50": 586.0383339999998,
+        "p95": 586.079708,
+        "p99": 586.079708,
+        "max": 586.079708,
+        "avg": 540.38
       },
       "throughput": {
-        "wallMs": 583,
+        "wallMs": 586,
         "callsPerSecond": 17
       },
       "sloResults": {
         "p95Ms": 500,
-        "p95Pass": true,
+        "p95Pass": false,
         "correctnessPass": true,
-        "overallPass": true
+        "overallPass": false
       },
       "errors": []
     },
@@ -105,15 +105,15 @@
         "timeouts": 0
       },
       "latencyMs": {
-        "p50": 1418.1965000000005,
-        "p95": 1953.3417919999997,
-        "p99": 1982.4950840000001,
-        "max": 1982.4950840000001,
-        "avg": 1413.88
+        "p50": 2312.206417,
+        "p95": 2312.2396249999997,
+        "p99": 2312.242667,
+        "max": 2312.242667,
+        "avg": 2108.54
       },
       "throughput": {
-        "wallMs": 2063,
-        "callsPerSecond": 12
+        "wallMs": 2313,
+        "callsPerSecond": 11
       },
       "sloResults": {
         "p95Ms": 1500,
@@ -138,21 +138,21 @@
         "timeouts": 0
       },
       "latencyMs": {
-        "p50": 2336.074375,
-        "p95": 2905.9901659999996,
-        "p99": 2948.146417,
-        "max": 2948.146417,
-        "avg": 2216.03
+        "p50": 4427.849166000001,
+        "p95": 4427.935375000001,
+        "p99": 4427.946750000001,
+        "max": 4427.946750000001,
+        "avg": 4119.21
       },
       "throughput": {
-        "wallMs": 3055,
-        "callsPerSecond": 16
+        "wallMs": 4428,
+        "callsPerSecond": 11
       },
       "sloResults": {
         "p95Ms": 3000,
-        "p95Pass": true,
+        "p95Pass": false,
         "correctnessPass": true,
-        "overallPass": true
+        "overallPass": false
       },
       "errors": []
     }

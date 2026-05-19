@@ -18,7 +18,7 @@ import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import { broadcastDashboardEvent } from '../utils/dashboard-events.js';
-import { resolveTenantId } from '../tenant/resolve-tenant.js';
+import { resolveTenantId, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 export interface InstantBlockEvent {
   serverName: string;
@@ -27,6 +27,7 @@ export interface InstantBlockEvent {
   block_reason: string;
   argsFingerprint: string;
   argSnippets?: string[];
+  tenantId?: string;
 }
 
 interface RecentBlock {
@@ -71,7 +72,7 @@ const RULE_TO_ATTACK_CLASS: Record<string, string> = {
   'arg-entropy': 'obfuscation',
 };
 
-let stateCache: AttackLearningState | null = null;
+let stateCacheByTenant = new Map<string, AttackLearningState>();
 let lastLlmInstantAt = 0;
 let suggestionCounter = 0;
 /** PostgreSQL-backed store (AuditTrailSync); falls back to local JSON file when unset. */
@@ -84,8 +85,16 @@ export function setAttackLearningSharedStore(store: typeof sharedStore): void {
   sharedStore = store;
 }
 
-function attackLearningTenantId(): string {
-  return resolveTenantId();
+function attackLearningTenantId(explicit?: string): string {
+  return explicit || resolveTenantId();
+}
+
+function getTenantStateCache(tenantId: string): AttackLearningState | undefined {
+  return stateCacheByTenant.get(tenantId);
+}
+
+function setTenantStateCache(tenantId: string, state: AttackLearningState): void {
+  stateCacheByTenant.set(tenantId, state);
 }
 
 function instantLearningEnabled(): boolean {
@@ -120,37 +129,44 @@ function emptyState(): AttackLearningState {
   };
 }
 
-export function loadAttackLearningState(): AttackLearningState {
-  if (stateCache) return stateCache;
-  const path = resolveAttackLearningStatePath();
+export function loadAttackLearningState(tenantId?: string): AttackLearningState {
+  const tid = attackLearningTenantId(tenantId);
+  const cached = getTenantStateCache(tid);
+  if (cached) return cached;
+  const path = resolveAttackLearningStatePath(tid);
   if (!existsSync(path)) {
-    stateCache = emptyState();
-    return stateCache;
+    const empty = emptyState();
+    setTenantStateCache(tid, empty);
+    return empty;
   }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as AttackLearningState;
-    stateCache = { ...emptyState(), ...parsed, version: 1 };
-    return stateCache;
+    const state = { ...emptyState(), ...parsed, version: 1 as const };
+    setTenantStateCache(tid, state);
+    return state;
   } catch {
-    stateCache = emptyState();
-    return stateCache;
+    const empty = emptyState();
+    setTenantStateCache(tid, empty);
+    return empty;
   }
 }
 
 /** Load from PostgreSQL shared store (call at bootstrap when GUARDIAN_AUDIT_SYNC_ENABLED). */
-export async function loadAttackLearningFromSharedStore(): Promise<void> {
+export async function loadAttackLearningFromSharedStore(tenantId?: string): Promise<void> {
   if (!sharedStore?.getAttackLearningState) return;
+  const tid = attackLearningTenantId(tenantId);
   try {
-    const remote = await sharedStore.getAttackLearningState(attackLearningTenantId());
+    const remote = await sharedStore.getAttackLearningState(tid);
     if (!remote) return;
-    const local = loadAttackLearningState();
+    const local = loadAttackLearningState(tid);
     const remoteTs = Date.parse(remote.updatedAt || '0');
     const localTs = Date.parse(local.updatedAt || '0');
     if (remoteTs >= localTs) {
-      stateCache = { ...emptyState(), ...remote, version: 1 };
-      saveAttackLearningState(stateCache);
+      const merged = { ...emptyState(), ...remote, version: 1 as const };
+      setTenantStateCache(tid, merged);
+      saveAttackLearningState(merged, tid);
     }
-    Logger.info('[instant-learning] Loaded attack learning state from shared PostgreSQL store');
+    Logger.info(`[instant-learning] Loaded attack learning state from shared PostgreSQL store (tenant=${tid})`);
   } catch (err: unknown) {
     Logger.warn(
       `[instant-learning] Shared store load failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -158,13 +174,13 @@ export async function loadAttackLearningFromSharedStore(): Promise<void> {
   }
 }
 
-export function saveAttackLearningState(state: AttackLearningState): void {
+export function saveAttackLearningState(state: AttackLearningState, tenantId?: string): void {
   state.updatedAt = new Date().toISOString();
-  stateCache = state;
-  const tenantId = attackLearningTenantId();
+  const tid = attackLearningTenantId(tenantId);
+  setTenantStateCache(tid, state);
   if (sharedStore?.persistAttackLearningState) {
     try {
-      const p = sharedStore.persistAttackLearningState(state, tenantId);
+      const p = sharedStore.persistAttackLearningState(state, tid);
       if (p && typeof (p as Promise<void>).catch === 'function') {
         void (p as Promise<void>).catch((err: unknown) => {
           Logger.debug(
@@ -179,7 +195,7 @@ export function saveAttackLearningState(state: AttackLearningState): void {
     }
   }
   try {
-    const path = resolveAttackLearningStatePath();
+    const path = resolveAttackLearningStatePath(tid);
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(path, JSON.stringify(state, null, 2));
@@ -230,8 +246,12 @@ function toProxyRecords(blocks: RecentBlock[]): ProxyCallRecord[] {
   }));
 }
 
-function mergePendingSuggestion(suggestion: AttackPatternSuggestion, confidenceBoost = 0): boolean {
-  const path = resolveAiPendingSuggestionsPath();
+function mergePendingSuggestion(
+  suggestion: AttackPatternSuggestion,
+  confidenceBoost = 0,
+  tenantId?: string,
+): boolean {
+  const path = resolveAiPendingSuggestionsPath(tenantId);
   const dir = dirname(path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
@@ -296,6 +316,7 @@ async function maybeRunInstantLlm(
   if (now - lastLlmInstantAt < llmRateLimitMs()) return 0;
   lastLlmInstantAt = now;
 
+  const tid = attackLearningTenantId(event.tenantId);
   const assistant = new LlmAssistant();
   const systemPrompt =
     'Classify MCP tool-call blocks. Reply ONLY JSON: {"attackClass":"...","confidence":0.0-1.0}';
@@ -313,9 +334,9 @@ async function maybeRunInstantLlm(
     const parsed = JSON.parse(result.text) as { attackClass?: string; confidence?: number };
     const cls = parsed.attackClass || attackClass;
     const conf = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5;
-    const state = loadAttackLearningState();
+    const state = loadAttackLearningState(tid);
     state.knownClassConfidence[cls] = Math.max(state.knownClassConfidence[cls] || 0, conf);
-    saveAttackLearningState(state);
+    saveAttackLearningState(state, tid);
     return conf > 0.7 ? 0.05 : 0;
   } catch {
     Logger.debug('[instant-learning] LLM classifier returned non-JSON');
@@ -343,8 +364,9 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
     return { queued: false, windowCount: 0 };
   }
 
+  const tid = attackLearningTenantId(event.tenantId);
   const now = Date.now();
-  const state = loadAttackLearningState();
+  const state = loadAttackLearningState(tid);
   state.totalEvents += 1;
 
   const groupKey = attackGroupKey(event.block_rule, event.toolName);
@@ -375,7 +397,7 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
   });
 
   pruneWindow(state, now);
-  saveAttackLearningState(state);
+  saveAttackLearningState(state, tid);
 
   const windowBlocks = blocksInWindow(state, event.block_rule, event.toolName);
   const minBlocks = attackMinBlocks();
@@ -383,7 +405,7 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
   let outcome = 'stats_only';
 
   const confidenceBoost = bumpKnownClassConfidence(state, event.block_rule);
-  saveAttackLearningState(state);
+  saveAttackLearningState(state, tid);
 
   if (windowBlocks.length >= minBlocks && !state.queuedSuggestionKeys.includes(groupKey)) {
     const suggestion = suggestFromBlockedGroup(
@@ -392,13 +414,13 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
       toProxyRecords(windowBlocks),
     );
     if (suggestion) {
-      queued = mergePendingSuggestion(suggestion, confidenceBoost);
+      queued = mergePendingSuggestion(suggestion, confidenceBoost, tid);
       if (queued) {
         state.queuedSuggestionKeys.push(groupKey);
         if (state.queuedSuggestionKeys.length > 200) {
           state.queuedSuggestionKeys = state.queuedSuggestionKeys.slice(-100);
         }
-        saveAttackLearningState(state);
+        saveAttackLearningState(state, tid);
         outcome = 'suggestion_queued';
         Logger.info(
           `[instant-learning] Queued attack suggestion ${suggestion.rule.name} after ${windowBlocks.length} blocks (${groupKey})`,
@@ -438,7 +460,7 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
 
 /** @internal Test reset */
 export function resetInstantAttackLearningState(): void {
-  stateCache = null;
+  stateCacheByTenant = new Map();
   lastLlmInstantAt = 0;
   suggestionCounter = 0;
   sharedStore = null;

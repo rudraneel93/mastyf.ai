@@ -10,6 +10,8 @@ import {
   DashboardAuth,
   SESSION_COOKIE_NAME,
 } from '../auth/dashboard-auth.js';
+import { resolveTenantContext, InvalidTenantIdError, isMultiTenantModeEnabled } from '../tenant/resolve-tenant.js';
+import { tenantRateLimitKey } from './redis-rate-limiter.js';
 import { Registry } from 'prom-client';
 import { WsBroadcaster } from '../dashboard/ws-broadcaster.js';
 import { setWsBroadcaster } from './dashboard-events.js';
@@ -229,7 +231,7 @@ export async function startDashboardServer(
     return Number.isFinite(n) && n > 0 ? n : 120;
   };
 
-  async function checkDashboardApiRateLimit(ip: string): Promise<boolean> {
+  async function checkDashboardApiRateLimit(ip: string, tenantId: string): Promise<boolean> {
     const limit = dashboardApiRateLimit();
     const key = `dashboard-api:${ip}`;
     try {
@@ -237,15 +239,16 @@ export async function startDashboardServer(
       if (isRedisConfigured()) {
         const { getSharedRedisRateLimiter } = await import('./redis-rate-limiter.js');
         const rl = getSharedRedisRateLimiter();
-        const { allowed } = await rl.checkAndIncrement(key, limit);
+        const { allowed } = await rl.checkAndIncrement(key, limit, 60000, tenantId);
         return allowed;
       }
     } catch {
       /* fall back to in-process limiter */
     }
-    const attempts = apiRateLimiter.get(ip) ?? 0;
+    const scopedKey = tenantRateLimitKey(tenantId, ip);
+    const attempts = apiRateLimiter.get(scopedKey) ?? 0;
     if (attempts >= limit) return false;
-    apiRateLimiter.set(ip, attempts + 1);
+    apiRateLimiter.set(scopedKey, attempts + 1);
     return true;
   }
 
@@ -270,12 +273,26 @@ export async function startDashboardServer(
       applyCors(req, res);
       res.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-ID, X-CSRF-Token',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-Id, X-Guardian-Tenant, X-CSRF-Token',
       });
       res.end(); return;
     }
 
     const setCors = () => applyCors(req, res);
+
+    let requestTenantId = process.env['GUARDIAN_TENANT_ID'] || 'default';
+    try {
+      requestTenantId = resolveTenantContext({
+        headers: req.headers as Record<string, string | string[] | undefined>,
+      }).tenantId;
+    } catch (err) {
+      if (err instanceof InvalidTenantIdError) {
+        setCors();
+        writeJson(res, 400, { error: err.message });
+        return;
+      }
+      throw err;
+    }
 
     try {
       if (url === '/api/auth/csrf' && method === 'GET') {
@@ -308,9 +325,10 @@ export async function startDashboardServer(
       if (url === '/api/login' && method === 'POST') {
         setCors();
         const ip = getClientIp(req);
-        const attempts = loginRateLimiter.get(ip) ?? 0;
+        const scopedLoginKey = tenantRateLimitKey(requestTenantId, ip);
+        const attempts = loginRateLimiter.get(scopedLoginKey) ?? 0;
         if (attempts >= 5) { writeJson(res, 429, { error: 'Too many login attempts' }); return; }
-        loginRateLimiter.set(ip, attempts + 1);
+        loginRateLimiter.set(scopedLoginKey, attempts + 1);
         const contentType = req.headers['content-type'] || '';
         let body: Record<string, string>;
         if (contentType.includes('application/x-www-form-urlencoded')) body = await readFormBody(req);
@@ -338,7 +356,7 @@ export async function startDashboardServer(
         });
 
         if (result.success) {
-          loginRateLimiter.delete(ip);
+          loginRateLimiter.delete(scopedLoginKey);
           const newCsrf = auth.issueCsrfToken();
           const setCookies = [
             auth.sessionSetCookieHeader(result.token!),
@@ -389,7 +407,7 @@ export async function startDashboardServer(
         && url !== '/api/login'
         && url !== '/api/auth/csrf'
       ) {
-        const apiAllowed = await checkDashboardApiRateLimit(getClientIp(req));
+        const apiAllowed = await checkDashboardApiRateLimit(getClientIp(req), requestTenantId);
         if (!apiAllowed) {
           setCors();
           writeJson(res, 429, { error: 'Too many API requests' });
@@ -410,8 +428,13 @@ export async function startDashboardServer(
 
       if (url === '/api/admin/tenant' && method === 'GET') {
         setCors();
+        const tenantCtx = resolveTenantContext({
+          headers: req.headers as Record<string, string | string[] | undefined>,
+        });
         writeJson(res, 200, {
-          tenantId: process.env['GUARDIAN_TENANT_ID'] || 'default',
+          tenantId: tenantCtx.tenantId,
+          tenantSource: tenantCtx.source,
+          multiTenantMode: isMultiTenantModeEnabled(),
           policyPath: process.env['GUARDIAN_POLICY_PATH'] || process.env['MCP_GUARDIAN_POLICY_PATH'] || 'default-policy.yaml',
         });
         return;
@@ -557,8 +580,8 @@ export async function startDashboardServer(
         try {
           const db = runtimeHistoryDb;
           if (!db) { writeJson(res, 200, { totalInstances: 1, activeInstances: 1, totalRequests: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db);
-          const records = await loadAllCallRecords(db, srvs);
+          const srvs = await getAllActiveServerNames(db, requestTenantId);
+          const records = await loadAllCallRecords(db, srvs, requestTenantId);
           const sum = summarizeRecords(records);
           const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
           const passRate = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : 100;
@@ -576,8 +599,8 @@ export async function startDashboardServer(
         setCors();
         try {
           const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db);
-          const records = await loadAllCallRecords(db, srvs);
+          const srvs = await getAllActiveServerNames(db, requestTenantId);
+          const records = await loadAllCallRecords(db, srvs, requestTenantId);
           const sorted = [...records].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
           const evts = sorted.slice(0, 50).map((r) => ({
             timestamp: r.timestamp, server_name: r.serverName, tool_name: r.toolName,
@@ -594,9 +617,9 @@ export async function startDashboardServer(
         setCors();
         try {
           const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], overallScore: 0, worstOffenders: [], activeThreats: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db); const reps: any[] = []; let ts = 0; let activeThreats = 0; let lastScan = 'N/A';
+          const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let ts = 0; let activeThreats = 0; let lastScan = 'N/A';
           for (const srv of srvs) {
-            const sc = await db.getLatestSecurityScan(srv);
+            const sc = await db.getLatestSecurityScan(srv, requestTenantId);
             if (sc) {
               const row = securityRowFromScan(sc as Record<string, unknown>, srv);
               reps.push(row); ts += row.score; activeThreats += row.critical + row.high;
@@ -612,11 +635,11 @@ export async function startDashboardServer(
         setCors();
         try {
           const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], totalCost: 0, projectedMonthly: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db); const reps: any[] = []; let totalCost = 0;
+          const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let totalCost = 0;
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
-            const recs = await db.getCallRecordsForServer(srv);
+            const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
             const sum = summarizeRecords(recs);
             reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(recs), unpriced: sum.unpricedCalls });
             totalCost += sum.costUsd;
@@ -632,16 +655,16 @@ export async function startDashboardServer(
         setCors();
         try {
           const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { serverReports: [], atRisk: [], avgLatency: 0 }); return; }
-          const srvs = await getAllActiveServerNames(db); const reps: any[] = []; let totalTools = 0; let latSum = 0; let latCount = 0;
+          const srvs = await getAllActiveServerNames(db, requestTenantId); const reps: any[] = []; let totalTools = 0; let latSum = 0; let latCount = 0;
           const cbStates = await fetchCircuitBreakerStates();
           for (const srv of srvs) {
-            const recs = await db.getCallRecordsForServer(srv);
+            const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
             const callLat = recs.length > 0 ? Math.round(recs.reduce((s: number, r: any) => s + (r.durationMs || 0), 0) / recs.length) : 0;
-            const sr = await db.getRecentSuccessRate(srv);
+            const sr = await db.getRecentSuccessRate(srv, requestTenantId);
             let latency = callLat;
             let tools = 0;
             if (typeof db.getLatestHealthCheck === 'function') {
-              const hc = await db.getLatestHealthCheck(srv);
+              const hc = await db.getLatestHealthCheck(srv, requestTenantId);
               if (hc) {
                 latency = hc.latency_ms ?? hc.latencyMs ?? callLat;
                 tools = hc.tool_count ?? hc.toolCount ?? 0;
@@ -663,8 +686,8 @@ export async function startDashboardServer(
           const db = runtimeHistoryDb;
           let sum = { total: 0, blocked: 0, costUsd: 0, totalLatency: 0 };
           if (db) {
-            const srvs = await getAllActiveServerNames(db);
-            const records = await loadAllCallRecords(db, srvs);
+            const srvs = await getAllActiveServerNames(db, requestTenantId);
+            const records = await loadAllCallRecords(db, srvs, requestTenantId);
             sum = summarizeRecords(records);
           }
           const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;

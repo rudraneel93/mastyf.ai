@@ -5,11 +5,11 @@ import type { IDatabase } from '../database/database-interface.js';
 import type { ProxyCallRecord } from '../types.js';
 import type { SecurityReport } from '../types.js';
 
-export async function getAllActiveServerNames(db: IDatabase): Promise<string[]> {
-  if ('getDistinctActiveServers' in db && typeof (db as { getDistinctActiveServers?: () => Promise<string[]> }).getDistinctActiveServers === 'function') {
-    return (db as { getDistinctActiveServers: () => Promise<string[]> }).getDistinctActiveServers();
+export async function getAllActiveServerNames(db: IDatabase, tenantId?: string): Promise<string[]> {
+  if ('getDistinctActiveServers' in db && typeof (db as { getDistinctActiveServers?: (tid?: string) => Promise<string[]> }).getDistinctActiveServers === 'function') {
+    return (db as { getDistinctActiveServers: (tid?: string) => Promise<string[]> }).getDistinctActiveServers(tenantId);
   }
-  return db.getDistinctScannedServers();
+  return db.getDistinctScannedServers(tenantId);
 }
 
 export function parseSecurityScanDetails(scan: unknown): SecurityReport | null {
@@ -71,10 +71,14 @@ export function summarizeRecords(records: ProxyCallRecord[]): {
   };
 }
 
-export async function loadAllCallRecords(db: IDatabase, servers: string[]): Promise<ProxyCallRecord[]> {
+export async function loadAllCallRecords(
+  db: IDatabase,
+  servers: string[],
+  tenantId?: string,
+): Promise<ProxyCallRecord[]> {
   const all: ProxyCallRecord[] = [];
   for (const srv of servers) {
-    all.push(...(await db.getCallRecordsForServer(srv)));
+    all.push(...(await db.getCallRecordsForServer(srv, undefined, tenantId)));
   }
   return all;
 }

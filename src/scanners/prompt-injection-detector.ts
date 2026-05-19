@@ -1,7 +1,14 @@
 /**
- * Prompt Injection Detector — production-grade response inspection.
+ * Prompt Injection Detector — request arguments and response inspection.
  *
- * Detects adversarial content in MCP tool RESPONSES that attempts to:
+ * **Request path:** `scanToolCallArguments()` walks every string leaf in tool call
+ * `arguments` (any key, nested objects/arrays) and runs the full regex rule set
+ * (critical, high, medium).
+ *
+ * **Response path:** `detectPromptInjection()` scans upstream tool responses (proxy
+ * response pipeline; unchanged).
+ *
+ * Detects adversarial content that attempts to:
  *   - Hijack the AI agent's behavior (jailbreak, role override, persona change)
  *   - Steal credentials or sensitive data (API keys, tokens, passwords)
  *   - Exfiltrate data to external URLs (curl, wget, fetch, pipes)
@@ -10,8 +17,8 @@
  *   - Evade detection (Unicode homoglyphs, zero-width characters, base64)
  *   - Abuse tool chaining (instruct AI to call execute_command, bash, etc.)
  *
- * Wired into proxy-server.ts response handling pipeline.
  */
+import { walkStringLeaves } from '../policy/arg-leaf-walker.js';
 import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
 import { DEFAULT_TRUSTED_EXFIL_DOMAINS, isTrustedDomainSquat } from '../utils/registrable-domain.js';
 
@@ -55,6 +62,12 @@ const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:developer mode|DAN mode|jailbreak|bypass (?:safety|filter|restriction|guardrail|content policy|moderation)|turn off (?:safety|filter|restrictions?|guardrails?|content moderation))' },
   { id: 'evil-mode', severity: 'critical', description: 'Evil/opposite persona jailbreak',
     regex: '(?:evil (?:mode|twin|version|clone|persona)|opposite mode|dark (?:mode|version|side)|unleash(?:ed)? (?:mode|version))' },
+  { id: 'safety-filters-off', severity: 'critical', description: 'Explicit safety filter disable',
+    regex: '(?:turn off|disable|deactivate)\\s+(?:all\\s+)?(?:safety|content)\\s+(?:filters?|moderation|guardrails?|restrictions?)' },
+  { id: 'safety-filters-off-v2', severity: 'critical', description: 'Safety filters disabled phrasing',
+    regex: 'safety\\s+filters?\\s+(?:off|disabled)' },
+  { id: 'inverse-instructions', severity: 'critical', description: 'Inverse/opposite instruction jailbreak',
+    regex: '(?:inverse|opposite)\\s+(?:mode\\s*[:;]?\\s*)?(?:of\\s+)?(?:your\\s+)?instructions' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 4: Data Exfiltration — CRITICAL
@@ -130,11 +143,11 @@ const INJECTION_RULES: InjectionPattern[] = [
   { id: 'unicode-homoglyph', severity: 'medium', description: 'Unicode homoglyph / invisible characters',
     regex: '[\\u200B-\\u200F\\u00AD\\uFEFF\\u202A-\\u202E\\u2060-\\u2064\\u061C\\u180E\\u034F\\u17B4\\u17B5]' },
   { id: 'base64-obfuscation', severity: 'medium', description: 'Base64-encoded hidden instruction (40+ chars)',
-    regex: '(?:echo |printf |\\b)(?:[A-Za-z0-9+/]{40,}={0,2})(?:\\s*\\||\\s*>|\\s*&&|\\s*;|\\s*$)' },
+    regex: '(?:echo |printf |cat |base64 ).{0,40}[A-Za-z0-9+/]{40,}={0,2}(?:\\s*\\||\\s*>|\\s*&&|\\s*;|\\s*$)' },
   { id: 'hex-escape-injection', severity: 'medium', description: 'Hex-escaped injection string',
     regex: '(?:\\\\x[0-9a-fA-F]{2}){8,}' },
   { id: 'rot13-obfuscation', severity: 'medium', description: 'Likely ROT13/ROT-encoded instruction (gibberish word patterns)',
-    regex: '\\b(?:vtabjre|qri|whfg|abj|guvf|gung|lbh|ner|gur|sbe|jvgu|sebz|unir|jvyy|pna|qba\'?g|zr|jvgu|vf|vg|va|ba|ng|gb|ol|na|nf|ab|fb|vs|be|hc|bhg)\\b' },
+    regex: '\\b(?:vtabjre|juvfg|guvf|gung|lbh|ner|gur|sbe|jvgu|sebz|unir|jvyy|qba\'?g|bhg|zlfg|cebwrpg|qvpr)\\b' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 11: Social Engineering — MEDIUM
@@ -169,15 +182,46 @@ function getPatterns(): Array<{ id: string; severity: 'critical' | 'high' | 'med
   return compiledPatterns;
 }
 
-export function detectPromptInjection(
-  toolName: string,
-  responseBody: string,
+export interface ScanToolCallArgumentsOptions {
+  /** When true, only critical-severity patterns (legacy semantic-guards behavior). */
+  criticalOnly?: boolean;
+}
+
+/**
+ * Scan all string leaves in tool call arguments with the full injection rule set.
+ */
+export function scanToolCallArguments(
+  args: Record<string, unknown> | undefined,
+  options?: ScanToolCallArgumentsOptions,
 ): InjectionFinding[] {
+  if (!args || typeof args !== 'object') return [];
+
   const findings: InjectionFinding[] = [];
   const seen = new Set<string>();
-  const decodedBody = deobfuscateRecursive(responseBody);
+
+  for (const { value } of walkStringLeaves(args)) {
+    if (!value.trim()) continue;
+    const decoded = deobfuscateRecursive(value);
+    for (const finding of matchInjectionPatterns(decoded, seen, options?.criticalOnly)) {
+      const dedup = `${finding.patternId}:${finding.matchPreview}`;
+      if (seen.has(dedup)) continue;
+      seen.add(dedup);
+      findings.push(finding);
+    }
+  }
+
+  return findings;
+}
+
+function matchInjectionPatterns(
+  decodedBody: string,
+  seen: Set<string>,
+  criticalOnly = false,
+): InjectionFinding[] {
+  const findings: InjectionFinding[] = [];
 
   for (const pattern of getPatterns()) {
+    if (criticalOnly && pattern.severity !== 'critical') continue;
     // Reset lastIndex for global regex
     if (pattern.regex.global) pattern.regex.lastIndex = 0;
 
@@ -210,12 +254,21 @@ export function detectPromptInjection(
     const preview = decodedBody.slice(start, end).replace(/\n/g, ' ').replace(/\s+/g, ' ');
 
     findings.push({
-      severity:     pattern.severity,
-      patternId:    pattern.id,
-      description:  pattern.description,
+      severity: pattern.severity,
+      patternId: pattern.id,
+      description: pattern.description,
       matchPreview: `...${preview.slice(0, 100)}...`,
     });
   }
 
   return findings;
+}
+
+export function detectPromptInjection(
+  _toolName: string,
+  responseBody: string,
+): InjectionFinding[] {
+  const seen = new Set<string>();
+  const decodedBody = deobfuscateRecursive(responseBody);
+  return matchInjectionPatterns(decodedBody, seen, false);
 }

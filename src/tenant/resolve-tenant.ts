@@ -1,21 +1,139 @@
-export function resolveTenantId(sources?: {
+import { existsSync } from 'fs';
+
+export const DEFAULT_TENANT_ID = 'default';
+export const MAX_TENANT_ID_LENGTH = 64;
+
+/** Alphanumeric + hyphen; must start/end with alphanumeric. */
+const TENANT_ID_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,62}[a-zA-Z0-9])?$/;
+
+export type TenantContext = {
+  tenantId: string;
+  source: 'env' | 'header';
+};
+
+export class InvalidTenantIdError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidTenantIdError';
+  }
+}
+
+/** Validate and normalize a tenant identifier (rejects empty, path traversal, invalid chars). */
+export function validateTenantId(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new InvalidTenantIdError('Tenant id must not be empty');
+  }
+  if (trimmed.includes('..') || trimmed.includes('/') || trimmed.includes('\\')) {
+    throw new InvalidTenantIdError('Tenant id must not contain path traversal sequences');
+  }
+  if (trimmed.length > MAX_TENANT_ID_LENGTH) {
+    throw new InvalidTenantIdError(`Tenant id exceeds max length of ${MAX_TENANT_ID_LENGTH}`);
+  }
+  if (!TENANT_ID_PATTERN.test(trimmed)) {
+    throw new InvalidTenantIdError(
+      'Tenant id must be alphanumeric with optional internal hyphens',
+    );
+  }
+  return trimmed;
+}
+
+/** Extract tenant from HTTP headers (case-insensitive keys). */
+export function extractTenantHeader(
+  headers?: Record<string, string | string[] | undefined>,
+): string | undefined {
+  if (!headers) return undefined;
+  const normalized = Object.fromEntries(
+    Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]),
+  );
+  for (const key of ['x-guardian-tenant', 'x-tenant-id']) {
+    const val = normalized[key];
+    if (typeof val === 'string' && val.trim()) return val.trim();
+    if (Array.isArray(val) && val[0]) return String(val[0]).trim();
+  }
+  return undefined;
+}
+
+export function resolveTenantContext(sources?: {
   header?: string | string[] | undefined;
+  headers?: Record<string, string | string[] | undefined>;
   meta?: unknown;
-}): string {
-  const header = sources?.header;
-  if (typeof header === 'string' && header.trim()) return header.trim();
-  if (Array.isArray(header) && header[0]) return String(header[0]).trim();
+}): TenantContext {
+  let fromRequest: string | undefined;
+  if (sources?.header) {
+    fromRequest = Array.isArray(sources.header) ? sources.header[0] : sources.header;
+  } else if (sources?.headers) {
+    fromRequest = extractTenantHeader(sources.headers);
+  }
 
   const meta = sources?.meta as Record<string, unknown> | undefined;
-  if (meta?.tenantId && typeof meta.tenantId === 'string') return meta.tenantId;
+  if (!fromRequest && meta?.tenantId && typeof meta.tenantId === 'string') {
+    fromRequest = meta.tenantId;
+  }
 
-  return process.env['GUARDIAN_TENANT_ID'] || 'default';
+  if (fromRequest?.trim()) {
+    return { tenantId: validateTenantId(fromRequest), source: 'header' };
+  }
+
+  const envRaw = process.env['GUARDIAN_TENANT_ID'] || DEFAULT_TENANT_ID;
+  try {
+    return { tenantId: validateTenantId(envRaw), source: 'env' };
+  } catch {
+    return { tenantId: DEFAULT_TENANT_ID, source: 'env' };
+  }
+}
+
+/** Resolve tenant id — env default when no request-scoped source is present. */
+export function resolveTenantId(sources?: {
+  header?: string | string[] | undefined;
+  headers?: Record<string, string | string[] | undefined>;
+  meta?: unknown;
+}): string {
+  return resolveTenantContext(sources).tenantId;
+}
+
+/** CLI/batch jobs with no HTTP headers — uses GUARDIAN_TENANT_ID or `default`. */
+export function resolveTenantFromEnv(): string {
+  return resolveTenantId();
+}
+
+/**
+ * Resolve tenant for CLI batch scans. Prefers `--tenant`, then GUARDIAN_TENANT_ID.
+ * When GUARDIAN_MULTI_TENANT_ENABLED=true, requires an explicit tenant via flag or env.
+ */
+export function resolveCliTenantId(opts?: { tenant?: string }): string {
+  const fromFlag = opts?.tenant?.trim();
+  if (fromFlag) {
+    return validateTenantId(fromFlag);
+  }
+  const envSet = Boolean(process.env['GUARDIAN_TENANT_ID']?.trim());
+  if (isMultiTenantModeEnabled() && !envSet) {
+    throw new InvalidTenantIdError(
+      'Multi-tenant mode requires --tenant <id> or GUARDIAN_TENANT_ID for batch scans',
+    );
+  }
+  return resolveTenantFromEnv();
+}
+
+/** Prefix Redis/in-process rate-limit keys with tenant namespace. */
+export function tenantRateLimitKey(tenantId: string, key: string): string {
+  const tid = tenantId?.trim() || DEFAULT_TENANT_ID;
+  return `tenant:${tid}:${key}`;
+}
+
+/** Whether multi-tenant header routing is enabled (shared gateway mode). */
+export function isMultiTenantModeEnabled(): boolean {
+  return process.env['GUARDIAN_MULTI_TENANT_ENABLED'] === 'true';
 }
 
 export function resolveTenantPolicyPath(tenantId: string, baseDir?: string): string {
   const root = baseDir || process.env['GUARDIAN_POLICY_ROOT'] || '.';
-  if (tenantId === 'default') {
+  if (tenantId === DEFAULT_TENANT_ID) {
     return process.env['GUARDIAN_POLICY_PATH'] || `${root}/default-policy.yaml`;
   }
-  return `${root}/policies/${tenantId}/policy.yaml`;
+  const templatePath = `${root}/policy-templates/tenants/${tenantId}/policy.yaml`;
+  const legacyPath = `${root}/policies/${tenantId}/policy.yaml`;
+  if (existsSync(templatePath)) return templatePath;
+  if (existsSync(legacyPath)) return legacyPath;
+  return templatePath;
 }
