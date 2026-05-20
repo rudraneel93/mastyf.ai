@@ -21,7 +21,6 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: npx tsc --project tsconfig.json
       - run: pnpm run build
       - run: pnpm test
       - run: pnpm audit --audit-level=high

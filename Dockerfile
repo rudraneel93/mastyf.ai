@@ -1,5 +1,5 @@
 # Pinned digest for reproducible builds (see docs/SUPPLY_CHAIN.md)
-FROM node:20-alpine@sha256:2bfb33e7cde99c9ec8e73e81b4ecc9a9d936ca7e2c5c36efde62e94f96b0ed38 AS builder
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS builder
 WORKDIR /app
 
 COPY . .
@@ -9,12 +9,14 @@ RUN corepack enable && pnpm install --frozen-lockfile
 # Verify better-sqlite3 native prebuild (onlyBuiltDependencies in package.json)
 RUN node -e "require('better-sqlite3'); console.log('better-sqlite3 prebuild OK')"
 
+RUN pnpm --filter @mcp-guardian/plugin-sdk run build
+
 RUN cd packages/core && pnpm build
 RUN cd packages/server && pnpm build
 RUN npx tsc --project tsconfig.json
 RUN cd packages/cli && pnpm build
 
-FROM node:20-alpine@sha256:2bfb33e7cde99c9ec8e73e81b4ecc9a9d936ca7e2c5c36efde62e94f96b0ed38
+FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 RUN apk add --no-cache curl su-exec
 WORKDIR /app

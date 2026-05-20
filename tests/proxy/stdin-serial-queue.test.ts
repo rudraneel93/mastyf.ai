@@ -2,8 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { McpProxyServer } from '../../src/proxy/proxy-server.js';
 import { HistoryDatabase } from '../../src/database/history-db.js';
 
-describe('McpProxyServer stdin serial queue', () => {
-  it('serializes rapid handleClientInput so currentRequestId is not raced', async () => {
+describe('McpProxyServer stdin RequestIdLock', () => {
+  // McpProxyServer uses RequestIdLock (not global AsyncSerialQueue): same MCP id
+  // serializes; distinct ids may overlap by design — see adversarial-harness analysis.
+
+  it('serializes same request id so currentRequestId is not raced', async () => {
     const db = new HistoryDatabase(':memory:');
     const proxy = new McpProxyServer(
       'node',
@@ -32,15 +35,61 @@ describe('McpProxyServer stdin serial queue', () => {
         params: { name: 'echo', arguments: { n: id } },
       });
 
+    const sameId = 'dup';
+    await Promise.all([
+      proxy.handleClientInput(mkCall(sameId)),
+      proxy.handleClientInput(mkCall(sameId)),
+      proxy.handleClientInput(mkCall(sameId)),
+    ]);
+
+    expect(order).toEqual([
+      'start', sameId, 'end', sameId,
+      'start', sameId, 'end', sameId,
+      'start', sameId, 'end', sameId,
+    ]);
+
+    proxy.kill();
+    vi.restoreAllMocks();
+  });
+
+  it('allows concurrent handleClientInput for distinct request ids', async () => {
+    const db = new HistoryDatabase(':memory:');
+    const proxy = new McpProxyServer(
+      'node',
+      ['-e', 'process.stdin.resume()'],
+      { PATH: process.env.PATH || '' },
+      db,
+      'parallel-test',
+    );
+
+    const order: string[] = [];
+    vi.spyOn(proxy as any, 'processClientInput').mockImplementation(async (raw: string) => {
+      const msg = JSON.parse(raw);
+      if (msg.method === 'tools/call' && msg.id) {
+        order.push(`start:${msg.id}`);
+        await new Promise((r) => setTimeout(r, 40));
+        order.push(`end:${msg.id}`);
+      }
+    });
+
+    const mkCall = (id: string) =>
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id,
+        method: 'tools/call',
+        params: { name: 'echo', arguments: { n: id } },
+      });
+
     await Promise.all([
       proxy.handleClientInput(mkCall('a')),
       proxy.handleClientInput(mkCall('b')),
       proxy.handleClientInput(mkCall('c')),
     ]);
 
-    const ends = order.filter((x) => x === 'end');
-    expect(ends.length).toBe(3);
-    expect(order).toEqual(['start', 'a', 'end', 'a', 'start', 'b', 'end', 'b', 'start', 'c', 'end', 'c']);
+    expect(order.filter((x) => x.startsWith('start:'))).toHaveLength(3);
+    expect(order.filter((x) => x.startsWith('end:'))).toHaveLength(3);
+    // Overlap: distinct ids run in parallel (all starts before any end).
+    expect(order.indexOf('end:a')).toBeGreaterThan(order.indexOf('start:b'));
 
     proxy.kill();
     vi.restoreAllMocks();

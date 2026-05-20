@@ -143,7 +143,7 @@ describe('PolicyEngine', () => {
           {
             name: 'only-safe-tools',
             action: 'block',
-            tools: { allow: ['read_file', 'search_repositories'] },
+            tools: { allow: ['read_file', 'search_repositories'], enforceAllowlist: true },
           },
         ],
       },

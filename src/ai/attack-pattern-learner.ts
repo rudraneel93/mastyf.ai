@@ -102,7 +102,6 @@ export function suggestFromBlockedGroup(
   if (argPatterns.length > 0) {
     const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
     const confidence = Math.min(0.5 + recs.length * 0.08, 0.95);
-    if (confidence < attackMinConfidence()) return null;
     return {
       rule: {
         name: `attack-learned-${slug}`,
@@ -118,7 +117,6 @@ export function suggestFromBlockedGroup(
 
   const slug = `${blockRule}-${toolName}`.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 48);
   const confidence = Math.min(0.45 + recs.length * 0.07, 0.88);
-  if (confidence < attackMinConfidence()) return null;
   return {
     rule: {
       name: `attack-learned-deny-${slug}`,

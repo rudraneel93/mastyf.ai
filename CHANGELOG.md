@@ -91,6 +91,28 @@ All notable changes to MCP Guardian will be documented in this file.
 | `GUARDIAN_LEGACY_NO_DPOP` | `false` | Disable DPoP requirement for legacy clients |
 | `GUARDIAN_SPIFFE_SOCKET_PATH` | — | SPIFFE Workload API Unix socket |
 
+## [2.9.0] - 2026-05-20
+
+Release focused on adversarial harness CI evidence, README evidence layers, and enterprise attack-simulation reporting.
+
+### Added
+- **Adversarial harness (CI-gated)** — `adversarial-harness/run-all.sh`, corpus + evasion bundles, Node live stdio proxy tests, Python policy mirror; reports under [`reports/adversarial-harness/`](reports/adversarial-harness/).
+- **README evidence layers** — four-layer table (repo eval, adversarial harness, enterprise 5-scenario sim, 180-min SCA) with honest synthetic vs primary labeling.
+- **Enterprise attack-simulation package** — five-scenario sim, dashboards, and analysis under [`reports/enterprise-attack-sim/`](reports/enterprise-attack-sim/).
+
+### Metrics (from [`reports/adversarial-harness/summary.md`](reports/adversarial-harness/summary.md), 2026-05-20)
+- **154/154** corpus attacks blocked; **74/74** benign pass; **0** false positives.
+- **84/85** evasion blocked; **1** bypass (**adv-066** — base64-in-`search` documented in harness analysis).
+- **26/26** Node integration tests; **400/402** (99.5%) Python/TS parity; **0** corpus parity mismatches.
+
+### Fixed
+- **Attack-learning auto-apply** — `attackMinConfidence()` enforced in `SuggestionEngine` auto-apply path (not at pattern suggestion time); restores high-confidence learned rules without dropping sub-threshold suggestions prematurely.
+- **Policy allowlist test** — `enforceAllowlist: true` on tools allow fixture so block semantics match production policy.
+- **Stdio proxy tests** — aligned with `RequestIdLock` (same id serialized, distinct ids may overlap); renamed suite and added parallel-id coverage.
+
+### Changed
+- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.9.0** with root.
+
 ## [2.8.6] - 2026-05-20
 
 Post-2.8.4 enterprise hardening, security fixes, and adversarial harness coverage.

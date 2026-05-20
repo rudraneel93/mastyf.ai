@@ -1,5 +1,5 @@
 import { DataCollector, GovernanceSnapshot, registerDataCollector, recordPolicyDecisionGlobal } from './data-collector.js';
-import { learnAttackPatterns } from './attack-pattern-learner.js';
+import { learnAttackPatterns, attackMinConfidence } from './attack-pattern-learner.js';
 import { BaselineLearner, AnomalySuggestion } from './baseline-learner.js';
 import { CostOptimizer, CostSuggestion } from './cost-optimizer.js';
 import { ThreatIntel, ThreatSuggestion } from './threat-intel.js';
@@ -210,7 +210,8 @@ export class SuggestionEngine {
     if (isAiAutoApplyEnabled() && !this.selfImprovement.isThresholdAdjustmentFrozen()) {
       const threshold = this.selfImprovement.getAdaptiveThreshold() || this.config.autoApplyThreshold;
       const toApply = allSuggestions.filter((s) => {
-        if (s.confidence < threshold) return false;
+        const minConfidence = s.source === 'attack' ? Math.max(threshold, attackMinConfidence()) : threshold;
+        if (s.confidence < minConfidence) return false;
         const patterns = s.rule.argPatterns?.join(' ') || '';
         if (wouldDisableDangerousBlocking(s.rule.name, patterns, true)) {
           Logger.warn(`[SuggestionEngine] Skipping auto-apply of dangerous unblock: ${s.rule.name}`);
