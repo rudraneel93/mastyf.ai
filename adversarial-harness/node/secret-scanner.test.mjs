@@ -12,9 +12,9 @@ describe('Adversarial harness: secret scanner', () => {
 
   const samples = [
     ['aws-key', 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE'],
-    ['aws-secret', 'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'],
-    ['github-pat', 'ghp_1234567890abcdefghijklmnopqrstuvwxyz12'],
-    ['github-fine', 'github_pat_11ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr'],
+    ['aws-secret', 'aws_secret_access_key="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'],
+    ['github-pat', `ghp_${'a'.repeat(36)}`],
+    ['github-fine', `github_pat_${'A'.repeat(82)}`],
     ['slack-token', ['xox', 'b-1234567890-1234567890-abcdefghijklmnopqrstuvwx'].join('')],
     ['stripe', `sk_live_${'0'.repeat(24)}`],
     ['openai', 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890ABCDEF'],

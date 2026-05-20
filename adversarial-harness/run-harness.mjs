@@ -93,7 +93,14 @@ const pyReport = loadJson(join(REPORT_DIR, 'python-eval.json'));
 const parityReport = loadJson(join(REPORT_DIR, 'parity-report.json'));
 const corpusReport = loadJson(join(__dir, '..', 'corpus-eval-report.json'));
 
-  const required = ['export-harness-rules', 'generate-custom-attacks', 'python-eval', 'node-corpus-eval', 'node-python-parity'];
+  const required = [
+    'export-harness-rules',
+    'generate-custom-attacks',
+    'python-eval',
+    'node-harness-tests',
+    'node-corpus-eval',
+    'node-python-parity',
+  ];
   const allOk = required.every((name) => steps.find((s) => s.label === name)?.ok);
 
 const md = `# Adversarial Harness Report

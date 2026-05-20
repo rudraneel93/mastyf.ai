@@ -32,7 +32,7 @@ pnpm exec vitest run adversarial-harness/node/*.test.mjs
 - Loads `exported/injection_rules.json` from TS `INJECTION_RULES` (same regex sources).
 - Mirrors evaluation order: `request-prompt-injection` → `semantic-guards` → `yaml-rules`.
 - Does **not** run DistilBERT ML or async session data-flow (use Node `evaluateAsync` for P2 features).
-- `scripts/compare-node-python.mjs` reports Node vs Python block decisions on all fixtures.
+- `scripts/compare-node-python.ts` reports Node vs Python block decisions on all fixtures.
 
 ## Reports
 
