@@ -25,6 +25,21 @@ export function getSecretRuleCount(): number {
   return SECRET_RULES.length;
 }
 
+function compileSecretRegex(pattern: string, flags: string): RegExp {
+  let regex = pattern;
+  let f = flags ?? '';
+  // Inline (?i:...) / (?s:...) groups are invalid alongside RegExp flags — hoist to flags.
+  if (regex.includes('(?i:')) {
+    regex = regex.replace(/\(\?i:/g, '(?:');
+    if (!f.includes('i')) f = `${f}i`;
+  }
+  if (regex.includes('(?s:')) {
+    regex = regex.replace(/\(\?s:/g, '(?:');
+    if (!f.includes('s')) f = `${f}s`;
+  }
+  return new RegExp(regex, f);
+}
+
 /** Compiled rules (regex pre-built at module load). */
 export function getRules(): CompiledRule[] {
   if (!compiledRules) {
@@ -32,7 +47,7 @@ export function getRules(): CompiledRule[] {
       id: r.id,
       provider: r.provider,
       severity: r.severity,
-      regex: new RegExp(r.regex, r.flags),
+      regex: compileSecretRegex(r.regex, r.flags),
       entropy: r.entropy,
       exclusions: r.falsePositiveExclusions?.map(e => new RegExp(e, 'i')),
     }));

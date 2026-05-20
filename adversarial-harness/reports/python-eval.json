@@ -1,0 +1,357 @@
+{
+  "timestamp": "2026-05-20T10:25:00.272643+00:00",
+  "engine": "python",
+  "policy": "/workspace/default-policy.yaml",
+  "totalEntries": 313,
+  "overall": {
+    "tp": 235,
+    "fp": 0,
+    "tn": 74,
+    "fn": 4,
+    "precision": 1.0,
+    "recall": 0.9832635983263598,
+    "f1": 0.9915611814345991
+  },
+  "byCategory": [
+    {
+      "category": "benign",
+      "total": 55,
+      "tp": 0,
+      "fp": 0,
+      "tn": 55,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "context-poison",
+      "total": 2,
+      "tp": 1,
+      "fp": 0,
+      "tn": 0,
+      "fn": 1,
+      "failures": [
+        "MISSED [custom-adversarial:fixtures/custom-attacks/adv-078.json] \u2192 pass (allowlist)"
+      ]
+    },
+    {
+      "category": "credential-exfil",
+      "total": 24,
+      "tp": 24,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "credential-theft",
+      "total": 3,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "cross-tool-chain",
+      "total": 16,
+      "tp": 16,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "default-deny",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "deny-github",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "deny-tool",
+      "total": 3,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "edge-cases",
+      "total": 22,
+      "tp": 5,
+      "fp": 0,
+      "tn": 17,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "evasion-encoding",
+      "total": 5,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 1,
+      "failures": [
+        "MISSED [custom-adversarial:fixtures/custom-attacks/adv-010.json] \u2192 pass (allowlist)"
+      ]
+    },
+    {
+      "category": "evasion-unicode",
+      "total": 3,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "evasion-zero-width",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "exfil-url",
+      "total": 3,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 1,
+      "failures": [
+        "MISSED [custom-adversarial:fixtures/custom-attacks/adv-053.json] \u2192 pass (allowlist)"
+      ]
+    },
+    {
+      "category": "indirect-exfil",
+      "total": 4,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "jailbreak",
+      "total": 5,
+      "tp": 5,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "ldap",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "multiline-pi",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "obfuscation",
+      "total": 2,
+      "tp": 1,
+      "fp": 0,
+      "tn": 0,
+      "fn": 1,
+      "failures": [
+        "MISSED [custom-adversarial:fixtures/custom-attacks/adv-067.json] \u2192 pass (allowlist)"
+      ]
+    },
+    {
+      "category": "path-evasion",
+      "total": 4,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "prompt-injection",
+      "total": 32,
+      "tp": 32,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "prompt-leak",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "reverse-shell",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "shell-evasion",
+      "total": 4,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "shell-obfuscation",
+      "total": 26,
+      "tp": 26,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "social",
+      "total": 3,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "sql-evasion",
+      "total": 6,
+      "tp": 6,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "sql-nosql",
+      "total": 27,
+      "tp": 27,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "ssrf-evasion",
+      "total": 6,
+      "tp": 6,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "ssrf-url",
+      "total": 26,
+      "tp": 24,
+      "fp": 0,
+      "tn": 2,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "ssti",
+      "total": 3,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "stacked-evasion",
+      "total": 5,
+      "tp": 5,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "synonym-evasion",
+      "total": 4,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "system-override",
+      "total": 2,
+      "tp": 2,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    },
+    {
+      "category": "tool-chain",
+      "total": 4,
+      "tp": 4,
+      "fp": 0,
+      "tn": 0,
+      "fn": 0,
+      "failures": []
+    }
+  ],
+  "suites": {
+    "corpus": {
+      "total": 228,
+      "tp": 154,
+      "fp": 0,
+      "tn": 74,
+      "fn": 0,
+      "passed": true
+    },
+    "custom-adversarial": {
+      "total": 85,
+      "tp": 81,
+      "fp": 0,
+      "tn": 0,
+      "fn": 4,
+      "passed": false
+    }
+  },
+  "failures": [
+    "MISSED [custom-adversarial:fixtures/custom-attacks/adv-010.json] \u2192 pass (allowlist)",
+    "MISSED [custom-adversarial:fixtures/custom-attacks/adv-053.json] \u2192 pass (allowlist)",
+    "MISSED [custom-adversarial:fixtures/custom-attacks/adv-067.json] \u2192 pass (allowlist)",
+    "MISSED [custom-adversarial:fixtures/custom-attacks/adv-078.json] \u2192 pass (allowlist)"
+  ],
+  "passed": false,
+  "corpusPassed": true
+}
