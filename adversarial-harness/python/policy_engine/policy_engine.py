@@ -1,18 +1,15 @@
 """
 Policy engine — faithful Python port of PolicyEngine.evaluate() sync pipeline.
-
-Order: request-prompt-injection → semantic-guards (shell + tool-chain + semantic) → yaml-rules.
-Async paths (ML, session data-flow, OPA) are not replicated; harness compares via Node for those.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
-from collections import defaultdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import yaml
 
@@ -21,10 +18,39 @@ from .prompt_injection import scan_tool_call_arguments
 from .semantic_guards import evaluate_semantic_guards
 from .shell_tokenizer import ShellTokenizer
 from .tool_chain import evaluate_tool_chain_guard
-from .types import CallContext, PolicyAction, PolicyDecision, PolicyMode
+from .types import AgentIdentity, CallContext, PolicyAction, PolicyDecision, PolicyMode
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_POLICY = REPO_ROOT / "default-policy.yaml"
+
+SyncMode = Literal["full", "yaml_only"]
+
+
+def _identity_from_dict(raw: dict[str, Any] | None) -> AgentIdentity | None:
+    if not raw:
+        return None
+    return AgentIdentity(
+        sub=str(raw.get("sub", "unknown")),
+        issuer=str(raw.get("issuer", "harness")),
+        client_id=raw.get("clientId") or raw.get("client_id"),
+        scopes=raw.get("scopes"),
+        tenant_id=raw.get("tenantId") or raw.get("tenant_id"),
+    )
+
+
+def context_from_dict(data: dict[str, Any], defaults: dict[str, Any] | None = None) -> CallContext:
+    d = {**(defaults or {}), **data}
+    return CallContext(
+        server_name=str(d.get("serverName", d.get("server_name", "harness"))),
+        tool_name=str(d.get("toolName", d.get("tool_name", "search"))),
+        arguments=dict(d.get("arguments") or {}),
+        request_id=str(d.get("requestId", d.get("request_id", "harness-1"))),
+        request_tokens=int(d.get("requestTokens", d.get("request_tokens", 50))),
+        timestamp=str(d.get("timestamp", "")),
+        session_id=d.get("sessionId", d.get("session_id")),
+        tenant_id=d.get("tenantId", d.get("tenant_id")),
+        agent_identity=_identity_from_dict(d.get("agentIdentity") or d.get("agent_identity")),
+    )
 
 
 class PolicyEngine:
@@ -45,12 +71,17 @@ class PolicyEngine:
 
     @classmethod
     def from_default_policy(cls) -> "PolicyEngine":
+        if not DEFAULT_POLICY.is_file():
+            raise FileNotFoundError(f"default-policy.yaml not found at {DEFAULT_POLICY}")
         data = yaml.safe_load(DEFAULT_POLICY.read_text(encoding="utf-8"))
         return cls(data)
 
+    @classmethod
+    def from_policy_dict(cls, policy_dict: dict[str, Any]) -> "PolicyEngine":
+        return cls({"version": "1.0", "policy": policy_dict})
+
     @staticmethod
     def _regex_from_policy_pattern(p: str) -> str:
-        """PyYAML often yields extra backslash escaping vs Node js-yaml for the same YAML."""
         if "\\\\" in p:
             p = p.replace("\\\\", "\\")
         return p
@@ -88,6 +119,59 @@ class PolicyEngine:
 
         return [leaf.value for leaf in walk_string_leaves(obj)]
 
+    def _scope_match(self, required: str, agent_scopes: list[str]) -> bool:
+        req = required.lower()
+        return any(s.lower() == req for s in agent_scopes)
+
+    def _client_id_match(self, pattern: str, client_id: str) -> bool:
+        try:
+            return bool(re.search(pattern, client_id))
+        except re.error:
+            return pattern == client_id
+
+    def _evaluate_rbac(self, rule: dict[str, Any], ctx: CallContext) -> Optional[PolicyDecision]:
+        rbac = rule.get("rbac")
+        if not rbac:
+            return None
+        name = rule.get("name", "")
+        action = self._resolve_action(rule.get("action", "block"))
+        identity = ctx.agent_identity
+        if not identity:
+            return PolicyDecision(
+                action,
+                name,
+                f"RBAC rule '{name}' requires agent identity but none provided",
+            )
+        scopes = rbac.get("scopes") or []
+        if scopes:
+            agent_scopes = identity.scopes or []
+            if not any(self._scope_match(s, agent_scopes) for s in scopes):
+                return PolicyDecision(
+                    action,
+                    name,
+                    f"Agent '{identity.sub}' missing required scope. Need one of: [{', '.join(scopes)}], "
+                    f"have: [{', '.join(agent_scopes) or 'none'}]",
+                )
+        client_patterns = rbac.get("clientIds") or []
+        if client_patterns:
+            cid = identity.client_id or ""
+            if not any(self._client_id_match(p, cid) for p in client_patterns):
+                return PolicyDecision(
+                    action,
+                    name,
+                    f"Client ID '{cid}' not allowed. Allowed patterns: [{', '.join(client_patterns)}]",
+                )
+        tenants = rbac.get("tenants") or []
+        if tenants:
+            tenant = ctx.tenant_id or os.environ.get("GUARDIAN_TENANT_ID", "default")
+            if tenant not in tenants:
+                return PolicyDecision(
+                    action,
+                    name,
+                    f"Tenant '{tenant}' not allowed for rule '{name}'. Allowed: [{', '.join(tenants)}]",
+                )
+        return None
+
     def _evaluate_rule(
         self,
         rule: dict[str, Any],
@@ -120,6 +204,10 @@ class PolicyEngine:
                 f"Tool '{ctx.tool_name}' matches destructive category",
             )
 
+        rbac_dec = self._evaluate_rbac(rule, ctx)
+        if rbac_dec:
+            return rbac_dec
+
         for field, patterns in self._compiled_arg.get(name, []):
             values = (
                 self._walk_leaves(ctx.arguments)
@@ -151,7 +239,15 @@ class PolicyEngine:
 
         max_cpm = rule.get("maxCallsPerMinute")
         if max_cpm and not skip_rate:
-            key = f"{ctx.server_name}:{ctx.tool_name}"
+            tenant = ctx.tenant_id or os.environ.get("GUARDIAN_TENANT_ID", "default")
+            client_id = (ctx.agent_identity.client_id if ctx.agent_identity else None) or (
+                ctx.agent_identity.sub if ctx.agent_identity else None
+            )
+            key = (
+                f"{tenant}:{ctx.server_name}:{ctx.tool_name}:{client_id}"
+                if client_id
+                else f"{tenant}:{ctx.server_name}:{ctx.tool_name}"
+            )
             now = time.time()
             count, reset = self._call_counters.get(key, (0, now + 60))
             if now > reset:
@@ -195,7 +291,15 @@ class PolicyEngine:
             )
         return None
 
-    def evaluate(self, ctx: CallContext, skip_local_rate_limit: bool = False) -> PolicyDecision:
+    def reset_rate_counters(self) -> None:
+        self._call_counters.clear()
+
+    def evaluate(
+        self,
+        ctx: CallContext,
+        skip_local_rate_limit: bool = False,
+        sync_mode: SyncMode = "full",
+    ) -> PolicyDecision:
         norm_args = (
             self.normalizer.normalize_json_value(ctx.arguments or {})
             if ctx.arguments
@@ -209,34 +313,37 @@ class PolicyEngine:
             request_tokens=ctx.request_tokens,
             timestamp=ctx.timestamp,
             session_id=ctx.session_id,
+            tenant_id=ctx.tenant_id,
+            agent_identity=ctx.agent_identity,
         )
         args_str = json.dumps(norm_args, ensure_ascii=False)
 
-        findings = scan_tool_call_arguments(norm_args)
-        if findings:
-            rank = {"critical": 0, "high": 1, "medium": 2}
-            top = min(findings, key=lambda f: rank.get(f.severity, 9))
-            return PolicyDecision(
-                self._resolve_action("block"),
-                "request-prompt-injection",
-                f"Prompt injection: {top.pattern_id} ({top.severity})",
-            )
+        if sync_mode == "full":
+            findings = scan_tool_call_arguments(norm_args)
+            if findings:
+                rank = {"critical": 0, "high": 1, "medium": 2}
+                top = min(findings, key=lambda f: rank.get(f.severity, 9))
+                return PolicyDecision(
+                    self._resolve_action("block"),
+                    "request-prompt-injection",
+                    f"Prompt injection: {top.pattern_id} ({top.severity})",
+                )
 
-        shell_dec = self._evaluate_semantic_shell(args_str)
-        if shell_dec:
-            return shell_dec
+            shell_dec = self._evaluate_semantic_shell(args_str)
+            if shell_dec:
+                return shell_dec
 
-        chain = evaluate_tool_chain_guard(norm_ctx)
-        if chain:
-            return PolicyDecision(
-                self._resolve_action(chain.action),
-                chain.rule,
-                chain.reason,
-            )
+            chain = evaluate_tool_chain_guard(norm_ctx)
+            if chain:
+                return PolicyDecision(
+                    self._resolve_action(chain.action),
+                    chain.rule,
+                    chain.reason,
+                )
 
-        sem = evaluate_semantic_guards(norm_ctx)
-        if sem:
-            return PolicyDecision(self._resolve_action(sem.action), sem.rule, sem.reason)
+            sem = evaluate_semantic_guards(norm_ctx)
+            if sem:
+                return PolicyDecision(self._resolve_action(sem.action), sem.rule, sem.reason)
 
         permitted = False
         for rule in self.rules:

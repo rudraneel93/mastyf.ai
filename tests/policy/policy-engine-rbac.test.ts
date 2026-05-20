@@ -46,6 +46,13 @@ describe('PolicyEngine RBAC', () => {
     expect(decision.action).toBe('pass');
   });
 
+  it('matches scopes case-insensitively', () => {
+    const decision = engine.evaluate(ctx({
+      agentIdentity: { sub: 'admin-1', scopes: ['ADMIN'] },
+    }));
+    expect(decision.action).toBe('pass');
+  });
+
   it('blocks when identity missing on rbac rule', () => {
     const decision = engine.evaluate(ctx());
     expect(decision.action).toBe('block');

@@ -18,6 +18,7 @@ import {
   evaluateRedisRateLimit,
   opaStrategy,
   runShadowPolicy,
+  yamlRulesStrategy,
   type PolicyEngineDeps,
   type SyncEvaluateContext,
 } from './strategies/index.js';
@@ -139,7 +140,15 @@ export class PolicyEngine {
     return finalDecision;
   }
 
-  evaluate(context: CallContext, options?: { skipLocalRateLimit?: boolean }): PolicyDecision {
+  /** Clear in-memory per-minute call counters (harness / isolated rate-limit suites). */
+  resetRateCounters(): void {
+    this.callCounters.clear();
+  }
+
+  evaluate(
+    context: CallContext,
+    options?: { skipLocalRateLimit?: boolean; yamlOnly?: boolean },
+  ): PolicyDecision {
     const normalizedArgs = context.arguments
       ? this.normalizer.normalizeJsonValue(context.arguments) as Record<string, unknown>
       : {};
@@ -157,7 +166,10 @@ export class PolicyEngine {
     };
 
     const deps = this.buildDeps();
-    for (const strategy of SYNC_POLICY_STRATEGIES) {
+    const strategies = options?.yamlOnly
+      ? SYNC_POLICY_STRATEGIES.filter((s) => s === yamlRulesStrategy)
+      : SYNC_POLICY_STRATEGIES;
+    for (const strategy of strategies) {
       const decision = strategy.evaluate(syncCtx, deps);
       if (decision) return decision;
     }
@@ -252,7 +264,9 @@ export class PolicyEngine {
       }
       if (rule.rbac.scopes && rule.rbac.scopes.length > 0) {
         const agentScopes = identity.scopes || [];
-        const hasScope = rule.rbac.scopes.some(s => agentScopes.includes(s));
+        const hasScope = rule.rbac.scopes.some((required) =>
+          agentScopes.some((s) => s.toLowerCase() === required.toLowerCase()),
+        );
         if (!hasScope) {
           return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Agent '${identity.sub}' missing required scope. Need one of: [${rule.rbac.scopes.join(', ')}], have: [${agentScopes.join(', ') || 'none'}]` };
         }

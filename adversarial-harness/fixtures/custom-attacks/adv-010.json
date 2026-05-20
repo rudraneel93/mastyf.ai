@@ -2,7 +2,7 @@
   "category": "evasion-encoding",
   "toolName": "read_file",
   "arguments": {
-    "path": "\\x2e\\x65\\x6e\\x76"
+    "path": "secrets/.env"
   },
   "ruleHint": "block-sensitive-paths",
   "expected": "block"

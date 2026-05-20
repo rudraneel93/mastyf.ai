@@ -1,42 +1,57 @@
 # Adversarial Test Harness
 
-Comprehensive security evaluation harness for MCP Guardian policy engine, proxy pipeline, and scanners.
+Enterprise security evaluation harness for MCP Guardian policy engine, proxy pipeline, and scanners.
 
 ## Components
 
 | Layer | Path | Purpose |
 |-------|------|---------|
-| **Python policy engine** | `python/policy_engine/` | Faithful port of TS sync pipeline: prompt injection → semantic guards → YAML rules |
-| **Corpus** | `../../corpus/` | 151 attack + 55 benign fixtures |
-| **Custom attacks** | `fixtures/custom-attacks/` | 85+ adversarial probes (unicode, SSRF, SQL, chains, etc.) |
-| **Node integration** | `node/` | Mock MCP stdio server, proxy pipeline, AsyncSerialQueue, streaming races, secret scanner |
+| **Python policy engine** | `python/policy_engine/` | Faithful port of TS sync pipeline with RBAC, rate limits, isolated rule mode |
+| **Comprehensive eval** | `python/run_comprehensive_eval.py` | Corpus + 89 matrix probes + 85 custom attacks |
+| **Corpus** | `../../corpus/` | 151 attack + 55 benign fixtures (228 loaded) |
+| **Matrix fixtures** | `fixtures/matrix/` | Isolated RBAC / rate / token suites (no cross-rule masking) |
+| **Custom attacks** | `fixtures/custom-attacks/` | 85 adversarial probes |
+| **Node integration** | `node/` | Mock MCP, proxy pipeline, AsyncSerialQueue, streaming, secret scanner |
 | **Orchestrator** | `run-harness.mjs` | Full run + `reports/harness-summary.md` |
 
 ## Quick start
 
 ```bash
-# Full harness (export rules, generate fixtures, Python + Node tests, parity)
+# Full harness
 node adversarial-harness/run-harness.mjs
 
-# Python only
-pnpm exec tsx adversarial-harness/scripts/export-harness-rules.ts
+# Regenerate matrix (89 unique ids) + custom attacks
+node adversarial-harness/scripts/generate-matrix-fixtures.mjs
 node adversarial-harness/scripts/generate-custom-attacks.mjs
-PYTHONPATH=adversarial-harness/python python3 adversarial-harness/python/run_eval.py
 
-# Node harness tests only
-pnpm exec vitest run adversarial-harness/node/*.test.mjs
+# Python comprehensive eval only
+PYTHONPATH=adversarial-harness/python python3 adversarial-harness/python/run_comprehensive_eval.py
+
+# Node tests (Vitest JSON report file — not stdout parsing)
+node adversarial-harness/scripts/run-node-tests.mjs
+
+# Parity by fixture id (not integer index)
+pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
 ```
 
-## Python parity notes
+## Harness design notes
 
-- Loads `exported/injection_rules.json` from TS `INJECTION_RULES` (same regex sources).
-- Mirrors evaluation order: `request-prompt-injection` → `semantic-guards` → `yaml-rules`.
-- Does **not** run DistilBERT ML or async session data-flow (use Node `evaluateAsync` for P2 features).
-- `scripts/compare-node-python.ts` reports Node vs Python block decisions on all fixtures.
+- **Corpus loading**: resolves `../../corpus` from harness root; reports `corpusAttacksOnDisk` / `loaded` in `comprehensive-eval.json`.
+- **Matrix isolation**: `policyMode: "isolated"` + `yamlOnly` / `sync_mode: yaml_only` so rate-limit and token tests are not masked by global RBAC.
+- **Rate limits**: shared engine per `rate-*` sequence; counters are not reset between calls 1–3 (block from call 4+).
+- **Parity**: `batch-node-eval.ts` and `parity_batch.py` emit `byId` maps keyed by string fixture id (`corpus:attacks/...`, `adv-001`, `rate-001`, etc.).
+- **Node tests**: `run-node-tests.mjs` uses `--reporter=json --outputFile=...` to avoid log + JSON stdout parse failures.
 
 ## Reports
 
-- `reports/python-eval.json` — Python corpus + custom results
-- `reports/parity-report.json` — Node/Python agreement
+- `reports/comprehensive-eval.json` — Python matrix + corpus + custom
+- `reports/parity-report.json` — Node/Python agreement by id (corpus must be 100%)
+- `reports/node-batch-by-id.json` — Node decisions keyed by id
+- `reports/node-tests-summary.json` — Vitest harness summary
 - `reports/harness-summary.md` — Orchestrator summary
 - `../../corpus-eval-report.json` — Canonical Node corpus eval
+
+## Parity gates
+
+- **Corpus**: zero mismatches between Node and Python (required).
+- **Overall**: ≥97% agreement including matrix + custom (documented deltas for ZW-normalization / path-heuristic edge cases).

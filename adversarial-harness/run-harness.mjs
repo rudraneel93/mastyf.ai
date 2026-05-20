@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Comprehensive adversarial test harness orchestrator.
- * 1. Export rules  2. Generate custom attacks  3. Python eval  4. Node tests  5. Parity  6. Report
+ * Enterprise adversarial harness orchestrator.
+ * Export rules → matrix + custom fixtures → Python comprehensive eval → Node tests → corpus → parity by id
  */
 import { spawnSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
@@ -9,6 +9,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
+const REPO = join(__dir, '..');
 const REPORT_DIR = join(__dir, 'reports');
 const SUMMARY = join(REPORT_DIR, 'harness-summary.md');
 
@@ -17,7 +18,7 @@ const steps = [];
 function run(cmd, args, opts = {}) {
   const label = opts.label ?? [cmd, ...args].join(' ');
   const r = spawnSync(cmd, args, {
-    cwd: opts.cwd ?? join(__dir, '..'),
+    cwd: opts.cwd ?? REPO,
     encoding: 'utf-8',
     env: { ...process.env, ...opts.env },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -39,69 +40,59 @@ function loadJson(path) {
 
 mkdirSync(REPORT_DIR, { recursive: true });
 
-console.log('=== Adversarial Harness ===\n');
+console.log('=== Adversarial Harness (enterprise) ===\n');
 
-// 1. Export rules
 run('pnpm', ['exec', 'tsx', 'adversarial-harness/scripts/export-harness-rules.ts'], {
   label: 'export-harness-rules',
 });
 
-// 2. Generate custom attacks
 run('node', ['adversarial-harness/scripts/generate-custom-attacks.mjs'], {
   label: 'generate-custom-attacks',
 });
 
-// 3. Python corpus + custom eval
+run('node', ['adversarial-harness/scripts/generate-matrix-fixtures.mjs'], {
+  label: 'generate-matrix-fixtures',
+});
+
 run(
   'python3',
   ['-m', 'pip', 'install', '-q', '-r', 'adversarial-harness/python/requirements.txt'],
   { label: 'pip-install' },
 );
-const py = run('python3', ['adversarial-harness/python/run_eval.py'], {
-  label: 'python-eval',
-  cwd: join(__dir, '..'),
+
+run('python3', ['adversarial-harness/python/run_comprehensive_eval.py'], {
+  label: 'python-comprehensive-eval',
   env: { PYTHONPATH: join(__dir, 'python') },
 });
 
-// 4. Node harness tests (vitest)
 run('pnpm', ['build'], { label: 'pnpm-build' });
-const vitestArgs = [
-  'exec',
-  'vitest',
-  'run',
-  'adversarial-harness/node/async-queue.test.mjs',
-  'adversarial-harness/node/streaming-race.test.mjs',
-  'adversarial-harness/node/secret-scanner.test.mjs',
-  'adversarial-harness/node/proxy-pipeline.test.mjs',
-];
-run('pnpm', vitestArgs, { label: 'node-harness-tests' });
 
-// 5. Node corpus eval (canonical)
+run('node', ['adversarial-harness/scripts/run-node-tests.mjs'], {
+  label: 'node-harness-tests',
+});
+
 run('pnpm', ['exec', 'tsx', 'corpus/run-eval.ts'], { label: 'node-corpus-eval' });
 
-// 6. Parity
-const parity = run(
-  'pnpm',
-  ['exec', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'],
-  {
-    label: 'node-python-parity',
-    env: { PYTHONPATH: join(__dir, 'python') },
-  },
-);
+run('pnpm', ['exec', 'tsx', 'adversarial-harness/scripts/compare-node-python.ts'], {
+  label: 'node-python-parity',
+  env: { PYTHONPATH: join(__dir, 'python') },
+});
 
-const pyReport = loadJson(join(REPORT_DIR, 'python-eval.json'));
+const comprehensive = loadJson(join(REPORT_DIR, 'comprehensive-eval.json'));
 const parityReport = loadJson(join(REPORT_DIR, 'parity-report.json'));
-const corpusReport = loadJson(join(__dir, '..', 'corpus-eval-report.json'));
+const corpusReport = loadJson(join(REPO, 'corpus-eval-report.json'));
+const nodeTests = loadJson(join(REPORT_DIR, 'node-tests-summary.json'));
 
-  const required = [
-    'export-harness-rules',
-    'generate-custom-attacks',
-    'python-eval',
-    'node-harness-tests',
-    'node-corpus-eval',
-    'node-python-parity',
-  ];
-  const allOk = required.every((name) => steps.find((s) => s.label === name)?.ok);
+const required = [
+  'export-harness-rules',
+  'generate-custom-attacks',
+  'generate-matrix-fixtures',
+  'python-comprehensive-eval',
+  'node-harness-tests',
+  'node-corpus-eval',
+  'node-python-parity',
+];
+const allOk = required.every((name) => steps.find((s) => s.label === name)?.ok);
 
 const md = `# Adversarial Harness Report
 
@@ -123,30 +114,41 @@ ${s.stderr ? `\n\`\`\`\n${s.stderr.trim()}\n\`\`\`\n` : ''}`,
   )
   .join('\n')}
 
-## Python Policy Engine
+## Python Comprehensive Eval
 
-${pyReport ? `- Entries: ${pyReport.totalEntries}\n- Passed: ${pyReport.passed}\n- F1: ${(pyReport.overall.f1 * 100).toFixed(1)}%\n- Failures: ${pyReport.failures.length}` : '_No report_'}
+${comprehensive
+  ? `- ${comprehensive.pythonPolicyEngine?.summary ?? 'n/a'}
+- Corpus loaded: ${comprehensive.corpus?.loaded ?? 0} (attacks on disk: ${comprehensive.corpus?.attacks ?? 0}, benign: ${comprehensive.corpus?.benign ?? 0})
+- Matrix: ${comprehensive.matrix?.passed ?? 0}/${comprehensive.matrix?.total ?? 0}
+- Duplicate IDs: ${Object.keys(comprehensive.duplicateIds ?? {}).length}
+- Failures: ${(comprehensive.failures ?? []).length}`
+  : '_No report_'}
+
+## Node Harness Tests
+
+${nodeTests ? `- ${nodeTests.passed}/${nodeTests.total} passed (vitest JSON report)` : '_No report_'}
 
 ## Node Corpus Eval
 
 ${corpusReport ? `- Entries: ${corpusReport.totalEntries}\n- Passed: ${corpusReport.passed}\n- Attack block rate: ${(corpusReport.attackBlockRate * 100).toFixed(1)}%` : '_No report_'}
 
-## Node ↔ Python Parity
+## Node ↔ Python Parity (by fixture id)
 
-${parityReport ? `- Agreement: ${parityReport.agreement}/${parityReport.total} (${(parityReport.agreementRate * 100).toFixed(1)}%)\n- Mismatches: ${parityReport.mismatches.length}` : '_No report_'}
+${parityReport ? `- Agreement: ${parityReport.agreement}/${parityReport.total} (${(parityReport.agreementRate * 100).toFixed(1)}%)\n- Corpus mismatches: ${(parityReport.corpusMismatches ?? []).length}\n- Total mismatches: ${parityReport.mismatches.length}` : '_No report_'}
 
 ## Coverage
 
-- Corpus: 151 attacks + 55 benign fixtures
-- Custom adversarial: 85+ evasion-focused probes
-- Node: AsyncSerialQueue, streaming chunk races, secret scanner, mock MCP + proxy pipeline
-- Python: faithful sync policy pipeline (prompt injection, semantic guards, YAML rules)
+- Corpus: attacks + benign under \`corpus/\`
+- Matrix: 89 isolated category probes (RBAC, rate, token without cross-rule masking)
+- Custom: 85+ evasion probes
+- Node: AsyncSerialQueue, streaming races, secret scanner, mock MCP proxy
+- Parity: string \`id\` keyed \`byId\` maps (no integer index lookup)
 `;
 
 writeFileSync(SUMMARY, md);
 writeFileSync(
   join(REPORT_DIR, 'harness-summary.json'),
-  JSON.stringify({ steps, pyReport, parityReport, corpusReport, allOk }, null, 2),
+  JSON.stringify({ steps, comprehensive, parityReport, corpusReport, nodeTests, allOk }, null, 2),
 );
 
 console.log(`\nReport: ${SUMMARY}`);

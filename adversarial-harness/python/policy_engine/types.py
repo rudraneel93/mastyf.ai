@@ -8,6 +8,16 @@ PolicyMode = Literal["audit", "warn", "block"]
 
 
 @dataclass
+class AgentIdentity:
+    sub: str
+    issuer: str = "harness"
+    client_id: Optional[str] = None
+    scopes: Optional[list[str]] = None
+    tenant_id: Optional[str] = None
+    expires_at: Optional[int] = None
+
+
+@dataclass
 class PolicyDecision:
     action: PolicyAction
     rule: str
@@ -23,3 +33,5 @@ class CallContext:
     request_tokens: int = 50
     timestamp: str = ""
     session_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    agent_identity: Optional[AgentIdentity] = None
