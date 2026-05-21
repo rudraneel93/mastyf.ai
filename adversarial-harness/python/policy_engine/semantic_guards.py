@@ -108,6 +108,8 @@ MALICIOUS_HOST_RE = re.compile(
 PROMPT_OVERRIDE = [
     re.compile(r"\boverride\b.{0,60}\b(?:system|instructions?|prompt|rules?)\b", re.I),
     re.compile(r"\badmin\s+bypass\b", re.I),
+    re.compile(r"\b(?:new|unrestricted)\s+assistant\s+persona\b", re.I),
+    re.compile(r"\byou\s+are\s+now\s+an?\s+unrestricted\s+assistant\b", re.I),
 ]
 
 TOKEN_BUDGET_ABUSE = [

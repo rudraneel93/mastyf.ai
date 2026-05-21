@@ -103,6 +103,8 @@ const MALICIOUS_HOST_RE =
 const PROMPT_OVERRIDE_PATTERNS: RegExp[] = [
   /\boverride\b.{0,60}\b(?:system|instructions?|prompt|rules?)\b/i,
   /\badmin\s+bypass\b/i,
+  /\b(?:new|unrestricted)\s+assistant\s+persona\b/i,
+  /\byou\s+are\s+now\s+an?\s+unrestricted\s+assistant\b/i,
 ];
 
 /** Token budget / resource exhaustion phrasing in arguments. */

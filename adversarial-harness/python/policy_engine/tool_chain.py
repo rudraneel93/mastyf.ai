@@ -14,7 +14,7 @@ READ_TOOLS = re.compile(
     re.I,
 )
 SENSITIVE_TARGETS = re.compile(
-    r"\b(?:/etc/passwd|\.env(?:\.\w+)?|\.ssh/|id_rsa|id_ed25519|\.aws/|credentials|secrets?|serviceaccount/token|terraform\.tfstate|\.kube/config)\b",
+    r"(?:^|[\s'\"`])(?:/etc/passwd|\.env(?:\.\w+)?|\.ssh/|id_rsa|id_ed25519|\.aws/|credentials|secrets?|serviceaccount/token|terraform\.tfstate|\.kube/config)\b",
     re.I,
 )
 EXFIL_VERBS = re.compile(
@@ -82,6 +82,14 @@ ALWAYS_EXECUTE_RE = re.compile(
     r"\balways\s+(?:call|invoke|run|execute)\b",
     re.I,
 )
+CALL_READ_EXFIL_RE = re.compile(
+    r"\b(?:call|invoke|run)\s+(?:read_file|read)\b.{0,200}\b(?:then|and then|next|after that)\b.{0,160}\b(?:post|send|webhook|curl|wget|upload|exfil)\b",
+    re.I,
+)
+PUPPETEER_LOCAL_ADMIN_RE = re.compile(
+    r"\bpuppeteer_(?:navigate|screenshot)\b.{0,80}\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b",
+    re.I,
+)
 
 
 def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
@@ -103,6 +111,8 @@ def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
         or THEN_EXECUTE_RE.search(blob)
         or AFTER_THAT_RUN_RE.search(blob)
         or ALWAYS_EXECUTE_RE.search(blob)
+        or CALL_READ_EXFIL_RE.search(blob)
+        or PUPPETEER_LOCAL_ADMIN_RE.search(blob)
     ):
         return PolicyDecision(
             action="block",

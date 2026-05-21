@@ -50,6 +50,14 @@ run('node', ['adversarial-harness/scripts/generate-custom-attacks.mjs'], {
   label: 'generate-custom-attacks',
 });
 
+run('node', ['adversarial-harness/scripts/generate-uploaded-bypass-fixtures.mjs'], {
+  label: 'generate-uploaded-bypass',
+});
+
+run('pnpm', ['exec', 'tsx', 'adversarial-harness/scripts/export-harness-rules.ts'], {
+  label: 'export-harness-rules-pre-python',
+});
+
 run('node', ['adversarial-harness/scripts/generate-comprehensive-generated.mjs'], {
   label: 'generate-comprehensive-generated',
 });

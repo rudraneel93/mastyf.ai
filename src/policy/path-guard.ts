@@ -20,6 +20,7 @@ const SENSITIVE_PATH_PATTERNS: RegExp[] = [
   /\/\.ssh(?:\/|$)/,
   /\/\.aws\/credentials$/,
   /\/\.env(?:\.|$)/,
+  /(?:^|\/)\.env(?:\.|$)/,
   /(?:^|\/)id_rsa(?:\.|$)/,
   /(?:^|\/)authorized_keys$/,
   /\/\.gnupg(?:\/|$)/,

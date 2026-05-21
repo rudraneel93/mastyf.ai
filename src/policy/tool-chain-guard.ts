@@ -10,7 +10,7 @@ const READ_TOOLS =
   /\b(?:read_file|read|cat|head|tail|less|strings|type|get_file|fetch_file)\b/i;
 
 const SENSITIVE_TARGETS =
-  /\b(?:\/etc\/passwd|\.env(?:\.\w+)?|\.ssh\/|id_rsa|id_ed25519|\.aws\/|credentials|secrets?|serviceaccount\/token|terraform\.tfstate|\.kube\/config)\b/i;
+  /(?:^|[\s'"`])(?:\/etc\/passwd|\.env(?:\.\w+)?|\.ssh\/|id_rsa|id_ed25519|\.aws\/|credentials|secrets?|serviceaccount\/token|terraform\.tfstate|\.kube\/config)\b/i;
 
 const EXFIL_VERBS =
   /\b(?:curl|wget|fetch|ncat|netcat|post|send|upload|forward|deliver|transmit|ship|emit|exfil|webhook|callback)\b/i;
@@ -59,6 +59,14 @@ const AFTER_THAT_RUN_RE = /\bafter\s+that\s+(?:call|invoke|run|execute)\b/i;
 
 const ALWAYS_EXECUTE_RE = /\balways\s+(?:call|invoke|run|execute)\b/i;
 
+/** Explicit call read_file → exfil staging (MCPG / upload-chain probes). */
+const CALL_READ_EXFIL_RE =
+  /\b(?:call|invoke|run)\s+(?:read_file|read)\b.{0,200}\b(?:then|and then|next|after that)\b.{0,160}\b(?:post|send|webhook|curl|wget|upload|exfil)\b/i;
+
+/** Browser automation to localhost / admin surfaces. */
+const PUPPETEER_LOCAL_ADMIN_RE =
+  /\bpuppeteer_(?:navigate|screenshot)\b.{0,80}\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b/i;
+
 export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null {
   const args = ctx.arguments ?? {};
   const blob = walkStringLeaves(args)
@@ -78,7 +86,9 @@ export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null 
     MUST_INVOKE_RE.test(blob) ||
     THEN_EXECUTE_RE.test(blob) ||
     AFTER_THAT_RUN_RE.test(blob) ||
-    ALWAYS_EXECUTE_RE.test(blob)
+    ALWAYS_EXECUTE_RE.test(blob) ||
+    CALL_READ_EXFIL_RE.test(blob) ||
+    PUPPETEER_LOCAL_ADMIN_RE.test(blob)
   ) {
     return {
       action: 'block',

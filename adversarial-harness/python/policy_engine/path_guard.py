@@ -23,6 +23,7 @@ SENSITIVE_PATH_PATTERNS = [
     re.compile(r"/\.ssh(?:/|$)"),
     re.compile(r"/\.aws/credentials$"),
     re.compile(r"/\.env(?:\.|$)"),
+    re.compile(r"(?:^|/)\.env(?:\.|$)"),
     re.compile(r"(?:^|/)id_rsa(?:\.|$)"),
     re.compile(r"(?:^|/)authorized_keys$"),
     re.compile(r"/\.kube(?:/|$)"),

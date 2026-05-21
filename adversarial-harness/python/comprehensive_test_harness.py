@@ -28,7 +28,7 @@ from typing import Any
 
 from policy_engine import PolicyEngine
 from policy_engine.policy_engine import context_from_dict
-from policy_engine.secrets_guard import scan_secrets_in_blob
+from policy_engine.secrets_guard import get_full_rule_count, scan_secrets_in_blob
 from policy_engine.session_flow_guard import reset_session_flow_history
 from policy_engine.timing_guard import reset_timing_probe_counters
 from policy_engine.types import PolicyDecision
@@ -40,6 +40,7 @@ CORPUS_BENIGN = REPO_ROOT / "corpus" / "benign"
 MATRIX_DIR = HARNESS_ROOT / "fixtures" / "matrix"
 CUSTOM_DIR = HARNESS_ROOT / "fixtures" / "custom-attacks"
 GENERATED_DIR = HARNESS_ROOT / "fixtures" / "generated"
+UPLOADED_BYPASS_DIR = HARNESS_ROOT / "fixtures" / "uploaded-bypass"
 REPORT_DIR = HARNESS_ROOT / "reports"
 DEFAULT_POLICY = REPO_ROOT / "default-policy.yaml"
 
@@ -92,14 +93,20 @@ def load_policy_cases() -> tuple[list[TestCase], dict[str, int]]:
     matrix = discover_fixtures(MATRIX_DIR, "matrix", MATRIX_DIR) if MATRIX_DIR.is_dir() else []
     custom = discover_fixtures(CUSTOM_DIR, "custom", CUSTOM_DIR) if CUSTOM_DIR.is_dir() else []
     generated = discover_fixtures(GENERATED_DIR, "generated", GENERATED_DIR) if GENERATED_DIR.is_dir() else []
+    uploaded = (
+        discover_fixtures(UPLOADED_BYPASS_DIR, "uploaded-bypass", UPLOADED_BYPASS_DIR)
+        if UPLOADED_BYPASS_DIR.is_dir()
+        else []
+    )
     counts = {
         "corpusAttacks": len(attacks),
         "corpusBenign": len(benign),
         "matrix": len(matrix),
         "custom": len(custom),
         "generated": len(generated),
+        "uploadedBypass": len(uploaded),
     }
-    return attacks + benign + matrix + custom + generated, counts
+    return attacks + benign + matrix + custom + generated + uploaded, counts
 
 
 def _isolated_key(case: TestCase) -> str:
@@ -290,25 +297,92 @@ async def test_streaming_race() -> dict[str, Any]:
 
 
 def test_secret_scanner_python() -> dict[str, Any]:
+    """Full 267-rule scanner parity (exported from secret-rules.ts)."""
     samples = {
         "aws-key": "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
         "github-pat": "ghp_" + "a" * 36,
-        "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.x",
+        "jwt-upload": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.x",
+        "jwt-full": (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIn0."
+            "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+        ),
         "pem": "-----BEGIN RSA PRIVATE KEY-----\nMIIE",
         "stripe": "sk_live_" + "0" * 24,
+        "db-url": "DATABASE_URL=postgres://user:SecretPass@host.example/db",
         "placeholder": "your_api_key_here example only",
     }
-    results = {}
+    results: dict[str, Any] = {}
     for name, blob in samples.items():
-        hits = scan_secrets_in_blob(blob)
+        hits = scan_secrets_in_blob(blob, full=True)
         results[name] = {"hits": hits, "detected": len(hits) > 0}
-    detected_count = sum(1 for n, r in results.items() if r["detected"] and n != "placeholder")
+    must_detect = ("aws-key", "github-pat", "pem", "stripe", "jwt-full")
+    detected_count = sum(1 for n in must_detect if results[n]["detected"])
     placeholder_fp = results["placeholder"]["detected"]
+    rule_count = get_full_rule_count()
     return {
-        "passed": detected_count >= 4 and not placeholder_fp,
+        "passed": detected_count >= len(must_detect) and not placeholder_fp,
         "samples": results,
         "detectedCount": detected_count,
+        "ruleCount": rule_count,
+        "jwtUploadDetected": results["jwt-upload"]["detected"],
     }
+
+
+def write_enterprise_csv(rows: list[dict[str, Any]], path: Path) -> None:
+    import csv
+
+    if not rows:
+        return
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def run_enterprise_csv_export(engines: dict[str, PolicyEngine]) -> list[dict[str, Any]]:
+    """Export production PolicyEngine results in upload CSV format (block→critical)."""
+    rows: list[dict[str, Any]] = []
+    cases, _ = load_policy_cases()
+    for case in cases:
+        t0 = time.perf_counter()
+        try:
+            decision = evaluate_case(case, engines)
+            ms = (time.perf_counter() - t0) * 1000
+            blocked = decision.action in ("block", "flag")
+            expect_block = case.expected == "block"
+            if expect_block:
+                expected_status = "critical"
+                actual_status = "critical" if blocked else "clean"
+            else:
+                expected_status = "clean"
+                actual_status = "clean" if not blocked else "critical"
+            rows.append({
+                "fixture_id": case.id,
+                "type": case.source.replace("corpus-", "").replace("-attacks", "-attack") or case.category,
+                "tool_name": case.raw.get("toolName", ""),
+                "expected_status": expected_status,
+                "actual_status": actual_status,
+                "passed": "yes" if (blocked == expect_block) else "no",
+                "issues_count": 1 if blocked and expect_block else 0,
+                "scan_time_ms": round(ms, 2),
+                "rule": decision.rule if blocked else "",
+                "error": "",
+            })
+        except Exception as exc:
+            rows.append({
+                "fixture_id": case.id,
+                "type": case.category,
+                "tool_name": case.raw.get("toolName", ""),
+                "expected_status": "critical" if case.expected == "block" else "clean",
+                "actual_status": "error",
+                "passed": "no",
+                "issues_count": 0,
+                "scan_time_ms": 0,
+                "rule": "",
+                "error": str(exc)[:200],
+            })
+    return rows
 
 
 def run_node_infrastructure_tests(skip_node: bool) -> dict[str, Any]:
@@ -445,19 +519,27 @@ def main() -> int:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("=== MCP Guardian Comprehensive Adversarial Harness ===\n")
-    print("[1/4] Policy engine evaluation (corpus + custom + matrix)...")
+    print("[1/5] Policy engine evaluation (corpus + custom + matrix + uploaded-bypass)...")
     policy = run_policy_engine_suite()
     _, fixture_counts = load_policy_cases()
 
-    print("[2/4] AsyncSerialQueue simulation...")
+    print("[2/5] AsyncSerialQueue simulation...")
     async_queue = asyncio.run(test_async_serial_queue(100))
 
-    print("[3/4] Streaming + secret scanner (Python)...")
+    print("[3/5] Streaming + secret scanner (267 rules)...")
     streaming = asyncio.run(test_streaming_race())
     secrets_py = test_secret_scanner_python()
 
-    print("[4/4] Node infrastructure (mock MCP, proxy, vitest)...")
+    print("[4/5] Node infrastructure (mock MCP, proxy, vitest)...")
     node_vitest = run_node_infrastructure_tests(args.skip_node)
+
+    print("[5/5] Enterprise CSV export (production PolicyEngine)...")
+    engines = {"default": PolicyEngine.from_default_policy()}
+    csv_rows = run_enterprise_csv_export(engines)
+    csv_path = REPORT_DIR / "enterprise_results.csv"
+    write_enterprise_csv(csv_rows, csv_path)
+    csv_passed = sum(1 for r in csv_rows if r["passed"] == "yes")
+    csv_total = len(csv_rows)
 
     total = policy.total
     pass_rate = round(100.0 * policy.passed / total, 2) if total else 0.0
@@ -489,6 +571,16 @@ def main() -> int:
             "streamingPython": streaming,
             "secretScannerPython": secrets_py,
             "nodeVitest": node_vitest,
+        },
+        "enterpriseCsv": {
+            "path": str(csv_path),
+            "total": csv_total,
+            "passed": csv_passed,
+            "passRatePercent": round(100.0 * csv_passed / csv_total, 2) if csv_total else 0,
+            "note": (
+                "Uses production default-policy.yaml PolicyEngine; "
+                "uploaded 56% results used scanner-only harness, not this stack."
+            ),
         },
         "allPassed": all_ok,
         "conclusion": (
