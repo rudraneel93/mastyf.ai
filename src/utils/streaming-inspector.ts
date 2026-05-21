@@ -2,19 +2,17 @@
  * Chunked streaming inspection for large tool responses (SSE/WS/stdio).
  * Scans 64KB windows with overlap so patterns spanning chunk boundaries are caught.
  */
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
-import { scanForSecrets } from '../scanners/secret-scanner.js';
-import type { PolicyEngine } from '../policy/policy-engine.js';
-import type { InjectionFinding } from '../scanners/prompt-injection-detector.js';
-import type { SecretFinding } from '../types.js';
+import { evaluateResponseDlp, type ResponseDlpFinding } from '../policy/response-dlp.js';
+import { MAX_RESPONSE_DLP_BYTES, utf8ByteLength } from './eval-bounds.js';
 
 export const STREAMING_INSPECTOR_CHUNK_BYTES = 64 * 1024;
 export const STREAMING_INSPECTOR_OVERLAP_BYTES = 512;
 
 export interface StreamingInspectFinding {
-  source: 'policy' | 'injection' | 'secret';
+  source: 'dlp' | 'policy';
   message: string;
   severity?: 'critical' | 'high' | 'medium' | 'low';
+  category?: string;
 }
 
 export interface StreamingInspectResult {
@@ -22,66 +20,44 @@ export interface StreamingInspectResult {
   findings: StreamingInspectFinding[];
   hasCritical: boolean;
   hasHigh: boolean;
+  truncated?: boolean;
 }
 
 export interface StreamingInspectorState {
   carry: string;
   findings: StreamingInspectFinding[];
+  totalBytes: number;
 }
 
 export function createStreamingInspectorState(): StreamingInspectorState {
-  return { carry: '', findings: [] };
+  return { carry: '', findings: [], totalBytes: 0 };
 }
 
 export function isResponseScanSkipped(): boolean {
   return process.env['GUARDIAN_SKIP_RESPONSE_SCAN'] === 'true';
 }
 
-function mergeInjectionFindings(
-  state: StreamingInspectorState,
-  toolName: string,
-  text: string,
-): void {
-  const found = detectPromptInjection(toolName, text);
-  for (const f of found) {
-    const key = `injection:${f.patternId}`;
+function mergeDlpFindings(state: StreamingInspectorState, findings: ResponseDlpFinding[]): void {
+  for (const f of findings) {
+    const key = `dlp:${f.category}:${f.ruleId}`;
     if (state.findings.some((x) => x.message === key)) continue;
     state.findings.push({
-      source: 'injection',
+      source: 'dlp',
       message: key,
       severity: f.severity,
+      category: f.category,
     });
   }
 }
 
-function mergeSecretFindings(state: StreamingInspectorState, text: string, ctx: string): void {
-  const found = scanForSecrets(text, ctx);
-  for (const f of found) {
-    const key = `secret:${f.type}:${f.location}`;
-    if (state.findings.some((x) => x.message === key)) continue;
-    const sev = String(f.severity).toLowerCase();
-    state.findings.push({
-      source: 'secret',
-      message: key,
-      severity: sev === 'high' ? 'high' : 'medium',
-    });
-  }
-}
-
-function mergePolicyFindings(
+function runDlpOnWindow(
   state: StreamingInspectorState,
-  policy: PolicyEngine,
   toolName: string,
   serverName: string,
-  text: string,
+  window: string,
 ): void {
-  const { clean, detections } = policy.evaluateResponse(toolName, serverName, text);
-  if (clean) return;
-  for (const d of detections) {
-    if (!state.findings.some((x) => x.source === 'policy' && x.message === d)) {
-      state.findings.push({ source: 'policy', message: d, severity: 'high' });
-    }
-  }
+  const dlp = evaluateResponseDlp(toolName, serverName, window);
+  mergeDlpFindings(state, dlp.findings);
 }
 
 /** Feed a chunk of response text; returns incremental findings for this chunk only. */
@@ -91,11 +67,17 @@ export function inspectResponseChunk(
   opts: {
     toolName: string;
     serverName: string;
-    policy?: PolicyEngine | null;
+    policy?: unknown;
     scanSecrets?: boolean;
   },
 ): StreamingInspectFinding[] {
+  void opts.scanSecrets;
   if (!chunk) return [];
+  state.totalBytes += utf8ByteLength(chunk);
+  if (state.totalBytes > MAX_RESPONSE_DLP_BYTES) {
+    return state.findings;
+  }
+
   const combined = state.carry + chunk;
   const chunkSize = STREAMING_INSPECTOR_CHUNK_BYTES;
   const newFindings: StreamingInspectFinding[] = [];
@@ -104,13 +86,7 @@ export function inspectResponseChunk(
   let offset = 0;
   while (offset < combined.length) {
     const window = combined.slice(offset, offset + chunkSize);
-    if (opts.policy) {
-      mergePolicyFindings(state, opts.policy, opts.toolName, opts.serverName, window);
-    }
-    mergeInjectionFindings(state, opts.toolName, window);
-    if (opts.scanSecrets !== false) {
-      mergeSecretFindings(state, window, `stream:${opts.serverName}:${opts.toolName}`);
-    }
+    runDlpOnWindow(state, opts.toolName, opts.serverName, window);
     offset += chunkSize - STREAMING_INSPECTOR_OVERLAP_BYTES;
     if (offset <= 0 || chunkSize <= STREAMING_INSPECTOR_OVERLAP_BYTES) break;
   }
@@ -130,7 +106,7 @@ export function inspectFullResponse(
   opts: {
     toolName: string;
     serverName: string;
-    policy?: PolicyEngine | null;
+    policy?: unknown;
     scanSecrets?: boolean;
   },
 ): StreamingInspectResult {
@@ -159,15 +135,15 @@ export function finalizeStreamingInspect(state: StreamingInspectorState): Stream
     findings: state.findings,
     hasCritical,
     hasHigh,
+    truncated: state.totalBytes > MAX_RESPONSE_DLP_BYTES,
   };
 }
 
 export function findingsToMessages(findings: StreamingInspectFinding[]): string[] {
   return findings.map((f) => {
-    if (f.source === 'injection') return f.message.replace(/^injection:/, 'PI: ');
-    if (f.source === 'secret') return f.message.replace(/^secret:/, 'Secret: ');
+    if (f.source === 'dlp' && f.category) {
+      return `${f.category}: ${f.message.replace(/^dlp:[^:]+:/, '')}`;
+    }
     return f.message;
   });
 }
-
-export type { InjectionFinding, SecretFinding };

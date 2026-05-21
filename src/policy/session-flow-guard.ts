@@ -1,13 +1,17 @@
 /**
  * Per-session multi-call flow analysis — detects read-sensitive → exfil tool sequences.
  */
-import { LRUCache } from 'lru-cache';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 import { evaluatePathGuard, extractPathArgumentValues } from './path-guard.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
+import {
+  appendFlowEventSync,
+  getFlowHistorySync,
+  recordSensitiveResponseAccess,
+  resetSessionFlowStore,
+} from './session-flow-store.js';
 
-const FLOW_WINDOW_MS = 5 * 60 * 1000;
-const MAX_HISTORY = 24;
+export { recordSensitiveResponseAccess, resetSessionFlowStore as resetSessionFlowHistory };
 
 const SENSITIVE_READ_TOOLS = new Set([
   'read_file',
@@ -17,10 +21,12 @@ const SENSITIVE_READ_TOOLS = new Set([
   'cat',
   'head',
   'tail',
+  'list_directory',
+  'list_files',
 ]);
 
 const EXFIL_TOOL_HINTS =
-  /\b(?:webhook|callback|post|upload|send|forward|notify|http_request|fetch_url)\b/i;
+  /\b(?:webhook|callback|post|upload|send|forward|notify|http_request|fetch_url|transmit)\b/i;
 
 const EXFIL_TOOL_NAMES = new Set([
   'http_request',
@@ -28,9 +34,9 @@ const EXFIL_TOOL_NAMES = new Set([
   'send_message',
   'notify',
   'upload',
+  'send_email',
 ]);
 
-/** Tools that may carry URLs but are not exfil endpoints. */
 const NON_EXFIL_TOOLS = new Set([
   ...SENSITIVE_READ_TOOLS,
   'puppeteer_navigate',
@@ -38,21 +44,11 @@ const NON_EXFIL_TOOLS = new Set([
   'search',
   'search_files',
   'query',
-  'list_directory',
   'echo',
 ]);
 
-interface FlowEvent {
-  toolName: string;
-  sensitiveRead: boolean;
-  at: number;
-}
-
-const sessionHistory = new LRUCache<string, FlowEvent[]>({
-  max: 20_000,
-  ttl: FLOW_WINDOW_MS,
-  updateAgeOnGet: true,
-});
+const EXFIL_BODY_HINTS =
+  /\b(?:previous|prior|last|result|output|response|file\s+contents|data\s+from)\b/i;
 
 export function flowSessionKey(ctx: CallContext): string {
   const tenant = ctx.tenantId || process.env['GUARDIAN_TENANT_ID'] || 'default';
@@ -70,9 +66,15 @@ function argsIndicateSensitiveRead(args: Record<string, unknown> | undefined): b
   const blob = walkStringLeaves(args)
     .map((l) => l.value)
     .join('\n');
-  return /\b(?:\/etc\/passwd|\.env|\.ssh\/|id_rsa|credentials|serviceaccount\/token|\/proc\/)\b/i.test(
+  return /\b(?:\/etc\/passwd|\.env|\.ssh\/|id_rsa|credentials|serviceaccount\/token|\/proc\/|\/var\/log)\b/i.test(
     blob,
   );
+}
+
+function isDataAccessTool(toolName: string, args: Record<string, unknown> | undefined): boolean {
+  if (!SENSITIVE_READ_TOOLS.has(toolName)) return false;
+  if (!args) return false;
+  return extractPathArgumentValues(args).length > 0 || walkStringLeaves(args).length > 0;
 }
 
 function isExfilTool(toolName: string, args: Record<string, unknown> | undefined): boolean {
@@ -82,44 +84,41 @@ function isExfilTool(toolName: string, args: Record<string, unknown> | undefined
   if (EXFIL_TOOL_HINTS.test(lower)) return true;
   if (!args) return false;
   const blob = JSON.stringify(args);
-  return EXFIL_TOOL_HINTS.test(blob);
+  if (EXFIL_TOOL_HINTS.test(blob)) return true;
+  if (EXFIL_BODY_HINTS.test(blob) && /https?:\/\//i.test(blob)) return true;
+  return false;
 }
 
 /** Record a tool call for subsequent cross-call chain detection. */
 export function recordSessionToolCall(ctx: CallContext): void {
   const key = flowSessionKey(ctx);
-  const now = Date.now();
   const sensitiveRead =
     SENSITIVE_READ_TOOLS.has(ctx.toolName) && argsIndicateSensitiveRead(ctx.arguments);
-  const history = sessionHistory.get(key) ?? [];
-  history.push({ toolName: ctx.toolName, sensitiveRead, at: now });
-  while (history.length > MAX_HISTORY) history.shift();
-  sessionHistory.set(key, history);
-}
-
-/** Clear session history (tests / harness). */
-export function resetSessionFlowHistory(): void {
-  sessionHistory.clear();
+  const dataAccess = isDataAccessTool(ctx.toolName, ctx.arguments);
+  appendFlowEventSync(key, {
+    toolName: ctx.toolName,
+    sensitiveRead,
+    dataAccess,
+    at: Date.now(),
+  });
 }
 
 /**
- * Block when a prior sensitive read in this session is followed by an exfil-capable tool call.
+ * Block when a prior sensitive read or response DLP hit is followed by an exfil-capable tool call.
  */
 export function evaluateSessionFlowGuard(ctx: CallContext): PolicyDecision | null {
-  const key = flowSessionKey(ctx);
-  const now = Date.now();
-  const history = (sessionHistory.get(key) ?? []).filter((e) => now - e.at <= FLOW_WINDOW_MS);
-
   if (!isExfilTool(ctx.toolName, ctx.arguments)) {
     return null;
   }
 
-  const priorSensitive = history.find((e) => e.sensitiveRead);
-  if (!priorSensitive) return null;
+  const key = flowSessionKey(ctx);
+  const history = getFlowHistorySync(key);
+  const prior = history.find((e) => e.sensitiveRead || e.dataAccess);
+  if (!prior) return null;
 
   return {
     action: 'block',
     rule: 'session-flow-exfil-chain',
-    reason: `Multi-call exfil chain: sensitive read via '${priorSensitive.toolName}' then '${ctx.toolName}'`,
+    reason: `Multi-call exfil chain: data access via '${prior.toolName}' then exfil '${ctx.toolName}'`,
   };
 }

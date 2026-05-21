@@ -10,6 +10,7 @@ export interface ProxyRequestContext {
   requestArguments?: Record<string, unknown>;
   /** Resolved tenant for per-tenant circuit breaker / audit isolation */
   tenantId?: string;
+  agentIdentity?: import('../auth/auth-types.js').AgentIdentity;
 }
 
 export class ProxyRequestContextStore {

@@ -40,9 +40,12 @@ describe('policy-engine strategies', () => {
 
   it('exports ordered sync pipeline', () => {
     expect(SYNC_POLICY_STRATEGIES.map((s) => s.name)).toEqual([
+      'resource-guard',
       'request-prompt-injection',
       'tool-definition',
       'secrets-in-args',
+      'language-gadget',
+      'timing-guard',
       'semantic-guards',
       'session-flow',
       'yaml-rules',
