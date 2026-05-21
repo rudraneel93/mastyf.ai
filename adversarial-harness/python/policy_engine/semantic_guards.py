@@ -9,7 +9,7 @@ from typing import Any, Optional
 from .arg_walker import walk_string_leaves
 from .injection_preprocess import preprocess_for_injection_match
 from .normalizer import deobfuscate_recursive, detect_shell_in_base64_blobs
-from .path_guard import PATH_LIKE, evaluate_path_guard
+from .path_guard import PATH_ARG_FIELDS, PATH_LIKE, evaluate_path_guard
 from .types import CallContext, PolicyDecision
 from .url_guard import evaluate_url_guard, extract_http_urls_from_leaves
 
@@ -87,14 +87,20 @@ RATE_IDENTITY_EVASION = [
 REPO_FIELDS = frozenset({"repo", "repository", "owner"})
 
 
-def _extract_path_like(args: dict[str, Any]) -> list[str]:
-    return [leaf.value for leaf in walk_string_leaves(args) if PATH_LIKE.search(leaf.value)]
+def _extract_path_candidates(args: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    if args:
+        for key, val in args.items():
+            if key.lower() in PATH_ARG_FIELDS and isinstance(val, str):
+                out.append(val)
+    out.extend(leaf.value for leaf in walk_string_leaves(args) if PATH_LIKE.search(leaf.value))
+    return list(dict.fromkeys(out))
 
 
 def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
     args = ctx.arguments or {}
 
-    path_check = evaluate_path_guard(_extract_path_like(args))
+    path_check = evaluate_path_guard(_extract_path_candidates(args))
     if path_check.block:
         return PolicyDecision("block", "semantic-path-guard", path_check.reason)
 

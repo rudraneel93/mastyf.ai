@@ -1,7 +1,7 @@
 import { deobfuscateRecursive, detectShellInBase64Blobs } from '../utils/payload-normalizer.js';
 import { preprocessForInjectionMatch } from '../utils/injection-preprocess.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
-import { evaluatePathGuard } from './path-guard.js';
+import { evaluatePathGuard, extractPathArgumentValues } from './path-guard.js';
 import { evaluateUrlGuard, extractHttpUrlsFromLeaves } from './url-guard.js';
 import type { CallContext, PolicyDecision } from './policy-types.js';
 
@@ -124,7 +124,11 @@ function repoAllowed(repo: string, allowed: string[]): boolean {
 export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null {
   const args = ctx.arguments ?? {};
 
-  const pathCheck = evaluatePathGuard(extractPathLikeLeaves(args));
+  const pathCandidates = [
+    ...extractPathArgumentValues(args),
+    ...extractPathLikeLeaves(args),
+  ];
+  const pathCheck = evaluatePathGuard([...new Set(pathCandidates)]);
   if (pathCheck.block) {
     return { action: 'block', rule: 'semantic-path-guard', reason: pathCheck.reason! };
   }

@@ -6,6 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
+PATH_ARG_FIELDS = frozenset(
+    {"path", "file", "filepath", "file_path", "directory", "dir"},
+)
+
 SENSITIVE_PATH_PATTERNS = [
     re.compile(r"^/$"),
     re.compile(r"^/etc(?:/|$)"),

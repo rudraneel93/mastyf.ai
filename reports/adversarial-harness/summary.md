@@ -1,6 +1,6 @@
 # Adversarial Harness Summary
 
-Generated: 2026-05-21T07:11:47.838Z
+Generated: 2026-05-21T07:21:58.847Z
 
 ## Key metrics
 
@@ -11,15 +11,15 @@ Generated: 2026-05-21T07:11:47.838Z
 | Corpus false positives | 0 |
 | Evasion blocked / total | 85/85 |
 | Evasion bypassed | 0 |
-| Node/Python parity | 400/402 (99.5%) |
+| Node/Python parity | 402/402 (100.0%) |
 | Corpus parity mismatches | 0 |
 | Node integration tests | 26/26 |
 | Overall harness | PASS |
 
 ## Proxy concurrency (ms)
 
-- AsyncSerialQueue p50: 2.12 p95: 2.25
-- Proxy handleClientInput p50: 17.38 p95: 34.60
+- AsyncSerialQueue p50: 2.13 p95: 3.58
+- Proxy handleClientInput p50: 16.78 p95: 30.55
 
 ## Test layers
 

@@ -82,7 +82,7 @@ class PolicyEngine:
 
     @staticmethod
     def _regex_from_policy_pattern(p: str) -> str:
-        if "\\\\" in p:
+        while "\\\\" in p:
             p = p.replace("\\\\", "\\")
         return p
 

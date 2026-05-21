@@ -24,6 +24,7 @@ import {
   type PolicyEngineDeps,
   type SyncEvaluateContext,
 } from './strategies/index.js';
+import { compilePolicyRegex } from './regex-compile.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -60,7 +61,7 @@ export class PolicyEngine {
     for (const rule of this.rules) {
       if (rule.patterns?.length) {
         try {
-          const compiled = rule.patterns.map(p => new RegExp(p, 'i'));
+          const compiled = rule.patterns.map((p) => compilePolicyRegex(p));
           this.compiledPatterns.set(rule.name, [
             ...(this.compiledPatterns.get(rule.name) || []),
             { compiled, rule },
@@ -72,7 +73,7 @@ export class PolicyEngine {
       if (rule.argPatterns?.length) {
         for (const ap of rule.argPatterns) {
           try {
-            const compiled = ap.patterns.map(p => new RegExp(p, 'i'));
+            const compiled = ap.patterns.map((p) => compilePolicyRegex(p));
             this.compiledArgPatterns.set(rule.name, [
               ...(this.compiledArgPatterns.get(rule.name) || []),
               { field: ap.field, compiled, rule },

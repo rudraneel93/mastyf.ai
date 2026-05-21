@@ -1,3 +1,5 @@
+import { deobfuscateRecursive } from '../../utils/payload-normalizer.js';
+import { walkStringLeaves } from '../arg-leaf-walker.js';
 import { evaluateSemanticGuards } from '../semantic-guards.js';
 import { evaluateToolChainGuard } from '../tool-chain-guard.js';
 import type { CommandRisk } from '../shell-tokenizer.js';
@@ -7,14 +9,23 @@ import type { PolicyStrategy, PolicyEngineDeps, SyncEvaluateContext } from './ty
 function evaluateSemanticShell(
   shellRisk: CommandRisk,
   toolName: string,
-  argsStr: string,
+  shellInput: string,
   deps: PolicyEngineDeps,
 ): PolicyDecision | null {
   if (deps.config.policy.semantic_shell === false) return null;
 
   const { shellTokenizer, resolveAction } = deps;
 
-  const psReason = shellTokenizer.detectPowerShellRisk(argsStr);
+  const ncReason = shellTokenizer.detectNetcatReverseShell(shellInput);
+  if (ncReason) {
+    return {
+      action: resolveAction('block'),
+      rule: 'semantic-shell-guard',
+      reason: ncReason,
+    };
+  }
+
+  const psReason = shellTokenizer.detectPowerShellRisk(shellInput);
   if (psReason) {
     return {
       action: resolveAction('block'),
@@ -23,7 +34,7 @@ function evaluateSemanticShell(
     };
   }
 
-  const b64ShellReason = shellTokenizer.detectBase64PipeShell(argsStr);
+  const b64ShellReason = shellTokenizer.detectBase64PipeShell(shellInput);
   if (b64ShellReason) {
     return {
       action: resolveAction('block'),
@@ -32,7 +43,7 @@ function evaluateSemanticShell(
     };
   }
 
-  const substReason = shellTokenizer.detectSensitiveCommandSubstitution(argsStr);
+  const substReason = shellTokenizer.detectSensitiveCommandSubstitution(shellInput);
   if (substReason) {
     return {
       action: resolveAction('block'),
@@ -72,9 +83,14 @@ function evaluateSemanticShell(
 export const semanticGuardsStrategy: PolicyStrategy = {
   name: 'semantic-guards',
   evaluate({ normalized, argsStr }, deps) {
-    const shellRisk: CommandRisk = argsStr.length > 0
+    const leafBlob = walkStringLeaves(normalized.arguments ?? {})
+      .map((l) => deobfuscateRecursive(l.value))
+      .join('\n');
+    const shellInput = leafBlob.length > 0 ? leafBlob : argsStr;
+
+    const shellRisk: CommandRisk = shellInput.length > 0
       ? deps.shellTokenizer.analyzeRisk(
-          deps.shellTokenizer.tokenize(argsStr).commands,
+          deps.shellTokenizer.tokenize(shellInput).commands,
         )
       : {
           hasCommandSubstitution: false,
@@ -85,7 +101,7 @@ export const semanticGuardsStrategy: PolicyStrategy = {
           shellMetacharacters: [],
         };
 
-    const shellDecision = evaluateSemanticShell(shellRisk, normalized.toolName, argsStr, deps);
+    const shellDecision = evaluateSemanticShell(shellRisk, normalized.toolName, shellInput, deps);
     if (shellDecision) return shellDecision;
 
     const toolChain = evaluateToolChainGuard(normalized);

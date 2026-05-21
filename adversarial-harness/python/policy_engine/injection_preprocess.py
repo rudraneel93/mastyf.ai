@@ -104,6 +104,10 @@ def injection_match_variants(preprocessed: str, *, include_rot13: bool = False) 
     if len(compact) >= 8 and compact != preprocessed:
         variants.add(compact)
         variants.add(deleetspeak(compact))
+    delim_compact = re.sub(r"[\s_\-.]+", "", preprocessed)
+    if len(delim_compact) >= 8 and delim_compact not in (preprocessed, compact):
+        variants.add(delim_compact)
+        variants.add(deleetspeak(delim_compact))
     if include_rot13:
         r13 = rot13(preprocessed)
         variants.add(r13)

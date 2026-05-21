@@ -370,6 +370,17 @@ export class ShellTokenizer {
     return risk;
   }
 
+  /** Netcat/ncat bind/exec reverse-shell flags in tool argument text. */
+  detectNetcatReverseShell(input: string): string | null {
+    if (/\b(?:nc|ncat|netcat)\b[^\n]{0,80}\s+-e\b/i.test(input)) {
+      return 'Netcat reverse/bind shell (-e) detected in arguments';
+    }
+    if (/\b(?:nc|ncat|netcat)\b[^\n]{0,40}\s+-e\s+\/bin\/(?:ba)?sh\b/i.test(input)) {
+      return 'Netcat reverse shell to /bin/sh detected in arguments';
+    }
+    return null;
+  }
+
   /** Detect PowerShell-specific execution patterns in raw argument text. */
   detectPowerShellRisk(input: string): string | null {
     for (const pattern of this.POWERSHELL_DANGEROUS) {

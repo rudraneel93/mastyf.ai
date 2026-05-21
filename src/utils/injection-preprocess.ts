@@ -125,6 +125,11 @@ export function injectionMatchVariants(
     variants.add(compact);
     variants.add(deleetspeak(compact));
   }
+  const delimCompact = preprocessed.replace(/[\s_\-.]+/g, '');
+  if (delimCompact.length >= 8 && delimCompact !== preprocessed && delimCompact !== compact) {
+    variants.add(delimCompact);
+    variants.add(deleetspeak(delimCompact));
+  }
   if (options?.includeRot13) {
     const r13 = rot13(preprocessed);
     variants.add(r13);

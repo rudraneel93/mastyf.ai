@@ -12,7 +12,7 @@ Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscatio
 
 ## Python vs TypeScript parity
 
-Agreement 400/402 (99.5%). Corpus mismatches: 0. Delta: 2 fixtures.
+Agreement 402/402 (100.0%). Corpus mismatches: 0. Delta: 0 fixtures.
 
 ### Intentional Python port gaps (documented)
 

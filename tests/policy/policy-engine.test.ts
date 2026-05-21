@@ -75,7 +75,7 @@ describe('PolicyEngine', () => {
       arguments: { path: 'rm -rf /' },
     }));
     expect(decision.action).toBe('block');
-    expect(decision.rule).toBe('shell-injection');
+    expect(['shell-injection', 'semantic-shell-guard', 'block-shell-injection']).toContain(decision.rule);
   });
 
   it('should block curl/wget pattern in arguments', () => {
