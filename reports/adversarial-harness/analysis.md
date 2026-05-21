@@ -8,7 +8,7 @@
 
 ## Evasion suite (85 probes)
 
-Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscation, SQL/Nosql, tool-chain, and indirect exfil paths. **Blocked:** 84, **Bypassed:** 1.
+Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscation, SQL/Nosql, tool-chain, and indirect exfil paths. **Blocked:** 85, **Bypassed:** 0.
 
 ## Python vs TypeScript parity
 

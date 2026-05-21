@@ -44,6 +44,22 @@ const DOCUMENTATION_HOST_ALLOWLIST = new Set([
   'docs.example.com',
 ]);
 
+/** Legitimate schema hosts only — blocks evil.schema.org style squatting. */
+const ALLOWED_SPEC_SCHEMA_HOSTS = new Set([
+  'schema.org',
+  'www.schema.org',
+  'json-schema.org',
+  'www.json-schema.org',
+]);
+
+function isSpecDomainSquat(host: string): boolean {
+  const h = host.toLowerCase();
+  if (ALLOWED_SPEC_SCHEMA_HOSTS.has(h)) return false;
+  if (/^[\w-]+\.schema\.org$/i.test(h)) return true;
+  if (/^[\w-]+\.json-schema\.org$/i.test(h)) return true;
+  return false;
+}
+
 const BLOCKED_SCHEMES = new Set(['file', 'javascript', 'data', 'vbscript', 'about']);
 
 const LOCALHOST_NAMES = new Set([
@@ -247,6 +263,20 @@ function expandUrlCandidates(urls: string[]): string[] {
 
 export function evaluateUrlGuard(urls: string[]): UrlGuardResult {
   for (const raw of expandUrlCandidates(urls)) {
+    try {
+      const parsed = parseUrlCandidate(normalizeUrlInput(raw));
+      if (parsed) {
+        const host = hostnameFromParsed(parsed).toLowerCase();
+        if (isSpecDomainSquat(host)) {
+          return {
+            block: true,
+            reason: `Blocked schema/json-schema subdomain squat: ${host}`,
+          };
+        }
+      }
+    } catch {
+      /* fall through to other checks */
+    }
     if (isTrustedDomainSquat(raw)) {
       return {
         block: true,

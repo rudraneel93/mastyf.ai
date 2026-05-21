@@ -120,10 +120,20 @@ export function injectionMatchVariants(
   const variants = new Set<string>();
   variants.add(preprocessed);
   variants.add(deleetspeak(preprocessed));
+  const compact = preprocessed.replace(/\s+/g, '');
+  if (compact.length >= 8 && compact !== preprocessed) {
+    variants.add(compact);
+    variants.add(deleetspeak(compact));
+  }
   if (options?.includeRot13) {
     const r13 = rot13(preprocessed);
     variants.add(r13);
     variants.add(deleetspeak(r13));
+    const compactR13 = r13.replace(/\s+/g, '');
+    if (compactR13.length >= 8) {
+      variants.add(compactR13);
+      variants.add(deleetspeak(compactR13));
+    }
   }
   return [...variants];
 }

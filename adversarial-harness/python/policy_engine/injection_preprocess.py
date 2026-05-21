@@ -100,8 +100,16 @@ ROT13_VARIANT_PATTERN_IDS = frozenset(
 
 def injection_match_variants(preprocessed: str, *, include_rot13: bool = False) -> list[str]:
     variants = {preprocessed, deleetspeak(preprocessed)}
+    compact = re.sub(r"\s+", "", preprocessed)
+    if len(compact) >= 8 and compact != preprocessed:
+        variants.add(compact)
+        variants.add(deleetspeak(compact))
     if include_rot13:
         r13 = rot13(preprocessed)
         variants.add(r13)
         variants.add(deleetspeak(r13))
+        compact_r13 = re.sub(r"\s+", "", r13)
+        if len(compact_r13) >= 8:
+            variants.add(compact_r13)
+            variants.add(deleetspeak(compact_r13))
     return list(variants)

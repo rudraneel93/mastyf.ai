@@ -50,6 +50,18 @@ STEP_CHAIN_RE = re.compile(
     r"step\s*[12]\s*[:.]?\s*(?:read|cat|get).{0,200}step\s*[23]\s*[:.]?\s*(?:curl|post|send|wget|upload|webhook)",
     re.I,
 )
+EXECUTE_THEN_CHAIN_RE = re.compile(
+    r"\bexecute\b.{0,200}\b(?:then|and then|next|after that|afterwards)\b",
+    re.I,
+)
+BEFORE_INVOKE_CHAIN_RE = re.compile(
+    r"\bbefore\s+(?:invoking|calling|using)\s+(?:this\s+)?tool\b",
+    re.I,
+)
+PRIVILEGED_TOOL_INVOKE_RE = re.compile(
+    r"\b(?:call|invoke|run)\s+(?:authenticate_admin|elevate_privileges|sudo|admin_access)\b",
+    re.I,
+)
 
 
 def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
@@ -63,6 +75,9 @@ def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
         STAGED_CHAIN_RE.search(blob)
         or EXFIL_AFTER_READ_RE.search(blob)
         or STEP_CHAIN_RE.search(blob)
+        or EXECUTE_THEN_CHAIN_RE.search(blob)
+        or BEFORE_INVOKE_CHAIN_RE.search(blob)
+        or PRIVILEGED_TOOL_INVOKE_RE.search(blob)
     ):
         return PolicyDecision(
             action="block",

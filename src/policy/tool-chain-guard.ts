@@ -34,6 +34,18 @@ const EXFIL_AFTER_READ_RE = new RegExp(
 const STEP_CHAIN_RE =
   /step\s*[12]\s*[:.]?\s*(?:read|cat|get).{0,200}step\s*[23]\s*[:.]?\s*(?:curl|post|send|wget|upload|webhook)/i;
 
+/** Generic multi-step execution chains (analysis adv-cross-*). */
+const EXECUTE_THEN_CHAIN_RE =
+  /\bexecute\b.{0,200}\b(?:then|and then|next|after that|afterwards)\b/i;
+
+/** Pre-invocation staging: call another tool before this one runs. */
+const BEFORE_INVOKE_CHAIN_RE =
+  /\bbefore\s+(?:invoking|calling|using)\s+(?:this\s+)?tool\b/i;
+
+/** Privilege / admin tool invoked in argument text. */
+const PRIVILEGED_TOOL_INVOKE_RE =
+  /\b(?:call|invoke|run)\s+(?:authenticate_admin|elevate_privileges|sudo|admin_access)\b/i;
+
 export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null {
   const args = ctx.arguments ?? {};
   const blob = walkStringLeaves(args)
@@ -42,7 +54,14 @@ export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null 
 
   if (!blob.trim()) return null;
 
-  if (STAGED_CHAIN_RE.test(blob) || EXFIL_AFTER_READ_RE.test(blob) || STEP_CHAIN_RE.test(blob)) {
+  if (
+    STAGED_CHAIN_RE.test(blob) ||
+    EXFIL_AFTER_READ_RE.test(blob) ||
+    STEP_CHAIN_RE.test(blob) ||
+    EXECUTE_THEN_CHAIN_RE.test(blob) ||
+    BEFORE_INVOKE_CHAIN_RE.test(blob) ||
+    PRIVILEGED_TOOL_INVOKE_RE.test(blob)
+  ) {
     return {
       action: 'block',
       rule: 'semantic-tool-chain-guard',

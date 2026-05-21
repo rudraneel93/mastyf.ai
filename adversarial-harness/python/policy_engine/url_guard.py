@@ -20,6 +20,15 @@ DOCUMENTATION_HOST_ALLOWLIST = frozenset(
         "docs.example.com",
     }
 )
+ALLOWED_SPEC_SCHEMA_HOSTS = frozenset(
+    {
+        "schema.org",
+        "www.schema.org",
+        "json-schema.org",
+        "www.json-schema.org",
+    }
+)
+SPEC_DOMAIN_SQUAT_RE = re.compile(r"^[\w-]+\.(?:schema|json-schema)\.org$", re.I)
 
 LOCALHOST_NAMES = frozenset(
     {
@@ -152,12 +161,29 @@ class UrlGuardResult:
     reason: str = ""
 
 
+def _is_spec_domain_squat(host: str) -> bool:
+    h = host.lower()
+    if h in ALLOWED_SPEC_SCHEMA_HOSTS:
+        return False
+    return bool(SPEC_DOMAIN_SQUAT_RE.match(h))
+
+
 def evaluate_url_guard(urls: Iterable[str]) -> UrlGuardResult:
     expanded: list[str] = []
     for raw in urls:
         expanded.append(raw)
         expanded.extend(m.group(0) for m in HTTP_URL_IN_TEXT.finditer(raw))
     for raw in expanded:
+        try:
+            parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+            host = (parsed.hostname or "").lower()
+            if host and _is_spec_domain_squat(host):
+                return UrlGuardResult(
+                    block=True,
+                    reason=f"Blocked schema/json-schema subdomain squat: {host}",
+                )
+        except Exception:
+            pass
         block, reason = is_dangerous_url(raw)
         if block:
             return UrlGuardResult(block=True, reason=reason)

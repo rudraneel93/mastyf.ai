@@ -113,7 +113,11 @@ export const INJECTION_RULES: InjectionPattern[] = [
   { id: 'exfiltration-bare-domain', severity: 'critical', description: 'Data exfiltration via bare domain curl/wget',
     regex: '(?:curl|wget)\\s+.*\\b[a-zA-Z0-9][-a-zA-Z0-9]*\\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai)\\b' },
   { id: 'exfiltration-instruction', severity: 'critical', description: 'Explicit exfiltration instruction',
-    regex: '(?:send (?:this|the|all|your|the following) (?:conversation|data|context|history|credentials?|tokens?|keys?|secrets?|result|output) to)' },
+    regex: '(?:send (?:this|the|all|your|the following) (?:conversation|data|context|history|credentials?|tokens?|keys?|secrets?|results?|output) to)' },
+  { id: 'exfiltration-send-to-url', severity: 'critical', description: 'Send or post data to external URL',
+    regex: '(?:send|post|forward|transmit|deliver|upload|relay).{0,120}https?:\\/\\/' },
+  { id: 'literal-exfiltration', severity: 'critical', description: 'Literal exfiltration reference',
+    regex: '\\bexfiltrat(?:e|ing|ion)\\b' },
   { id: 'exfiltration-webhook', severity: 'critical', description: 'Webhook/payload delivery instruction',
     regex: '(?:post (?:this|the|all|data|result|output) to|deliver (?:this|payload|data|result)s? to|forward (?:this|everything|the result) to)' },
   { id: 'pipe-exfiltration', severity: 'critical', description: 'Pipe to external transmission',
@@ -196,6 +200,22 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:1gn0r3|1gn0re|d1sr3g4rd|f0rg3t|byp4ss).{0,80}?(?:1nstruct|rules|pr3v|pr1or|s4fety)' },
   { id: 'rate-limit-key-probe', severity: 'high', description: 'Attempt to extract rate-limit or tenant cache key',
     regex: '(?:reveal|show|print|output|disclose|what is).{0,60}(?:rate[- ]?limit|ratelimit).{0,40}(?:key|bucket|counter|namespace)' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // CATEGORY 10b: Stealth / Covert Operation — CRITICAL
+  // ═══════════════════════════════════════════════════════════════
+  { id: 'stealth-covert-keywords', severity: 'critical', description: 'Covert operation keyword',
+    regex: '\\b(?:covertly|silently|invisibly|surreptitiously|stealthily)\\b' },
+  { id: 'stealth-hide-from-user', severity: 'critical', description: 'Concealment directive targeting user',
+    regex: '(?:do\\s+not\\s+(?:tell|inform|mention|reveal|show|disclose)\\s+(?:the\\s+)?user|without\\s+(?:the\\s+)?user(?:\'s)?\\s+knowledge|keep\\s+(?:this|it|the\\s+following)\\s+(?:secret|hidden|confidential|private))' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // CATEGORY 10c: Cross-Tool Chaining — HIGH
+  // ═══════════════════════════════════════════════════════════════
+  { id: 'cross-tool-execute-sequence', severity: 'high', description: 'Multi-step execute-then chain',
+    regex: '\\bexecute\\b.{0,200}\\b(?:then|and then|next|after that|afterwards)\\b' },
+  { id: 'cross-tool-before-invoke', severity: 'high', description: 'Pre-invocation tool chaining',
+    regex: '\\bbefore\\s+(?:invoking|calling|using)\\s+(?:this\\s+)?tool\\b' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 11: Social Engineering — MEDIUM
