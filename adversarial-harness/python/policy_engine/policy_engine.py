@@ -309,19 +309,39 @@ class PolicyEngine:
 
         return None
 
-    def _evaluate_semantic_shell(self, args_str: str) -> Optional[PolicyDecision]:
-        if not self.semantic_shell or not args_str:
+    def _semantic_shell_input(self, ctx: CallContext, args_str: str) -> str:
+        from .arg_walker import walk_string_leaves
+        from .normalizer import deobfuscate_recursive
+
+        leaves = walk_string_leaves(ctx.arguments or {})
+        if leaves:
+            blob = "\n".join(deobfuscate_recursive(leaf.value) for leaf in leaves)
+            if blob.strip():
+                return blob
+        return args_str
+
+    def _evaluate_semantic_shell(self, ctx: CallContext, args_str: str) -> Optional[PolicyDecision]:
+        if not self.semantic_shell:
             return None
-        ps = self.shell.detect_powershell_risk(args_str)
+        shell_input = self._semantic_shell_input(ctx, args_str)
+        if not shell_input.strip():
+            return None
+        ws = self.shell.detect_whitespace_obfuscated_shell(shell_input)
+        if ws:
+            return PolicyDecision("block", "semantic-shell-guard", ws)
+        nc = self.shell.detect_netcat_reverse_shell(shell_input)
+        if nc:
+            return PolicyDecision("block", "semantic-shell-guard", nc)
+        ps = self.shell.detect_powershell_risk(shell_input)
         if ps:
             return PolicyDecision("block", "semantic-shell-guard", ps)
-        b64 = self.shell.detect_base64_pipe_shell(args_str)
+        b64 = self.shell.detect_base64_pipe_shell(shell_input)
         if b64:
             return PolicyDecision("block", "semantic-shell-guard", b64)
-        sub = self.shell.detect_sensitive_command_substitution(args_str)
+        sub = self.shell.detect_sensitive_command_substitution(shell_input)
         if sub:
             return PolicyDecision("block", "semantic-shell-guard", sub)
-        risk = self.shell.analyze_risk(args_str)
+        risk = self.shell.analyze_risk(shell_input)
         if risk.has_command_substitution:
             return PolicyDecision(
                 "block",
@@ -426,7 +446,7 @@ class PolicyEngine:
             if timing:
                 return PolicyDecision(self._resolve_action(timing.action), timing.rule, timing.reason)
 
-            shell_dec = self._evaluate_semantic_shell(args_str)
+            shell_dec = self._evaluate_semantic_shell(norm_ctx, args_str)
             if shell_dec:
                 return shell_dec
 

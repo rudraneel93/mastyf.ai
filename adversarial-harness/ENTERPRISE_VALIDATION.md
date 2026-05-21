@@ -33,7 +33,7 @@ Each fixture sets `expected: "block"` (or `pass` for placeholder-only secret pro
 
 No scanner-only shortcuts: decisions come from the same sync pipeline as TypeScript (`resource → encoding → injection → secrets → gadgets → timing → semantic → session-flow → YAML`).
 
-## 3. 100% on 536-fixture enterprise suite (real policy engine)
+## 3. 100% on 637-fixture enterprise suite (real policy engine)
 
 **Command:**
 
@@ -42,7 +42,7 @@ pnpm exec tsx adversarial-harness/scripts/export-harness-rules.ts
 pnpm run harness:comprehensive
 ```
 
-**Fixture breakdown (536 total):**
+**Fixture breakdown (637 total):**
 
 | Source | Count |
 |--------|-------|
@@ -52,8 +52,11 @@ pnpm run harness:comprehensive
 | Custom adversarial (`adv-001`…`adv-120`) | 120 |
 | Generated comprehensive | 38 |
 | Uploaded bypass | 83 |
+| Analysis ADV (`ADV-001`…`ADV-008`) | 101 |
 
-**Latest validated run:** `536/536` policy decisions correct; infrastructure (AsyncSerialQueue, streaming, 267-rule secrets, Node vitest 26/26) passed.
+**Generator:** `adversarial-harness/scripts/generate-analysis-adv-fixtures.mjs`
+
+**Latest validated run:** `637/637` policy decisions correct; infrastructure (AsyncSerialQueue, streaming, 267-rule secrets, Node vitest 26/26) passed.
 
 **Reports:**
 

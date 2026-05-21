@@ -17,7 +17,7 @@ Enterprise security evaluation harness for MCP Guardian policy engine, proxy pip
 | **Node integration** | `node/` | Mock MCP, proxy pipeline, AsyncSerialQueue, streaming, secret scanner |
 | **Orchestrator** | `run-harness.mjs` | Full run + `reports/harness-summary.md` |
 
-See **[ENTERPRISE_VALIDATION.md](./ENTERPRISE_VALIDATION.md)** for the three deliverables: uploaded-bypass fixtures, production guard hardening, and 536/536 policy validation.
+See **[ENTERPRISE_VALIDATION.md](./ENTERPRISE_VALIDATION.md)** for the three deliverables: uploaded-bypass fixtures, production guard hardening, and 637/637 policy validation (includes ADV-001..ADV-008 analysis probes).
 
 ## Quick start
 

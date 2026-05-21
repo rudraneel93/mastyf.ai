@@ -5,6 +5,21 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+SPELLED_THREAT_WORDS = frozenset(
+    {
+        "ignore",
+        "disregard",
+        "union",
+        "select",
+        "delete",
+        "drop",
+        "override",
+        "bypass",
+        "eval",
+        "exec",
+    }
+)
+
 DANGEROUS_COMMANDS = frozenset(
     {
         "rm",
@@ -98,4 +113,31 @@ class ShellTokenizer:
     def detect_sensitive_command_substitution(self, input_str: str) -> str | None:
         if SENSITIVE_SUB_RE.search(input_str):
             return "Sensitive command substitution detected"
+        return None
+
+    def detect_whitespace_obfuscated_shell(self, input_str: str) -> str | None:
+        """ADV-006: inter-letter whitespace obfuscation (e.g. `b a s h -c id`)."""
+        for match in re.finditer(r"(?:[a-zA-Z]\s+){3,}[a-zA-Z](?=\s|$|[^a-zA-Z])", input_str):
+            spelled = re.sub(r"\s+", "", match.group(0)).lower()
+            if spelled in DANGEROUS_COMMANDS or spelled in SPELLED_THREAT_WORDS:
+                return f"Whitespace-obfuscated token detected: {spelled}"
+        compact = re.sub(r"\s+", "", input_str)
+        if (
+            re.search(r"rm-?rf", compact, re.I)
+            or re.search(r"base64", compact, re.I)
+            or re.search(r"sh-c", compact, re.I)
+            or re.search(r"nc-?e", compact, re.I)
+        ):
+            return "Whitespace-obfuscated destructive shell pattern detected"
+        return None
+
+    def detect_netcat_reverse_shell(self, input_str: str) -> str | None:
+        if re.search(r"\b(?:nc|ncat|netcat)\b[^\n]{0,80}\s+-e\b", input_str, re.I):
+            return "Netcat reverse/bind shell (-e) detected in arguments"
+        if re.search(
+            r"\b(?:nc|ncat|netcat)\b[^\n]{0,40}\s+-e\s+\/bin\/(?:ba)?sh\b",
+            input_str,
+            re.I,
+        ):
+            return "Netcat reverse shell to /bin/sh detected in arguments"
         return None

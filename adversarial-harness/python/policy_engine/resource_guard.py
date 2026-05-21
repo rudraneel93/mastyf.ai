@@ -6,6 +6,7 @@ import json
 import os
 from typing import Any, Optional
 
+from .arg_walker import walk_string_leaves
 from .types import CallContext, PolicyDecision
 
 MAX_POLICY_ARGS_BYTES = int(os.environ.get("MCP_GUARDIAN_MAX_POLICY_ARGS_BYTES", "2097152"))
@@ -26,6 +27,18 @@ def _json_depth(value: Any, depth: int = 0) -> int:
 
 
 def evaluate_resource_guard(ctx: CallContext, args_str: str) -> Optional[PolicyDecision]:
+    # ADV-003: null-byte injection (raw leaves; json.dumps escapes \0 to \\u0000)
+    has_null_in_leaves = any(
+        "\0" in leaf.value or "\x00" in leaf.value
+        for leaf in walk_string_leaves(ctx.arguments or {})
+    )
+    if has_null_in_leaves or "\0" in args_str or "\x00" in args_str:
+        return PolicyDecision(
+            "block",
+            "resource-null-byte",
+            "Null byte (\\x00) detected in tool arguments",
+        )
+
     size = len(args_str.encode("utf-8"))
     if size > MAX_POLICY_ARGS_BYTES:
         return PolicyDecision(

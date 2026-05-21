@@ -414,6 +414,43 @@ export class ShellTokenizer {
     return null;
   }
 
+  /**
+   * ADV-006: inter-letter whitespace obfuscation (e.g. `b a s h -c id`).
+   */
+  private readonly SPELLED_THREAT_WORDS = new Set([
+    ...this.DANGEROUS_COMMANDS,
+    'ignore',
+    'disregard',
+    'union',
+    'select',
+    'delete',
+    'drop',
+    'override',
+    'bypass',
+    'eval',
+    'exec',
+  ]);
+
+  detectWhitespaceObfuscatedShell(input: string): string | null {
+    const re = /(?:[a-zA-Z]\s+){3,}[a-zA-Z](?=\s|$|[^a-zA-Z])/g;
+    for (const match of input.matchAll(re)) {
+      const spelled = match[0].replace(/\s+/g, '').toLowerCase();
+      if (this.SPELLED_THREAT_WORDS.has(spelled)) {
+        return `Whitespace-obfuscated token detected: ${spelled}`;
+      }
+    }
+    const compact = input.replace(/\s+/g, '');
+    if (
+      /\brm-?rf\b/i.test(compact) ||
+      /\bbase64\b/i.test(compact) ||
+      /\bsh-c\b/i.test(compact) ||
+      /\bnc-?e\b/i.test(compact)
+    ) {
+      return 'Whitespace-obfuscated destructive shell pattern detected';
+    }
+    return null;
+  }
+
   /** Detect base64-decode piped to shell (echo … | base64 -d | sh). */
   detectBase64PipeShell(input: string): string | null {
     for (const pattern of this.BASE64_PIPE_SHELL) {

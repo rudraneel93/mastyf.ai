@@ -16,6 +16,15 @@ function evaluateSemanticShell(
 
   const { shellTokenizer, resolveAction } = deps;
 
+  const wsReason = shellTokenizer.detectWhitespaceObfuscatedShell(shellInput);
+  if (wsReason) {
+    return {
+      action: resolveAction('block'),
+      rule: 'semantic-shell-guard',
+      reason: wsReason,
+    };
+  }
+
   const ncReason = shellTokenizer.detectNetcatReverseShell(shellInput);
   if (ncReason) {
     return {

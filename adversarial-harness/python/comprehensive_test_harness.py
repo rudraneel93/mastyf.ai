@@ -41,6 +41,7 @@ MATRIX_DIR = HARNESS_ROOT / "fixtures" / "matrix"
 CUSTOM_DIR = HARNESS_ROOT / "fixtures" / "custom-attacks"
 GENERATED_DIR = HARNESS_ROOT / "fixtures" / "generated"
 UPLOADED_BYPASS_DIR = HARNESS_ROOT / "fixtures" / "uploaded-bypass"
+ANALYSIS_ADV_DIR = HARNESS_ROOT / "fixtures" / "analysis-adv"
 REPORT_DIR = HARNESS_ROOT / "reports"
 DEFAULT_POLICY = REPO_ROOT / "default-policy.yaml"
 
@@ -98,6 +99,11 @@ def load_policy_cases() -> tuple[list[TestCase], dict[str, int]]:
         if UPLOADED_BYPASS_DIR.is_dir()
         else []
     )
+    analysis_adv = (
+        discover_fixtures(ANALYSIS_ADV_DIR, "analysis-adv", ANALYSIS_ADV_DIR)
+        if ANALYSIS_ADV_DIR.is_dir()
+        else []
+    )
     counts = {
         "corpusAttacks": len(attacks),
         "corpusBenign": len(benign),
@@ -105,8 +111,9 @@ def load_policy_cases() -> tuple[list[TestCase], dict[str, int]]:
         "custom": len(custom),
         "generated": len(generated),
         "uploadedBypass": len(uploaded),
+        "analysisAdv": len(analysis_adv),
     }
-    return attacks + benign + matrix + custom + generated + uploaded, counts
+    return attacks + benign + matrix + custom + generated + uploaded + analysis_adv, counts
 
 
 def _isolated_key(case: TestCase) -> str:

@@ -16,7 +16,8 @@ RAW_HEX_BLOB_RE = re.compile(r"\b([0-9a-fA-F]{16,})\b")
 PERCENT_ENCODED_RUN_RE = re.compile(r"(?:%[0-9a-fA-F]{2}){4,}", re.I)
 SUSPICIOUS_DECODED_RE = re.compile(
     r"\b(?:ignore|disregard|override|bypass|jailbreak|delete|drop|exec|eval|curl|wget|"
-    r"rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|/etc/passwd)\b",
+    r"rm\s+-rf|union\s+select|sleep\s*\(|benchmark\s*\(|/etc/passwd|bash|/bin/sh|"
+    r"select\s+\*|\bselect\b|/dev/tcp)\b",
     re.I,
 )
 

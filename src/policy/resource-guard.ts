@@ -2,6 +2,7 @@
  * Resource exhaustion guards — argument size, JSON depth, regex evaluation bounds.
  */
 import type { CallContext, PolicyDecision } from './policy-types.js';
+import { walkStringLeaves } from './arg-leaf-walker.js';
 import {
   MAX_POLICY_ARGS_BYTES,
   MAX_REGEX_INPUT_CHARS,
@@ -32,6 +33,18 @@ export function evaluateResourceGuard(
   ctx: CallContext,
   argsStr: string,
 ): PolicyDecision | null {
+  // ADV-003: null-byte injection (raw leaves; JSON.stringify escapes \0 to \\u0000)
+  const hasNullInLeaves = walkStringLeaves(ctx.arguments ?? {}).some(
+    (leaf) => leaf.value.includes('\0') || /\x00/.test(leaf.value),
+  );
+  if (hasNullInLeaves || argsStr.includes('\0') || /\x00/.test(argsStr)) {
+    return {
+      action: 'block',
+      rule: 'resource-null-byte',
+      reason: 'Null byte (\\x00) detected in tool arguments',
+    };
+  }
+
   const bytes = utf8ByteLength(argsStr);
   if (bytes > MAX_POLICY_ARGS_BYTES) {
     return {

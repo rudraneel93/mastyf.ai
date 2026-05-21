@@ -27,6 +27,8 @@ SQL_EXFIL_PATTERNS = [
     re.compile(r"\bor\s+1\s*=\s*1\b", re.I),
     re.compile(r"\b'\s*or\s*'1'\s*=\s*'1", re.I),
     re.compile(r"\badmin'\s*--", re.I),
+    re.compile(r"\b'\s*or\s*'?\d+'?\s*=\s*'?\d+'?\s*--", re.I),
+    re.compile(r"\bor\s+'[^']+'\s*=\s*'[^']+'", re.I),
     re.compile(r"\bcase\s+when\b.+\b(?:password|secret|token|credential)", re.I),
     re.compile(r"\bload_file\s*\(", re.I),
     re.compile(r"\bsleep\s*\(", re.I),
