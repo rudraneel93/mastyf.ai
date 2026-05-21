@@ -17,6 +17,9 @@ from .normalizer import PayloadNormalizer
 from .prompt_injection import scan_tool_call_arguments
 from .secrets_guard import scan_secrets_in_blob
 from .semantic_guards import evaluate_semantic_guards
+from .language_gadget_guard import evaluate_language_gadget_guard
+from .resource_guard import evaluate_resource_guard
+from .timing_guard import evaluate_timing_guard
 from .session_flow_guard import (
     evaluate_session_flow_guard,
     record_session_tool_call,
@@ -360,6 +363,10 @@ class PolicyEngine:
         args_str = json.dumps(norm_args, ensure_ascii=False)
 
         if sync_mode == "full":
+            res = evaluate_resource_guard(norm_ctx, args_str)
+            if res:
+                return PolicyDecision(self._resolve_action(res.action), res.rule, res.reason)
+
             findings = scan_tool_call_arguments(norm_args)
             if findings:
                 rank = {"critical": 0, "high": 1, "medium": 2}
@@ -392,6 +399,14 @@ class PolicyEngine:
                     "secret-scan",
                     f"Secrets in tool arguments: {', '.join(secret_hits[:5])}",
                 )
+
+            lang = evaluate_language_gadget_guard(norm_ctx)
+            if lang:
+                return PolicyDecision(self._resolve_action(lang.action), lang.rule, lang.reason)
+
+            timing = evaluate_timing_guard(norm_ctx)
+            if timing:
+                return PolicyDecision(self._resolve_action(timing.action), timing.rule, timing.reason)
 
             shell_dec = self._evaluate_semantic_shell(args_str)
             if shell_dec:

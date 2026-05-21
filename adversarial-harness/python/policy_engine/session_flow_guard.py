@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
-from collections import defaultdict
-from dataclasses import dataclass
 from typing import Any, Optional
 
 from .path_guard import evaluate_path_guard, extract_path_argument_values
 from .types import CallContext, PolicyDecision
 
+try:
+    from .session_flow_store import append_flow_event_sync, get_flow_history_sync, record_sensitive_response_access
+except ImportError:
+    append_flow_event_sync = None  # type: ignore
+
 FLOW_WINDOW_MS = 5 * 60 * 1000
-MAX_HISTORY = 24
 
 SENSITIVE_READ_TOOLS = frozenset(
     {
@@ -23,35 +26,27 @@ SENSITIVE_READ_TOOLS = frozenset(
         "cat",
         "head",
         "tail",
+        "list_directory",
+        "list_files",
     }
 )
 
-EXFIL_TOOL_NAMES = frozenset({"http_request", "post_webhook", "send_message", "notify", "upload"})
+EXFIL_TOOL_NAMES = frozenset(
+    {"http_request", "post_webhook", "send_message", "notify", "upload", "send_email"}
+)
 NON_EXFIL_TOOLS = SENSITIVE_READ_TOOLS | frozenset(
-    {
-        "puppeteer_navigate",
-        "puppeteer_screenshot",
-        "search",
-        "search_files",
-        "query",
-        "list_directory",
-        "echo",
-    }
+    {"puppeteer_navigate", "puppeteer_screenshot", "search", "search_files", "query", "echo"}
 )
 EXFIL_HINT = re.compile(
-    r"\b(?:webhook|callback|post|upload|send|forward|notify|http_request|fetch_url)\b",
+    r"\b(?:webhook|callback|post|upload|send|forward|notify|http_request|fetch_url|transmit)\b",
+    re.I,
+)
+EXFIL_BODY_HINT = re.compile(
+    r"\b(?:previous|prior|last|result|output|response|file\s+contents|data\s+from)\b",
     re.I,
 )
 
-
-@dataclass
-class FlowEvent:
-    tool_name: str
-    sensitive_read: bool
-    at: float
-
-
-_history: dict[str, list[FlowEvent]] = defaultdict(list)
+_history: dict[str, list[dict[str, Any]]] = {}
 
 
 def flow_session_key(ctx: CallContext) -> str:
@@ -68,14 +63,20 @@ def _args_sensitive(args: dict[str, Any] | None) -> bool:
     paths = extract_path_argument_values(args)
     if paths and evaluate_path_guard(paths).block:
         return True
-    blob = " ".join(str(v) for v in args.values())
+    blob = json.dumps(args, ensure_ascii=False)
     return bool(
         re.search(
-            r"\b(?:/etc/passwd|\.env|\.ssh/|id_rsa|credentials|serviceaccount/token|/proc/)",
+            r"\b(?:/etc/passwd|\.env|\.ssh/|id_rsa|credentials|serviceaccount/token|/proc/|/var/log)",
             blob,
             re.I,
         )
     )
+
+
+def _is_data_access(tool_name: str, args: dict[str, Any] | None) -> bool:
+    if tool_name not in SENSITIVE_READ_TOOLS or not args:
+        return False
+    return bool(extract_path_argument_values(args)) or bool(args)
 
 
 def _is_exfil_tool(tool_name: str, args: dict[str, Any] | None) -> bool:
@@ -86,24 +87,37 @@ def _is_exfil_tool(tool_name: str, args: dict[str, Any] | None) -> bool:
         return True
     if not args:
         return False
-    import json
-
     blob = json.dumps(args, ensure_ascii=False)
-    return bool(EXFIL_HINT.search(blob))
+    if EXFIL_HINT.search(blob):
+        return True
+    return bool(EXFIL_BODY_HINT.search(blob) and re.search(r"https?://", blob, re.I))
 
 
 def record_session_tool_call(ctx: CallContext) -> None:
     key = flow_session_key(ctx)
-    now = time.time() * 1000
-    sensitive = ctx.tool_name in SENSITIVE_READ_TOOLS and _args_sensitive(ctx.arguments)
-    hist = _history[key]
-    hist.append(FlowEvent(ctx.tool_name, sensitive, now))
-    if len(hist) > MAX_HISTORY:
-        del hist[: len(hist) - MAX_HISTORY]
+    event = {
+        "toolName": ctx.tool_name,
+        "sensitiveRead": ctx.tool_name in SENSITIVE_READ_TOOLS and _args_sensitive(ctx.arguments),
+        "dataAccess": _is_data_access(ctx.tool_name, ctx.arguments),
+        "at": time.time() * 1000,
+    }
+    if append_flow_event_sync:
+        append_flow_event_sync(key, event)
+        return
+    hist = _history.setdefault(key, [])
+    hist.append(event)
+    if len(hist) > 24:
+        del hist[: len(hist) - 24]
 
 
 def reset_session_flow_history() -> None:
     _history.clear()
+    try:
+        from .session_flow_store import reset_session_flow_store
+
+        reset_session_flow_store()
+    except ImportError:
+        pass
 
 
 def evaluate_session_flow_guard(ctx: CallContext) -> Optional[PolicyDecision]:
@@ -111,12 +125,15 @@ def evaluate_session_flow_guard(ctx: CallContext) -> Optional[PolicyDecision]:
         return None
     key = flow_session_key(ctx)
     now = time.time() * 1000
-    hist = [e for e in _history.get(key, []) if now - e.at <= FLOW_WINDOW_MS]
-    prior = next((e for e in hist if e.sensitive_read), None)
+    if get_flow_history_sync:
+        hist = get_flow_history_sync(key)
+    else:
+        hist = [e for e in _history.get(key, []) if now - e["at"] <= FLOW_WINDOW_MS]
+    prior = next((e for e in hist if e.get("sensitiveRead") or e.get("dataAccess")), None)
     if not prior:
         return None
     return PolicyDecision(
         "block",
         "session-flow-exfil-chain",
-        f"Multi-call exfil chain: sensitive read via '{prior.tool_name}' then '{ctx.tool_name}'",
+        f"Multi-call exfil chain: data access via '{prior.get('toolName')}' then exfil '{ctx.tool_name}'",
     )

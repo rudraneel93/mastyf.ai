@@ -7,7 +7,7 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'js-yaml';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
-import { resetSessionFlowHistory } from '../../src/policy/session-flow-guard.js';
+import { resetSessionFlowHistory } from '../../src/policy/session-flow-store.js';
 import type { CallContext, PolicyConfig } from '../../src/policy/policy-types.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));

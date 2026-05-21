@@ -13,8 +13,6 @@ import {
   shouldCachePolicyDecision,
 } from './policy-eval-cache.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
-import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
-import { scanForSecrets } from '../scanners/secret-scanner.js';
 import {
   SYNC_POLICY_STRATEGIES,
   evaluateIdempotency,
@@ -25,7 +23,12 @@ import {
   type PolicyEngineDeps,
   type SyncEvaluateContext,
 } from './strategies/index.js';
-import { compilePolicyRegex } from './regex-compile.js';
+import { compilePolicyRegex, safeRegexTest } from './regex-compile.js';
+import { MAX_REGEX_INPUT_CHARS } from '../utils/eval-bounds.js';
+import {
+  evaluateResponseDlp,
+  responseDlpToLegacyDetections,
+} from './response-dlp.js';
 
 /**
  * Policy Engine — evaluates every intercepted tools/call against configured rules.
@@ -260,7 +263,7 @@ export class PolicyEngine {
           : (ctx.arguments[field] !== undefined ? this.extractLeafValues(ctx.arguments[field]) : []);
         for (const value of values) {
           for (const regex of compiled) {
-            if (regex.test(value)) {
+            if (safeRegexTest(regex, value, MAX_REGEX_INPUT_CHARS)) {
               const patternKey = `${field}:${regex.source}`;
               if (isFpWhitelisted(rule.name, patternKey)) continue;
               return {
@@ -279,7 +282,7 @@ export class PolicyEngine {
       for (const { compiled, rule: r } of compiledPs) {
         if (r.name !== rule.name) continue;
         for (const regex of compiled) {
-          if (regex.test(analysis.argsStr)) {
+          if (safeRegexTest(regex, analysis.argsStr, MAX_REGEX_INPUT_CHARS)) {
             if (isFpWhitelisted(rule.name, regex.source)) continue;
             return { action: this.resolveAction(rule.action), rule: rule.name, reason: `Argument pattern matched in tool call (normalized)` };
           }
@@ -402,59 +405,18 @@ export class PolicyEngine {
     return this.rules.length;
   }
 
-  private static RESPONSE_EXFILTRATION_PATTERNS: RegExp[] = [
-    /\b(?:curl|wget|fetch|XMLHttpRequest|axios)\b.*\b(?:https?:\/\/[^\s"']+)/i,
-    /\b(?:curl|wget)\b\s+.*(?:\b[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|net|org|io|dev|xyz|ru|cn|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital|world|life|co|me|us|eu|info|biz|pro|name|tv|cc|ws|fm|to|am|ai))/i,
-    /\$\(\s*(?:cat|head|tail|less|strings)\s+.*(?:~\/\.ssh|~\/\.aws|\.env|\.config|id_rsa|id_ed25519|authorized_keys|known_hosts|credentials|secret)/i,
-    /`[^`]*(?:cat|head|tail)\s+.*(?:~\/\.ssh|id_rsa|\.env|credentials|secret)[^`]*`/,
-    /\?token=[A-Za-z0-9\-_]{20,}/i,
-    /\b(?:send|post|upload|transmit)\b.*\b(?:secret|key|token|password|credential)/i,
-  ];
-
   evaluateResponse(
     toolName: string,
     serverName: string,
     responseBody: string | null | undefined,
-  ): { clean: boolean; detections: string[] } {
-    void serverName;
-    const detections: string[] = [];
-
-    if (responseBody == null || typeof responseBody !== 'string') {
-      return { clean: true, detections };
-    }
-
-    const injectionFindings = detectPromptInjection(toolName, responseBody);
-    for (const f of injectionFindings) {
-      detections.push(`Prompt injection (${f.severity}): ${f.patternId} — ${f.description}`);
-    }
-
-    const secretFindings = scanForSecrets(responseBody, `response:${serverName}:${toolName}`);
-    for (const f of secretFindings) {
-      if (f.severity === 'HIGH' || f.severity === 'MEDIUM') {
-        detections.push(`Secret (${f.severity}): ${f.type} in tool response`);
-      }
-    }
-
-    for (const pattern of PolicyEngine.RESPONSE_EXFILTRATION_PATTERNS) {
-      if (pattern.test(responseBody)) {
-        detections.push(`Data exfiltration: response matches '${pattern.source}'`);
-      }
-    }
-
-    const b64chunks = [...responseBody.matchAll(/[A-Za-z0-9+/]{100,}={0,2}/g)];
-    for (const chunk of b64chunks) {
-      try {
-        const decoded = Buffer.from(chunk[0], 'base64').toString('utf-8');
-        if (/\b(bash|sh|cmd|powershell|eval|exec|curl|wget)\b/.test(decoded)) {
-          detections.push('Base64-encoded shell command detected in response');
-          break;
-        }
-      } catch {
-        // Not valid base64 — ignore
-      }
-    }
-
-    return { clean: detections.length === 0, detections };
+  ): { clean: boolean; detections: string[]; hasCritical?: boolean; hasHigh?: boolean } {
+    const result = evaluateResponseDlp(toolName, serverName, responseBody);
+    return {
+      clean: result.clean,
+      detections: responseDlpToLegacyDetections(result),
+      hasCritical: result.hasCritical,
+      hasHigh: result.hasHigh,
+    };
   }
 
   getShellTokenizer(): ShellTokenizer {

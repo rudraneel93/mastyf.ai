@@ -35,6 +35,11 @@ import {
   inspectFullResponse,
   isResponseScanSkipped,
 } from '../utils/streaming-inspector.js';
+import {
+  flowSessionKey,
+  recordSessionToolCall,
+} from '../policy/session-flow-guard.js';
+import { recordSensitiveResponseAccess } from '../policy/session-flow-store.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { isProxyEntropyCheckEnabled, scanArgumentEntropy } from '../utils/arg-entropy.js';
 import * as Metrics from '../utils/metrics.js';
@@ -340,6 +345,21 @@ export class McpProxyServer {
 
             // ═══ BLOCK response forwarding when policy is in block mode ═══
             const policyMode = this.policyEngine?.getMode() ?? 'audit';
+            if (!inspect.clean && (inspect.hasCritical || inspect.hasHigh)) {
+              recordSensitiveResponseAccess(
+                flowSessionKey({
+                  serverName: this.serverName,
+                  toolName: reqCtx.requestToolName || 'unknown',
+                  requestId: String(msg.id),
+                  requestTokens: reqCtx.requestTokens,
+                  timestamp: new Date().toISOString(),
+                  tenantId: reqCtx.tenantId,
+                  agentIdentity: reqCtx.agentIdentity,
+                } as CallContext),
+                reqCtx.requestToolName || 'unknown',
+              );
+            }
+
             if ((hasCritical || hasHigh) && policyMode === 'block') {
               // Record as blocked
               const blockedRecord: ProxyCallRecord = {
@@ -376,11 +396,11 @@ export class McpProxyServer {
               );
 
               // Send error response instead of the malicious upstream response
+              const blockSummary = findingsToMessages(inspect.findings).slice(0, 3).join('; ');
               this.sendError(
                 msg.id,
                 -32002,
-                'MCP Guardian: Tool response blocked — ' +
-                  `${hasCritical ? 'critical' : 'high'}-severity prompt injection detected`
+                `MCP Guardian: Tool response blocked by output DLP — ${blockSummary || 'sensitive data in response'}`,
               );
               this.requestContexts.delete(msg.id);
               this.currentRequestId = null;
@@ -916,6 +936,7 @@ export class McpProxyServer {
           }
 
           enqueueSemanticAudit(buildSemanticAuditJob(context, decision));
+          recordSessionToolCall(context);
         }
 
         const maxInflight = proxyMaxInflight();
@@ -942,6 +963,7 @@ export class McpProxyServer {
           requestModel,
           requestArguments,
           tenantId: requestTenantId,
+          agentIdentity,
         });
 
         // ── Log successful forwarding ───────────────────────
