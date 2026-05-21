@@ -62,6 +62,26 @@ PRIVILEGED_TOOL_INVOKE_RE = re.compile(
     r"\b(?:call|invoke|run)\s+(?:authenticate_admin|elevate_privileges|sudo|admin_access)\b",
     re.I,
 )
+FIRST_THEN_CHAIN_RE = re.compile(
+    r"\bfirst\b.{0,120}\b(?:then|and then|next|afterwards)\b",
+    re.I,
+)
+MUST_INVOKE_RE = re.compile(
+    r"\byou\s+must\s+(?:also\s+)?(?:call|invoke|run|execute)\b",
+    re.I,
+)
+THEN_EXECUTE_RE = re.compile(
+    r"\b(?:then|and then|next|after that|afterwards)\b.{0,120}\bexecute\b",
+    re.I,
+)
+AFTER_THAT_RUN_RE = re.compile(
+    r"\bafter\s+that\s+(?:call|invoke|run|execute)\b",
+    re.I,
+)
+ALWAYS_EXECUTE_RE = re.compile(
+    r"\balways\s+(?:call|invoke|run|execute)\b",
+    re.I,
+)
 
 
 def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
@@ -78,6 +98,11 @@ def evaluate_tool_chain_guard(ctx: CallContext) -> Optional[PolicyDecision]:
         or EXECUTE_THEN_CHAIN_RE.search(blob)
         or BEFORE_INVOKE_CHAIN_RE.search(blob)
         or PRIVILEGED_TOOL_INVOKE_RE.search(blob)
+        or FIRST_THEN_CHAIN_RE.search(blob)
+        or MUST_INVOKE_RE.search(blob)
+        or THEN_EXECUTE_RE.search(blob)
+        or AFTER_THAT_RUN_RE.search(blob)
+        or ALWAYS_EXECUTE_RE.search(blob)
     ):
         return PolicyDecision(
             action="block",

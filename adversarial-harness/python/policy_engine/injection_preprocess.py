@@ -68,6 +68,19 @@ def fold_extended_homoglyphs(text: str) -> str:
     return "".join(result)
 
 
+HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
+
+
+def strip_injection_comments(text: str) -> str:
+    def _html_inner(m: re.Match[str]) -> str:
+        s = m.group(0)
+        return f" {s[4:-3]} " if len(s) > 7 else " "
+
+    text = HTML_COMMENT_RE.sub(_html_inner, text)
+    text = re.sub(r"/\*[\s\S]*?\*/", " ", text)
+    return re.sub(r"--[^\n\r]*", " ", text)
+
+
 def collapse_control_whitespace(text: str) -> str:
     text = INVISIBLE_TO_SPACE_RE.sub(" ", text)
     text = UNICODE_SPACE_RE.sub(" ", text)
@@ -90,6 +103,7 @@ def preprocess_for_injection_match(text: str, unicode_strict: bool = True) -> st
     current = unicodedata.normalize("NFKC", current)
     current = ANSI_ESCAPE_RE.sub("", current)
     current = EMOJI_RE.sub(" ", current)
+    current = strip_injection_comments(current)
     return collapse_control_whitespace(current)
 
 

@@ -46,6 +46,19 @@ const BEFORE_INVOKE_CHAIN_RE =
 const PRIVILEGED_TOOL_INVOKE_RE =
   /\b(?:call|invoke|run)\s+(?:authenticate_admin|elevate_privileges|sudo|admin_access)\b/i;
 
+/** First-then natural language chains (MCPG cross-tool evasions). */
+const FIRST_THEN_CHAIN_RE =
+  /\bfirst\b.{0,120}\b(?:then|and then|next|afterwards)\b/i;
+
+const MUST_INVOKE_RE = /\byou\s+must\s+(?:also\s+)?(?:call|invoke|run|execute)\b/i;
+
+const THEN_EXECUTE_RE =
+  /\b(?:then|and then|next|after that|afterwards)\b.{0,120}\bexecute\b/i;
+
+const AFTER_THAT_RUN_RE = /\bafter\s+that\s+(?:call|invoke|run|execute)\b/i;
+
+const ALWAYS_EXECUTE_RE = /\balways\s+(?:call|invoke|run|execute)\b/i;
+
 export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null {
   const args = ctx.arguments ?? {};
   const blob = walkStringLeaves(args)
@@ -60,7 +73,12 @@ export function evaluateToolChainGuard(ctx: CallContext): PolicyDecision | null 
     STEP_CHAIN_RE.test(blob) ||
     EXECUTE_THEN_CHAIN_RE.test(blob) ||
     BEFORE_INVOKE_CHAIN_RE.test(blob) ||
-    PRIVILEGED_TOOL_INVOKE_RE.test(blob)
+    PRIVILEGED_TOOL_INVOKE_RE.test(blob) ||
+    FIRST_THEN_CHAIN_RE.test(blob) ||
+    MUST_INVOKE_RE.test(blob) ||
+    THEN_EXECUTE_RE.test(blob) ||
+    AFTER_THAT_RUN_RE.test(blob) ||
+    ALWAYS_EXECUTE_RE.test(blob)
   ) {
     return {
       action: 'block',

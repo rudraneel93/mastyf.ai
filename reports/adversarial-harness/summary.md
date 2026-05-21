@@ -1,6 +1,6 @@
 # Adversarial Harness Summary
 
-Generated: 2026-05-21T07:21:58.847Z
+Generated: 2026-05-21T07:39:22.029Z
 
 ## Key metrics
 
@@ -18,8 +18,8 @@ Generated: 2026-05-21T07:21:58.847Z
 
 ## Proxy concurrency (ms)
 
-- AsyncSerialQueue p50: 2.13 p95: 3.58
-- Proxy handleClientInput p50: 16.78 p95: 30.55
+- AsyncSerialQueue p50: 2.13 p95: 3.43
+- Proxy handleClientInput p50: 16.75 p95: 30.35
 
 ## Test layers
 

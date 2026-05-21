@@ -50,6 +50,10 @@ run('node', ['adversarial-harness/scripts/generate-custom-attacks.mjs'], {
   label: 'generate-custom-attacks',
 });
 
+run('node', ['adversarial-harness/scripts/generate-mcpg-catalog-attacks.mjs'], {
+  label: 'generate-mcpg-catalog',
+});
+
 run('node', ['adversarial-harness/scripts/generate-matrix-fixtures.mjs'], {
   label: 'generate-matrix-fixtures',
 });

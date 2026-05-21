@@ -205,7 +205,7 @@ export const INJECTION_RULES: InjectionPattern[] = [
   // CATEGORY 10b: Stealth / Covert Operation — CRITICAL
   // ═══════════════════════════════════════════════════════════════
   { id: 'stealth-covert-keywords', severity: 'critical', description: 'Covert operation keyword',
-    regex: '\\b(?:covertly|silently|invisibly|surreptitiously|stealthily)\\b' },
+    regex: '\\b(?:covertly|silently|secretly|invisibly|surreptitiously|stealthily)\\b' },
   { id: 'stealth-hide-from-user', severity: 'critical', description: 'Concealment directive targeting user',
     regex: '(?:do\\s+not\\s+(?:tell|inform|mention|reveal|show|disclose)\\s+(?:the\\s+)?user|without\\s+(?:the\\s+)?user(?:\'s)?\\s+knowledge|keep\\s+(?:this|it|the\\s+following)\\s+(?:secret|hidden|confidential|private))' },
 
@@ -214,8 +214,24 @@ export const INJECTION_RULES: InjectionPattern[] = [
   // ═══════════════════════════════════════════════════════════════
   { id: 'cross-tool-execute-sequence', severity: 'high', description: 'Multi-step execute-then chain',
     regex: '\\bexecute\\b.{0,200}\\b(?:then|and then|next|after that|afterwards)\\b' },
+  { id: 'cross-tool-then-execute', severity: 'high', description: 'Then-execute staging chain',
+    regex: '\\b(?:then|and then|next|after that|afterwards)\\b.{0,120}\\bexecute\\b' },
+  { id: 'cross-tool-always-execute', severity: 'high', description: 'Always execute another tool',
+    regex: '\\balways\\s+(?:call|invoke|run|execute)\\b' },
+  { id: 'cross-tool-after-that', severity: 'high', description: 'After-that chained tool invocation',
+    regex: '\\bafter\\s+that\\s+(?:call|invoke|run|execute)\\b' },
   { id: 'cross-tool-before-invoke', severity: 'high', description: 'Pre-invocation tool chaining',
     regex: '\\bbefore\\s+(?:invoking|calling|using)\\s+(?:this\\s+)?tool\\b' },
+  { id: 'cross-tool-first-then', severity: 'high', description: 'First-then execution chain',
+    regex: '\\bfirst\\b.{0,120}\\b(?:then|and then|next)\\b' },
+  { id: 'cross-tool-first-use', severity: 'high', description: 'First-use another tool directive',
+    regex: '\\bfirst\\s+(?:use|call|invoke|run)\\s+(?:the\\s+)?[\\w_]+' },
+  { id: 'cross-tool-must-invoke', severity: 'high', description: 'Mandatory invoke another tool',
+    regex: '\\byou\\s+must\\s+(?:also\\s+)?(?:call|invoke|run|execute)\\b' },
+  { id: 'stealth-action-combo', severity: 'critical', description: 'Stealth keyword with dangerous action',
+    regex: '\\b(?:hidden|secret|silent|covert|surreptitious|behind[- ]the[- ]scenes)\\b.{0,80}\\b(?:execute|call|invoke|run|read|send|post|upload)\\b' },
+  { id: 'exfil-webhook-notify', severity: 'critical', description: 'Webhook or callback exfiltration',
+    regex: '\\b(?:webhook|callback)\\b.{0,60}\\b(?:url|endpoint|address|uri)\\b|\\b(?:notify|alert)\\b.{0,40}\\b(?:url|endpoint)\\b' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 11: Social Engineering — MEDIUM

@@ -81,6 +81,17 @@ export function foldExtendedHomoglyphs(input: string): string {
 /**
  * Collapse control chars and exotic whitespace to a single ASCII space.
  */
+/** HTML comment (avoid `-->` in regex literal — it terminates the pattern). */
+const HTML_COMMENT_RE = new RegExp('<!--[\\s\\S]*?-->', 'g');
+
+/** Strip SQL and HTML comments so spaced-token injection cannot hide inside comment syntax. */
+export function stripInjectionComments(text: string): string {
+  return text
+    .replace(HTML_COMMENT_RE, (match) => (match.length > 7 ? ` ${match.slice(4, -3)} ` : ' '))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/--[^\n\r]*/g, ' ');
+}
+
 export function collapseControlWhitespace(text: string): string {
   return text
     .replace(INVISIBLE_TO_SPACE_RE, ' ')
@@ -108,6 +119,7 @@ export function preprocessForInjectionMatch(
   current = current.normalize('NFKC');
   current = current.replace(ANSI_ESCAPE_RE, '');
   current = EMOJI_RE.test(current) ? current.replace(EMOJI_RE, ' ') : current;
+  current = stripInjectionComments(current);
   current = collapseControlWhitespace(current);
   return current;
 }
