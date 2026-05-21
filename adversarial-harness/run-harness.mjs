@@ -107,7 +107,6 @@ const required = [
   'generate-custom-attacks',
   'generate-matrix-fixtures',
   'export-evasion-attacks',
-  'setup-python-venv',
   'python-comprehensive-eval',
   'node-harness-tests',
   'node-corpus-eval',
