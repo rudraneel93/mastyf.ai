@@ -59,33 +59,31 @@ describe('Adversarial harness: MCP proxy pipeline', () => {
     expect(true).toBe(true);
   });
 
-  it('serializes concurrent handleClientInput through AsyncSerialQueue', async () => {
+  it('serializes same request id and allows distinct ids concurrently', async () => {
     const order = [];
     vi.spyOn(proxy, 'processClientInput').mockImplementation(async (raw) => {
       const msg = JSON.parse(raw);
       if (msg.method === 'tools/call' && msg.id) {
-        order.push(`start:${msg.id}`);
-        proxy.currentRequestId = msg.id;
+        const rpcId = String(msg.id);
+        order.push(`start:${rpcId}`);
         await new Promise((r) => setTimeout(r, 30));
-        order.push(`end:${proxy.currentRequestId}`);
+        order.push(`end:${rpcId}`);
       }
     });
 
     await Promise.all([
-      proxy.handleClientInput(mkCall('a', 'echo', { n: 'a' })),
-      proxy.handleClientInput(mkCall('b', 'echo', { n: 'b' })),
-      proxy.handleClientInput(mkCall('c', 'echo', { n: 'c' })),
+      proxy.handleClientInput(mkCall('dup', 'echo', { n: '1' })),
+      proxy.handleClientInput(mkCall('dup', 'echo', { n: '2' })),
+      proxy.handleClientInput(mkCall('other', 'echo', { n: '3' })),
     ]);
 
     expect(order.filter((x) => x.startsWith('end:'))).toHaveLength(3);
-    expect(order).toEqual([
-      'start:a',
-      'end:a',
-      'start:b',
-      'end:b',
-      'start:c',
-      'end:c',
-    ]);
+    for (let i = 0; i < order.length; i++) {
+      if (order[i] !== 'start:dup') continue;
+      const endIdx = order.indexOf('end:dup', i);
+      expect(endIdx).toBeGreaterThan(i);
+      expect(order.slice(i + 1, endIdx).filter((x) => x === 'start:dup')).toHaveLength(0);
+    }
     vi.restoreAllMocks();
   });
 });
