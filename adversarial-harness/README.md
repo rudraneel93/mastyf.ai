@@ -12,9 +12,12 @@ Enterprise security evaluation harness for MCP Guardian policy engine, proxy pip
 | **Corpus** | `../../corpus/` | 151 attack + 55 benign fixtures |
 | **Matrix fixtures** | `fixtures/matrix/` | Isolated RBAC / rate / token suites (no cross-rule masking) |
 | **Custom attacks** | `fixtures/custom-attacks/` | 120 adversarial probes (adv-001…adv-120) |
+| **Uploaded bypass suite** | `fixtures/uploaded-bypass/` | 83 probes mirroring upload CSV categories |
 | **Generated probes** | `fixtures/generated/` | 38 encoding/unicode/RBAC edge cases |
 | **Node integration** | `node/` | Mock MCP, proxy pipeline, AsyncSerialQueue, streaming, secret scanner |
 | **Orchestrator** | `run-harness.mjs` | Full run + `reports/harness-summary.md` |
+
+See **[ENTERPRISE_VALIDATION.md](./ENTERPRISE_VALIDATION.md)** for the three deliverables: uploaded-bypass fixtures, production guard hardening, and 536/536 policy validation.
 
 ## Quick start
 
