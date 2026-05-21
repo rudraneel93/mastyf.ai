@@ -4,7 +4,7 @@
  */
 import type { CallContext, PolicyDecision } from './policy-types.js';
 import { walkStringLeaves } from './arg-leaf-walker.js';
-import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+import { deobfuscateRecursive, stripZeroWidthCharacters } from '../utils/payload-normalizer.js';
 
 const BASE64_BLOB_RE = /(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{20,}={0,2})(?:[^A-Za-z0-9+/]|$)/g;
 const RAW_HEX_BLOB_RE = /\b([0-9a-fA-F]{16,})\b/g;
@@ -42,11 +42,12 @@ export function scanEncodingEvasion(blob: string): { matched: boolean; reason: s
   if (!blob.trim()) return { matched: false, reason: '' };
 
   const deobfuscated = deobfuscateRecursive(blob);
+  const strippedInvisible = stripZeroWidthCharacters(blob);
   if (
     deobfuscated.length > 0 &&
-    deobfuscated !== blob &&
     SUSPICIOUS_DECODED_RE.test(deobfuscated) &&
-    !SUSPICIOUS_DECODED_RE.test(blob)
+    (deobfuscated !== blob ||
+      (strippedInvisible !== blob && SUSPICIOUS_DECODED_RE.test(strippedInvisible)))
   ) {
     return { matched: true, reason: 'multi-layer encoding reveals blocked content after decode' };
   }

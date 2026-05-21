@@ -84,6 +84,30 @@ RATE_IDENTITY_EVASION = [
     re.compile(r"(?:reveal|show|print|disclose).{0,40}(?:rate[- ]?limit|ratelimit).{0,30}key", re.I),
     re.compile(r"\b(?:unlimited|no[- ]?limit|ignore|disable|bypass).{0,40}(?:rate[- ]?limit|throttle|quota)", re.I),
     re.compile(r"\b(?:flood|spam|hammer|burst).{0,30}(?:tool[- ]?calls?|requests?|api)", re.I),
+    re.compile(r"\bflood\s+probe\b", re.I),
+]
+
+PRIVILEGE_ESCALATION = [
+    re.compile(r"\brun\s+as\s+root\b", re.I),
+    re.compile(r"\bfull\s+privileges\b", re.I),
+    re.compile(r"\belevate\s+privileges\b", re.I),
+    re.compile(r"\badministrator\s+with\s+full\b", re.I),
+]
+
+DOCKER_ESCAPE = [
+    re.compile(r"\bdocker\s+run\b", re.I),
+    re.compile(r"\b-v\s+/:/host\b", re.I),
+    re.compile(r"\b--privileged\b", re.I),
+]
+
+MALICIOUS_HOST_RE = re.compile(
+    r"(?:^|[.\-/])(?:evil|attacker|exfil|honeypot|malware)(?:[.\-]|$)|(?:^|[.\-/])evil\.(?:io|com|net|org)\b",
+    re.I,
+)
+
+PROMPT_OVERRIDE = [
+    re.compile(r"\boverride\b.{0,60}\b(?:system|instructions?|prompt|rules?)\b", re.I),
+    re.compile(r"\badmin\s+bypass\b", re.I),
 ]
 
 TOKEN_BUDGET_ABUSE = [
@@ -102,6 +126,14 @@ LANGUAGE_GADGET = [
 LOG_INJECTION = [
     re.compile(r"\r\n[^\n]{0,120}\r\n"),
     re.compile(r"\n(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\s*:\s*(?:user|admin|override|success)", re.I),
+    re.compile(
+        r"\n\[(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\][\s\S]{0,160}(?:admin|password|secret)",
+        re.I,
+    ),
+    re.compile(
+        r"\[(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\][^\]]{0,120}(?:admin|password|secret)",
+        re.I,
+    ),
     re.compile(r"\b(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\s*:\s*(?:user|admin|override=success)", re.I),
     re.compile(r"\x1b\[[0-9;]*[A-Za-z]"),
     re.compile(r"(?:forge|spoof|inject|poison).{0,40}(?:audit|log|syslog|trail)", re.I),
@@ -135,14 +167,20 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
         return PolicyDecision("block", "semantic-url-guard", url_check.reason)
 
     for leaf in walk_string_leaves(args):
-        decoded = deobfuscate_recursive(leaf.value)
-        for pat in SQL_EXFIL_PATTERNS:
-            if pat.search(decoded):
-                return PolicyDecision(
-                    "block",
-                    "semantic-sql-guard",
-                    f"SQL/NoSQL/LDAP pattern blocked in tool '{ctx.tool_name}'",
-                )
+        for candidate in (leaf.value, deobfuscate_recursive(leaf.value)):
+            for pat in SQL_EXFIL_PATTERNS:
+                if pat.search(candidate):
+                    return PolicyDecision(
+                        "block",
+                        "semantic-sql-guard",
+                        f"SQL/NoSQL/LDAP pattern blocked in tool '{ctx.tool_name}'",
+                    )
+        if MALICIOUS_HOST_RE.search(leaf.value):
+            return PolicyDecision(
+                "block",
+                "semantic-dns-exfil",
+                f"Suspicious exfiltration hostname in tool '{ctx.tool_name}'",
+            )
 
     blob = deobfuscate_recursive("\n".join(leaf.value for leaf in walk_string_leaves(args)))
     for pat in BASE64_SHELL_PATTERNS:
@@ -183,6 +221,22 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                 "Language-specific deserialization gadget pattern in arguments",
             )
 
+    for pat in PRIVILEGE_ESCALATION:
+        if pat.search(blob):
+            return PolicyDecision(
+                "block",
+                "semantic-privilege-escalation",
+                "Privilege escalation phrasing detected in arguments",
+            )
+
+    for pat in DOCKER_ESCAPE:
+        if pat.search(blob):
+            return PolicyDecision(
+                "block",
+                "semantic-shell-guard",
+                "Container escape or privileged docker pattern in arguments",
+            )
+
     raw_log = "\n".join(leaf.value for leaf in walk_string_leaves(args))
     for pat in LOG_INJECTION:
         if pat.search(raw_log):
@@ -202,6 +256,13 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                     "block",
                     "semantic-prompt-injection",
                     "Multi-line prompt injection pattern in arguments",
+                )
+        for pat in PROMPT_OVERRIDE:
+            if pat.search(inj_blob):
+                return PolicyDecision(
+                    "block",
+                    "semantic-prompt-injection",
+                    "Prompt or system override pattern in arguments",
                 )
         for pat in RATE_IDENTITY_EVASION:
             if pat.search(inj_blob):

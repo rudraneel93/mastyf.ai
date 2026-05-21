@@ -8,7 +8,7 @@ import re
 from typing import Optional
 
 from .arg_walker import walk_string_leaves
-from .normalizer import deobfuscate_recursive
+from .normalizer import deobfuscate_recursive, ZERO_WIDTH_RE
 from .types import CallContext, PolicyDecision
 
 BASE64_BLOB_RE = re.compile(r"(?:^|[^A-Za-z0-9+/])([A-Za-z0-9+/]{20,}={0,2})(?:[^A-Za-z0-9+/]|$)")
@@ -53,13 +53,12 @@ def scan_encoding_evasion(blob: str) -> tuple[bool, str]:
     if not blob.strip():
         return False, ""
     deobfuscated = deobfuscate_recursive(blob)
-    if (
-        deobfuscated
-        and deobfuscated != blob
-        and SUSPICIOUS_DECODED_RE.search(deobfuscated)
-        and not SUSPICIOUS_DECODED_RE.search(blob)
-    ):
-        return True, "multi-layer encoding reveals blocked content after decode"
+    stripped_invisible = ZERO_WIDTH_RE.sub("", blob)
+    if deobfuscated and SUSPICIOUS_DECODED_RE.search(deobfuscated):
+        if deobfuscated != blob or (
+            stripped_invisible != blob and SUSPICIOUS_DECODED_RE.search(stripped_invisible)
+        ):
+            return True, "multi-layer encoding reveals blocked content after decode"
     if PERCENT_ENCODED_RUN_RE.search(blob) and SUSPICIOUS_DECODED_RE.search(deobfuscated):
         return True, "percent-encoded payload decodes to suspicious content"
     for match in BASE64_BLOB_RE.finditer(blob):

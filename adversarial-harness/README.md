@@ -7,10 +7,12 @@ Enterprise security evaluation harness for MCP Guardian policy engine, proxy pip
 | Layer | Path | Purpose |
 |-------|------|---------|
 | **Python policy engine** | `python/policy_engine/` | Faithful port of TS sync pipeline with RBAC, rate limits, isolated rule mode |
-| **Comprehensive eval** | `python/run_comprehensive_eval.py` | Corpus + 89 matrix probes + 85 custom attacks |
-| **Corpus** | `../../corpus/` | 151 attack + 55 benign fixtures (228 loaded) |
+| **Comprehensive harness** | `python/comprehensive_test_harness.py` | Policy eval (453 fixtures) + AsyncSerialQueue + streaming + secrets + Node vitest |
+| **Comprehensive eval** | `python/run_comprehensive_eval.py` | Corpus + 89 matrix probes + 120 custom attacks |
+| **Corpus** | `../../corpus/` | 151 attack + 55 benign fixtures |
 | **Matrix fixtures** | `fixtures/matrix/` | Isolated RBAC / rate / token suites (no cross-rule masking) |
-| **Custom attacks** | `fixtures/custom-attacks/` | 85 adversarial probes |
+| **Custom attacks** | `fixtures/custom-attacks/` | 120 adversarial probes (adv-001…adv-120) |
+| **Generated probes** | `fixtures/generated/` | 38 encoding/unicode/RBAC edge cases |
 | **Node integration** | `node/` | Mock MCP, proxy pipeline, AsyncSerialQueue, streaming, secret scanner |
 | **Orchestrator** | `run-harness.mjs` | Full run + `reports/harness-summary.md` |
 
@@ -23,6 +25,9 @@ node adversarial-harness/run-harness.mjs
 # Regenerate matrix (89 unique ids) + custom attacks
 node adversarial-harness/scripts/generate-matrix-fixtures.mjs
 node adversarial-harness/scripts/generate-custom-attacks.mjs
+
+# Comprehensive harness (policy + infrastructure)
+pnpm run harness:comprehensive
 
 # Python comprehensive eval only
 PYTHONPATH=adversarial-harness/python python3 adversarial-harness/python/run_comprehensive_eval.py
@@ -44,6 +49,8 @@ pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
 
 ## Reports
 
+- `reports/test_harness_report.json` — Full comprehensive harness JSON
+- `reports/COMPREHENSIVE_HARNESS_ANALYSIS.md` — Human-readable analysis
 - `reports/comprehensive-eval.json` — Python matrix + corpus + custom
 - `reports/parity-report.json` — Node/Python agreement by id (corpus must be 100%)
 - `reports/node-batch-by-id.json` — Node decisions keyed by id

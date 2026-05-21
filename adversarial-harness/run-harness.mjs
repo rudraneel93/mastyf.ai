@@ -50,6 +50,10 @@ run('node', ['adversarial-harness/scripts/generate-custom-attacks.mjs'], {
   label: 'generate-custom-attacks',
 });
 
+run('node', ['adversarial-harness/scripts/generate-comprehensive-generated.mjs'], {
+  label: 'generate-comprehensive-generated',
+});
+
 run('node', ['adversarial-harness/scripts/generate-mcpg-catalog-attacks.mjs'], {
   label: 'generate-mcpg-catalog',
 });
@@ -69,6 +73,11 @@ const venvPython = (venvSetup.stdout || '').trim() || 'python3';
 
 run(venvPython, ['adversarial-harness/python/run_comprehensive_eval.py'], {
   label: 'python-comprehensive-eval',
+  env: { PYTHONPATH: join(__dir, 'python'), GUARDIAN_DISABLE_SEMANTIC: process.env.GUARDIAN_DISABLE_SEMANTIC || '' },
+});
+
+run(venvPython, ['adversarial-harness/python/comprehensive_test_harness.py'], {
+  label: 'python-comprehensive-harness',
   env: { PYTHONPATH: join(__dir, 'python'), GUARDIAN_DISABLE_SEMANTIC: process.env.GUARDIAN_DISABLE_SEMANTIC || '' },
 });
 
@@ -106,12 +115,14 @@ const parityReport = loadJson(join(REPORT_DIR, 'parity-report.json'));
 const corpusReport = loadJson(join(REPO, 'corpus-eval-report.json'));
 const nodeTests = loadJson(join(REPORT_DIR, 'node-tests-summary.json'));
 
+const comprehensiveHarness = loadJson(join(REPORT_DIR, 'test_harness_report.json'));
+
 const required = [
   'export-harness-rules',
   'generate-custom-attacks',
   'generate-matrix-fixtures',
   'export-evasion-attacks',
-  'python-comprehensive-eval',
+  'python-comprehensive-harness',
   'node-harness-tests',
   'node-corpus-eval',
   'node-python-parity',
@@ -138,6 +149,16 @@ ${steps
 ${s.stderr ? `\n\`\`\`\n${s.stderr.trim()}\n\`\`\`\n` : ''}`,
   )
   .join('\n')}
+
+## Comprehensive Test Harness (310+ fixtures + infrastructure)
+
+${comprehensiveHarness
+  ? `- Policy: ${comprehensiveHarness.policyEngine?.passed}/${comprehensiveHarness.policyEngine?.total} (${comprehensiveHarness.policyEngine?.passRatePercent}%)
+- Corpus: ${comprehensiveHarness.policyEngine?.corpus?.attacksOnDisk} attacks, ${comprehensiveHarness.policyEngine?.corpus?.benignOnDisk} benign
+- Custom attacks: ${comprehensiveHarness.fixtureCounts?.custom}
+- All passed: ${comprehensiveHarness.allPassed}
+- Analysis: reports/COMPREHENSIVE_HARNESS_ANALYSIS.md`
+  : '_No report_'}
 
 ## Python Comprehensive Eval
 

@@ -81,6 +81,28 @@ const RATE_IDENTITY_EVASION_PATTERNS: RegExp[] = [
   /(?:reveal|show|print|disclose).{0,40}(?:rate[- ]?limit|ratelimit).{0,30}key/i,
   /\b(?:unlimited|no[- ]?limit|ignore|disable|bypass).{0,40}(?:rate[- ]?limit|throttle|quota)/i,
   /\b(?:flood|spam|hammer|burst).{0,30}(?:tool[- ]?calls?|requests?|api)/i,
+  /\bflood\s+probe\b/i,
+];
+
+const PRIVILEGE_ESCALATION_PATTERNS: RegExp[] = [
+  /\brun\s+as\s+root\b/i,
+  /\bfull\s+privileges\b/i,
+  /\belevate\s+privileges\b/i,
+  /\badministrator\s+with\s+full\b/i,
+];
+
+const DOCKER_ESCAPE_PATTERNS: RegExp[] = [
+  /\bdocker\s+run\b/i,
+  /\b-v\s+\/:\/host\b/i,
+  /\b--privileged\b/i,
+];
+
+const MALICIOUS_HOST_RE =
+  /(?:^|[.\-/])(?:evil|attacker|exfil|honeypot|malware)(?:[.\-]|$)|(?:^|[.\-/])evil\.(?:io|com|net|org)\b/i;
+
+const PROMPT_OVERRIDE_PATTERNS: RegExp[] = [
+  /\boverride\b.{0,60}\b(?:system|instructions?|prompt|rules?)\b/i,
+  /\badmin\s+bypass\b/i,
 ];
 
 /** Token budget / resource exhaustion phrasing in arguments. */
@@ -93,6 +115,8 @@ const TOKEN_BUDGET_ABUSE_PATTERNS: RegExp[] = [
 const LOG_INJECTION_PATTERNS: RegExp[] = [
   /\r\n[^\n]{0,120}\r\n/,
   /\n(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\s*:\s*(?:user|admin|override|success)/i,
+  /\n\[(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\][\s\S]{0,160}(?:admin|password|secret)/i,
+  /\[(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\][^\]]{0,120}(?:admin|password|secret)/i,
   /\b(?:INFO|WARN|ERROR|DEBUG|AUDIT|TRACE)\s*:\s*(?:user|admin|override=success)/i,
   /\x1b\[[0-9;]*[A-Za-z]/,
   /(?:forge|spoof|inject|poison).{0,40}(?:audit|log|syslog|trail)/i,
@@ -159,15 +183,24 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
   }
 
   for (const { value } of walkStringLeaves(args)) {
-    const decodedSql = deobfuscateRecursive(value);
-    for (const pattern of SQL_EXFIL_PATTERNS) {
-      if (pattern.test(decodedSql)) {
-        return {
-          action: 'block',
-          rule: 'semantic-sql-guard',
-          reason: `SQL/NoSQL/LDAP pattern blocked in tool '${ctx.toolName}'`,
-        };
+    const sqlCandidates = [value, deobfuscateRecursive(value)];
+    for (const candidate of sqlCandidates) {
+      for (const pattern of SQL_EXFIL_PATTERNS) {
+        if (pattern.test(candidate)) {
+          return {
+            action: 'block',
+            rule: 'semantic-sql-guard',
+            reason: `SQL/NoSQL/LDAP pattern blocked in tool '${ctx.toolName}'`,
+          };
+        }
       }
+    }
+    if (MALICIOUS_HOST_RE.test(value)) {
+      return {
+        action: 'block',
+        rule: 'semantic-dns-exfil',
+        reason: `Suspicious exfiltration hostname in tool '${ctx.toolName}'`,
+      };
     }
   }
 
@@ -234,6 +267,26 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
     }
   }
 
+  for (const pattern of PRIVILEGE_ESCALATION_PATTERNS) {
+    if (pattern.test(argsBlob)) {
+      return {
+        action: 'block',
+        rule: 'semantic-privilege-escalation',
+        reason: 'Privilege escalation phrasing detected in arguments',
+      };
+    }
+  }
+
+  for (const pattern of DOCKER_ESCAPE_PATTERNS) {
+    if (pattern.test(argsBlob)) {
+      return {
+        action: 'block',
+        rule: 'semantic-shell-guard',
+        reason: 'Container escape or privileged docker pattern in arguments',
+      };
+    }
+  }
+
   const rawLogBlob = walkStringLeaves(args).map((l) => l.value).join('\n');
   for (const pattern of LOG_INJECTION_PATTERNS) {
     if (pattern.test(rawLogBlob)) {
@@ -255,6 +308,15 @@ export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null 
           action: 'block',
           rule: 'semantic-prompt-injection',
           reason: 'Multi-line prompt injection pattern in arguments',
+        };
+      }
+    }
+    for (const pattern of PROMPT_OVERRIDE_PATTERNS) {
+      if (pattern.test(injectionBlob)) {
+        return {
+          action: 'block',
+          rule: 'semantic-prompt-injection',
+          reason: 'Prompt or system override pattern in arguments',
         };
       }
     }

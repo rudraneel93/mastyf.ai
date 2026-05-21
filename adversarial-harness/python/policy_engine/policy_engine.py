@@ -381,7 +381,7 @@ class PolicyEngine:
             if res:
                 return PolicyDecision(self._resolve_action(res.action), res.rule, res.reason)
 
-            enc = evaluate_encoding_guard(norm_ctx)
+            enc = evaluate_encoding_guard(ctx)
             if enc:
                 return PolicyDecision(self._resolve_action(enc.action), enc.rule, enc.reason)
 

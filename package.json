@@ -70,6 +70,7 @@
     "harness:export": "tsx adversarial-harness/scripts/export-harness-rules.ts",
     "harness:attacks": "node adversarial-harness/scripts/generate-custom-attacks.mjs",
     "harness:python": "PYTHONPATH=adversarial-harness/python python3 adversarial-harness/python/run_comprehensive_eval.py",
+    "harness:comprehensive": "PYTHONPATH=adversarial-harness/python python3 adversarial-harness/python/comprehensive_test_harness.py",
     "harness:matrix": "node adversarial-harness/scripts/generate-matrix-fixtures.mjs",
     "harness:node": "node adversarial-harness/scripts/run-node-tests.mjs",
     "harness:parity": "tsx adversarial-harness/scripts/compare-node-python.ts",
