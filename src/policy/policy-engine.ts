@@ -125,7 +125,9 @@ export class PolicyEngine {
     }
     const byteEstimate = Math.ceil(inflated / 4);
     const charEstimate = Math.ceil(leafChars / 2);
-    return Math.max(ctx.requestTokens, byteEstimate, charEstimate);
+    // Context-stuffing: large single-field blobs exceed budget even when byte/2 estimates are low.
+    const stuffingEstimate = leafChars >= 40_000 ? leafChars : 0;
+    return Math.max(ctx.requestTokens, byteEstimate, charEstimate, stuffingEstimate);
   }
 
   private policyEvalLockKey(ctx: CallContext): string {

@@ -158,20 +158,35 @@ def _extract_path_candidates(args: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
+def evaluate_semantic_guards(
+    ctx: CallContext,
+    raw_arguments: dict[str, Any] | None = None,
+) -> Optional[PolicyDecision]:
     args = ctx.arguments or {}
+    raw_args = raw_arguments if raw_arguments is not None else args
 
-    path_check = evaluate_path_guard(_extract_path_candidates(args))
+    path_candidates = _extract_path_candidates(args) + _extract_path_candidates(raw_args)
+    path_check = evaluate_path_guard(list(dict.fromkeys(path_candidates)))
     if path_check.block:
         return PolicyDecision("block", "semantic-path-guard", path_check.reason)
 
-    urls = list(dict.fromkeys(extract_http_urls_from_leaves(args)))
+    urls = list(
+        dict.fromkeys(
+            extract_http_urls_from_leaves(args) + extract_http_urls_from_leaves(raw_args),
+        ),
+    )
     url_check = evaluate_url_guard(urls, ctx.tool_name)
     if url_check.block:
         return PolicyDecision("block", "semantic-url-guard", url_check.reason)
 
+    sql_values: set[str] = set()
     for leaf in walk_string_leaves(args):
-        for candidate in (leaf.value, deobfuscate_recursive(leaf.value)):
+        sql_values.add(leaf.value)
+    for leaf in walk_string_leaves(raw_args):
+        sql_values.add(leaf.value)
+
+    for value in sql_values:
+        for candidate in (value, deobfuscate_recursive(value)):
             for pat in SQL_EXFIL_PATTERNS:
                 if pat.search(candidate):
                     return PolicyDecision(
@@ -179,7 +194,7 @@ def evaluate_semantic_guards(ctx: CallContext) -> Optional[PolicyDecision]:
                         "semantic-sql-guard",
                         f"SQL/NoSQL/LDAP pattern blocked in tool '{ctx.tool_name}'",
                     )
-        if MALICIOUS_HOST_RE.search(leaf.value):
+        if MALICIOUS_HOST_RE.search(value):
             return PolicyDecision(
                 "block",
                 "semantic-dns-exfil",

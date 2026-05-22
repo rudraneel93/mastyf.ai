@@ -91,7 +91,7 @@ function evaluateSemanticShell(
 
 export const semanticGuardsStrategy: PolicyStrategy = {
   name: 'semantic-guards',
-  evaluate({ normalized, argsStr }, deps) {
+  evaluate({ raw, normalized, argsStr }, deps) {
     const leafBlob = walkStringLeaves(normalized.arguments ?? {})
       .map((l) => deobfuscateRecursive(l.value))
       .join('\n');
@@ -118,7 +118,10 @@ export const semanticGuardsStrategy: PolicyStrategy = {
       return { ...toolChain, action: deps.resolveAction(toolChain.action) };
     }
 
-    const semanticAbuse = evaluateSemanticGuards(normalized);
+    const semanticAbuse = evaluateSemanticGuards(
+      normalized,
+      raw.arguments ?? undefined,
+    );
     if (semanticAbuse) {
       return { ...semanticAbuse, action: deps.resolveAction(semanticAbuse.action) };
     }

@@ -12,7 +12,7 @@ Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscatio
 
 ## Python vs TypeScript parity
 
-Agreement 436/437 (99.8%). Corpus mismatches: 0. Delta: 1 fixtures.
+Agreement 437/437 (100.0%). Corpus mismatches: 0. Delta: 0 fixtures.
 
 ### Intentional Python port gaps (documented)
 
@@ -39,5 +39,5 @@ Chunk-boundary injection, concurrent chunk writers, and full-response jailbreak 
 
 ## Blockers / partial completion
 
-- **python-comprehensive-harness** failed (exit 1)
+- None — full harness green
 

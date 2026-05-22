@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-21T19:05:49.089Z",
+  "generatedAt": "2026-05-22T05:34:13.112Z",
   "harnessRoot": "/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness",
   "corpus": {
     "totalEntries": 228,
@@ -28,11 +28,11 @@
     "summary": "437/437 passed → 100.0%"
   },
   "parity": {
-    "agreement": 436,
+    "agreement": 437,
     "total": 437,
-    "agreementRate": 0.9977116704805492,
+    "agreementRate": 1,
     "corpusMismatches": 0,
-    "delta": 1
+    "delta": 0
   },
   "nodeIntegration": {
     "tests": {
@@ -45,16 +45,16 @@
     "concurrency": {
       "component": "AsyncSerialQueue",
       "samples": 50,
-      "p50Ms": 2.322125000000028,
-      "p95Ms": 2.431957999999895,
-      "maxMs": 2.516416999999933,
+      "p50Ms": 2.297083999999927,
+      "p95Ms": 2.352542000000085,
+      "maxMs": 2.7427090000001044,
       "note": "Serial queue — tasks run one at a time; latency includes prior queue depth",
       "proxy": {
         "component": "McpProxyServer.handleClientInput",
         "samples": 20,
-        "p50Ms": 55.304333999999926,
-        "p95Ms": 73.43279200000006,
-        "maxMs": 150.23279100000002,
+        "p50Ms": 58.8599999999999,
+        "p95Ms": 74.80766699999992,
+        "maxMs": 151.45433400000002,
         "integration": "real-mock-mcp-stdio"
       }
     },
@@ -66,7 +66,7 @@
       "concurrencyLatency": "live-proxy + AsyncSerialQueue metrics"
     }
   },
-  "overallPassed": false,
+  "overallPassed": true,
   "steps": [
     {
       "label": "export-harness-rules",
@@ -135,28 +135,28 @@
       "label": "python-comprehensive-eval",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"passed\": true,\n  \"python\": \"437/437 passed \\u2192 100.0%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 120,\n    \"blocked\": 120,\n    \"bypassed\": 0\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 45.04\n}\n",
+      "stdout": "{\n  \"passed\": true,\n  \"python\": \"437/437 passed \\u2192 100.0%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 120,\n    \"blocked\": 120,\n    \"bypassed\": 0\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 43.46\n}\n",
       "stderr": ""
     },
     {
       "label": "python-comprehensive-harness",
-      "ok": false,
-      "status": 1,
-      "stdout": "=== MCP Guardian Comprehensive Adversarial Harness ===\n\n[1/5] Policy engine evaluation (corpus + custom + matrix + uploaded-bypass)...\n[2/5] AsyncSerialQueue simulation...\n[3/5] Streaming + secret scanner (267 rules)...\n[4/5] Node infrastructure (mock MCP, proxy, vitest)...\n[5/5] Enterprise CSV export (production PolicyEngine)...\n\n{\n  \"policy\": \"635/637 (99.69%)\",\n  \"asyncQueue\": true,\n  \"streaming\": true,\n  \"secrets\": true,\n  \"nodeVitest\": true,\n  \"report\": \"/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/reports/test_harness_report.json\"\n}\n\nPolicy failures (first 15):\n  gen-token-001: expected=block actual=pass rule=allowlist\n  upload-semantic-13: expected=block actual=pass rule=allowlist\n",
+      "ok": true,
+      "status": 0,
+      "stdout": "=== MCP Guardian Comprehensive Adversarial Harness ===\n\n[1/5] Policy engine evaluation (corpus + custom + matrix + uploaded-bypass)...\n[2/5] AsyncSerialQueue simulation...\n[3/5] Streaming + secret scanner (267 rules)...\n[4/5] Node infrastructure (mock MCP, proxy, vitest)...\n[5/5] Enterprise CSV export (production PolicyEngine)...\n\n{\n  \"policy\": \"637/637 (100.0%)\",\n  \"asyncQueue\": true,\n  \"streaming\": true,\n  \"secrets\": true,\n  \"nodeVitest\": true,\n  \"report\": \"/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/reports/test_harness_report.json\"\n}\n",
       "stderr": ""
     },
     {
       "label": "python-corpus-only",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"timestamp\": \"2026-05-21T18:32:25.990172+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
+      "stdout": "{\n  \"timestamp\": \"2026-05-22T05:06:22.218766+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
       "stderr": ""
     },
     {
       "label": "pnpm-build",
       "ok": true,
       "status": 0,
-      "stdout": "\n> @mcp-guardian/server@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 4 packages\n   • Remote caching disabled\n\n@mcp-guardian/core:build: cache hit, replaying logs 82912638a4f33ae8\n@mcp-guardian/core:build: \n@mcp-guardian/core:build: > @mcp-guardian/core@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/core\n@mcp-guardian/core:build: > tsc\n@mcp-guardian/core:build: \n@mcp-guardian/plugin-sdk:build: cache hit, replaying logs 6e28f0bef4fbe0f0\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/plugin-sdk:build: > @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n@mcp-guardian/plugin-sdk:build: > tsc --project tsconfig.json\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/server:build: cache hit, replaying logs 331c572abed81249\n@mcp-guardian/server:build: \n@mcp-guardian/server:build: > @mcp-guardian/server@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/server\n@mcp-guardian/server:build: > tsc\n@mcp-guardian/server:build: \n@mcp-guardian/cli:build: cache hit, replaying logs cb73601b8b0c7ddb\n@mcp-guardian/cli:build: \n@mcp-guardian/cli:build: > @mcp-guardian/cli@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/cli\n@mcp-guardian/cli:build: > tsc\n@mcp-guardian/cli:build: \n\n Tasks:    4 successful, 4 total\nCached:    4 cached, 4 total\n  Time:    44ms >>> FULL TURBO\n\n",
+      "stdout": "\n> @mcp-guardian/server@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 4 packages\n   • Remote caching disabled\n\n@mcp-guardian/core:build: cache hit, replaying logs 82912638a4f33ae8\n@mcp-guardian/core:build: \n@mcp-guardian/core:build: > @mcp-guardian/core@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/core\n@mcp-guardian/core:build: > tsc\n@mcp-guardian/core:build: \n@mcp-guardian/plugin-sdk:build: cache hit, replaying logs 6e28f0bef4fbe0f0\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/server:build: cache hit, replaying logs 331c572abed81249\n@mcp-guardian/plugin-sdk:build: > @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n@mcp-guardian/plugin-sdk:build: > tsc --project tsconfig.json\n@mcp-guardian/plugin-sdk:build: \n@mcp-guardian/server:build: \n@mcp-guardian/server:build: > @mcp-guardian/server@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/server\n@mcp-guardian/server:build: > tsc\n@mcp-guardian/server:build: \n@mcp-guardian/cli:build: cache hit, replaying logs cb73601b8b0c7ddb\n@mcp-guardian/cli:build: \n@mcp-guardian/cli:build: > @mcp-guardian/cli@2.9.1 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/cli\n@mcp-guardian/cli:build: > tsc\n@mcp-guardian/cli:build: \n\n Tasks:    4 successful, 4 total\nCached:    4 cached, 4 total\n  Time:    34ms >>> FULL TURBO\n\n",
       "stderr": "• turbo 2.9.12\n"
     },
     {
@@ -177,7 +177,7 @@
       "label": "node-python-parity",
       "ok": true,
       "status": 0,
-      "stdout": "Parity: 436/437 (99.8%) mismatches=1\ncustom:adv-108.json node=false(pass) py=true(block) rule=semantic-sql-guard\n",
+      "stdout": "Parity: 437/437 (100.0%) mismatches=0\n",
       "stderr": ""
     },
     {

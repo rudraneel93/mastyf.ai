@@ -136,6 +136,18 @@ describe('Comprehensive gap fixes (uploaded analysis)', () => {
     });
   }
 
+  it('blocks context stuffing via token-budget (gen-token-001)', () => {
+    const d = engine.evaluate(ctx('search', { blob: 'x'.repeat(60_000) }));
+    expect(d.action).toBe('block');
+    expect(['token-budget', 'block-sql-exfil']).toContain(d.rule);
+  });
+
+  it('blocks SQL quote evasion after normalization (adv-108)', () => {
+    const d = engine.evaluate(ctx('search', { q: "admin'--" }));
+    expect(d.action).toBe('block');
+    expect(['semantic-sql-guard', 'block-sql-exfil']).toContain(d.rule);
+  });
+
   it('enforces token budget against UTF-8 inflation', () => {
     const inflated = 'A'.repeat(50) + '\u{1F600}'.repeat(200);
     const isolated = new PolicyEngine({

@@ -169,25 +169,38 @@ function repoAllowed(repo: string, allowed: string[]): boolean {
  * All guards scan every string leaf via `walkStringLeaves`. Prompt injection on
  * requests is handled in PolicyEngine via `scanToolCallArguments` (full rule set).
  */
-export function evaluateSemanticGuards(ctx: CallContext): PolicyDecision | null {
+export function evaluateSemanticGuards(
+  ctx: CallContext,
+  rawArguments?: Record<string, unknown> | null,
+): PolicyDecision | null {
   const args = ctx.arguments ?? {};
+  const rawArgs = rawArguments ?? args;
 
   const pathCandidates = [
     ...extractPathArgumentValues(args),
     ...extractPathLikeLeaves(args),
+    ...extractPathArgumentValues(rawArgs),
+    ...extractPathLikeLeaves(rawArgs),
   ];
   const pathCheck = evaluatePathGuard([...new Set(pathCandidates)]);
   if (pathCheck.block) {
     return { action: 'block', rule: 'semantic-path-guard', reason: pathCheck.reason! };
   }
 
-  const urlCandidates = extractHttpUrlsFromLeaves(args);
+  const urlCandidates = [
+    ...extractHttpUrlsFromLeaves(args),
+    ...extractHttpUrlsFromLeaves(rawArgs),
+  ];
   const urlCheck = evaluateUrlGuard([...new Set(urlCandidates)], ctx.toolName);
   if (urlCheck.block) {
     return { action: 'block', rule: 'semantic-url-guard', reason: urlCheck.reason! };
   }
 
-  for (const { value } of walkStringLeaves(args)) {
+  const sqlLeaves = new Set<string>();
+  for (const { value } of walkStringLeaves(args)) sqlLeaves.add(value);
+  for (const { value } of walkStringLeaves(rawArgs)) sqlLeaves.add(value);
+
+  for (const value of sqlLeaves) {
     const sqlCandidates = [value, deobfuscateRecursive(value)];
     for (const candidate of sqlCandidates) {
       for (const pattern of SQL_EXFIL_PATTERNS) {

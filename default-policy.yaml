@@ -162,8 +162,20 @@ policy:
             - \bselect\s+\*\s+from\b.+\b(accounts|customers|users|credentials|secrets|payments|transactions|admin_users|passwords)\b
             - \bunion\b.+\bselect\b
             - \bdelete\s+from\b
+            - \badmin'\s*--
             - '\\$where'
             - '\\$ne'
+        - field: q
+          patterns:
+            - \badmin'\s*--
+            - \bor\s+['"]?1['"]?\s*=\s*['"]?1['"]?\b
+            - \bunion\b.+\bselect\b
+        - field: blob
+          patterns:
+            - '^.{50000,}$'
+        - field: data
+          patterns:
+            - '^.{50000,}$'
         - field: body
           patterns:
             - \bdelete\s+from\b

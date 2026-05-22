@@ -199,7 +199,8 @@ class PolicyEngine:
                         inflated += 2
         byte_estimate = (inflated + 3) // 4
         char_estimate = (leaf_chars + 1) // 2
-        return max(ctx.request_tokens, byte_estimate, char_estimate)
+        stuffing_estimate = leaf_chars if leaf_chars >= 40_000 else 0
+        return max(ctx.request_tokens, byte_estimate, char_estimate, stuffing_estimate)
 
     def _evaluate_rule(
         self,
@@ -495,7 +496,7 @@ class PolicyEngine:
                     chain.reason,
                 )
 
-            sem = evaluate_semantic_guards(norm_ctx)
+            sem = evaluate_semantic_guards(norm_ctx, ctx.arguments)
             if sem:
                 return PolicyDecision(self._resolve_action(sem.action), sem.rule, sem.reason)
 
