@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { resolve, dirname } from 'path';
+import { existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { HistoryDatabase } from '../../src/database/history-db.js';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
@@ -50,7 +51,11 @@ function init(id: number): string {
   );
 }
 
-describe('integration: MCP fixtures matrix', () => {
+const fixturesReady = existsSync(ECHO) && existsSync(FS_FIXTURE);
+
+const describeFixtures = fixturesReady ? describe : describe.skip;
+
+describeFixtures('integration: MCP fixtures matrix', () => {
   describe('echo stdio', () => {
     let db: HistoryDatabase;
     let proxy: McpProxyServer;

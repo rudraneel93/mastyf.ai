@@ -91,6 +91,19 @@ All notable changes to MCP Guardian will be documented in this file.
 | `GUARDIAN_LEGACY_NO_DPOP` | `false` | Disable DPoP requirement for legacy clients |
 | `GUARDIAN_SPIFFE_SOCKET_PATH` | — | SPIFFE Workload API Unix socket |
 
+## [2.9.2] - 2026-05-22
+
+Enterprise findings closure ([`4649b48`](https://github.com/rudraneel93/mcp-guardian/commit/4649b48)) — see [`reports/enterprise-findings-fixes/summary.md`](reports/enterprise-findings-fixes/summary.md).
+
+### Fixed
+- **Enterprise findings (17/17 addressed)** — DPoP jti multi-Redis quorum (`GUARDIAN_DPOP_QUORUM_REDIS`), BK-tree typo-squat index, audit `blockReason` compaction, session rotation (`GUARDIAN_SESSION_ROTATE_ON_USE`), rate-limit / lock jitter; regression suite `tests/enterprise-findings-fixes.test.ts`.
+- **M-2 prompt injection** — expanded regex on the sync default path; tier-2 LLM semantic audit via `GUARDIAN_SEMANTIC_ASYNC` for high-risk deployments ([docs/AI_LEARNING.md](docs/AI_LEARNING.md)).
+- **Integration CI** — `tests/integration/mcp-fixtures.test.ts` excluded from default `pnpm vitest run`; run via `pnpm test:integration`.
+
+### Changed
+- **Adversarial harness metrics** — report artifact timestamps refreshed from local harness runs.
+- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.9.2** with root.
+
 ## [2.9.1] - 2026-05-21
 
 Patch release after **2.9.0** CI hardening.

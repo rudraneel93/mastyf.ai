@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-22T05:34:13.112Z",
+  "generatedAt": "2026-05-22T06:27:08.510Z",
   "harnessRoot": "/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness",
   "corpus": {
     "totalEntries": 228,
@@ -45,16 +45,16 @@
     "concurrency": {
       "component": "AsyncSerialQueue",
       "samples": 50,
-      "p50Ms": 2.297083999999927,
-      "p95Ms": 2.352542000000085,
-      "maxMs": 2.7427090000001044,
+      "p50Ms": 2.2781669999999394,
+      "p95Ms": 2.387917000000016,
+      "maxMs": 2.6106660000000375,
       "note": "Serial queue — tasks run one at a time; latency includes prior queue depth",
       "proxy": {
         "component": "McpProxyServer.handleClientInput",
         "samples": 20,
-        "p50Ms": 58.8599999999999,
-        "p95Ms": 74.80766699999992,
-        "maxMs": 151.45433400000002,
+        "p50Ms": 55.26262500000007,
+        "p95Ms": 73.31733299999996,
+        "maxMs": 141.06520799999998,
         "integration": "real-mock-mcp-stdio"
       }
     },

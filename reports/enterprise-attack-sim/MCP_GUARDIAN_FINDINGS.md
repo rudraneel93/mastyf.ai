@@ -1,8 +1,11 @@
 # MCP Guardian — Technical Findings & Vulnerabilities Report
 
+> **Resolution (v2.9.2 / [`4649b48`](https://github.com/rudraneel93/mcp-guardian/commit/4649b48)):** All **17** findings below are **resolved or improved** in the shipping codebase. Closure details: [`reports/enterprise-findings-fixes/summary.md`](../enterprise-findings-fixes/summary.md). **M-2** uses sync regex by default; tier-2 LLM audit is opt-in via `GUARDIAN_SEMANTIC_ASYNC`. This document is retained as the original assessment record — do not treat open checkboxes below as current status.
+
+
 **Severity Classification:** 3 High, 5 Medium, 7 Low  
 **Date:** May 20, 2026  
-**Status:** All critical blockers resolved; no known CVEs in v2.8.4
+**Status:** **Superseded — all items closed in v2.9.2** (see resolution banner above). Original snapshot: critical blockers resolved; no known CVEs in v2.8.4 at time of report.
 
 ---
 
@@ -668,20 +671,20 @@ export function createWebSocketClient(url: string, config?: { pinCert?: string }
 
 ## Summary of Fixes by Release
 
-### v2.8.5 (Patch - 2–3 weeks)
-- [ ] H-1: Async audit queue backpressure
-- [ ] H-2: CRLF header validation
-- [ ] M-1: JSON nesting iterative traversal
-- [ ] M-3: Policy YAML depth limit
-- [ ] M-4: Secret scanner regex improvements
-- [ ] L-1 through L-7
+### v2.8.5 (Patch - 2–3 weeks) — **shipped (pre-2.9.2)**
+- [x] H-1: Async audit queue backpressure
+- [x] H-2: CRLF header validation
+- [x] M-1: JSON nesting iterative traversal
+- [x] M-3: Policy YAML depth limit
+- [x] M-4: Secret scanner regex improvements
+- [x] L-1 through L-7
 
-### v2.9.0 (Minor - 6–8 weeks)
-- [ ] H-3: Multi-region DPoP lock (redlock)
-- [ ] M-2: Semantic prompt injection detection
-- [ ] M-5: Cost source validation
-- [ ] M-6: Payload normalizer completeness
-- [ ] M-7: WebSocket SSL pinning
+### v2.9.0+ / v2.9.2 (Minor) — **shipped in 2.9.2**
+- [x] H-3: Multi-region DPoP lock (redlock)
+- [x] M-2: Semantic prompt injection detection (sync regex + opt-in `GUARDIAN_SEMANTIC_ASYNC`)
+- [x] M-5: Cost source validation
+- [x] M-6: Payload normalizer completeness
+- [x] M-7: WebSocket SSL pinning
 
 ---
 

@@ -9,6 +9,7 @@ export default defineConfig({
   },
   test: {
     setupFiles: ['./tests/setup-env.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/integration/**'],
     maxConcurrency: 1,
     testTimeout: 30000,
     // Piping vitest stdout (e.g. `| tail -6`) is fully buffered until the process exits — no dots until done.
