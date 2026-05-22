@@ -25,7 +25,16 @@ mkdirSync(REPORT_DIR, { recursive: true });
 
 const r = spawnSync(
   'pnpm',
-  ['exec', 'vitest', 'run', ...tests, '--reporter=json', `--outputFile=${JSON_OUT}`],
+  [
+    'exec',
+    'vitest',
+    'run',
+    '--config',
+    'vitest.harness.config.ts',
+    ...tests,
+    '--reporter=json',
+    `--outputFile=${JSON_OUT}`,
+  ],
   { cwd: ROOT, encoding: 'utf-8' },
 );
 
