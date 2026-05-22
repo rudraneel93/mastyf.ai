@@ -3,7 +3,7 @@
  * One-click Security Swarm analysis — live MCP + gates + detailed analysis.txt
  *
  * Usage:
- *   node security-swarm/run-analysis.mjs [--full] [--skip-live] [--skip-swarm] [--quiet]
+ *   node security-swarm/run-analysis.mjs [--full] [--nightly] [--skip-live] [--skip-swarm] [--quiet] [--continuous] [--skip-continuous]
  */
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runOfficialFilesystemScenario } from '../scenarios/real-life/run-official-filesystem-scenario.mjs';
+import { runContinuousLiveAttack } from '../scenarios/real-life/run-continuous-live-attack.mjs';
 import { writeDetailedAnalysis } from './agents/analysis-report.mjs';
 import { writeTrafficSummary } from './agents/traffic-summary.mjs';
 import { writePlainEnglishReport } from './agents/plain-english-report.mjs';
@@ -24,9 +25,12 @@ import {
 } from './lib/job-state.mjs';
 
 const FULL = process.argv.includes('--full');
+const NIGHTLY = process.argv.includes('--nightly');
 const SKIP_LIVE = process.argv.includes('--skip-live');
 const SKIP_SWARM = process.argv.includes('--skip-swarm');
 const QUIET = process.argv.includes('--quiet');
+const RUN_CONTINUOUS = process.argv.includes('--continuous');
+const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous');
 
 const LIVE_JSON = join(REPO_ROOT, 'scenarios', 'real-life', 'output', 'live-filesystem-session.json');
 const VISUALS_SCRIPT = join(SWARM_DIR, 'scripts', 'generate-swarm-visuals.py');
@@ -159,6 +163,9 @@ async function main() {
       process.env.GUARDIAN_SEMANTIC_STORE_CALIBRATION = 'true';
       process.env.SWARM_CALIBRATE_CAPTURE = 'true';
       process.env.REAL_LIFE_METRICS_ENABLED = 'false';
+      if (FULL && !process.env.REAL_LIFE_BURST_REPEATS) {
+        process.env.REAL_LIFE_BURST_REPEATS = '20';
+      }
       const liveReport = await runOfficialFilesystemScenario();
       liveOk = liveReport.summary?.allPassed ?? false;
       if (liveReport.summary?.scenariosRun === 0) {
@@ -210,7 +217,12 @@ async function main() {
 
     if (!SKIP_SWARM) {
       setPhase('swarm');
-      const swarmScript = FULL ? 'security-swarm:live' : 'security-swarm:fast';
+      const swarmScript = NIGHTLY ? 'security-swarm:live' : 'security-swarm:fast';
+      log(
+        NIGHTLY
+          ? 'Swarm gates (nightly): corpus + full adversarial harness — typically 30–60 min, output streams below…'
+          : 'Swarm gates (fast): corpus + harness parity — typically 3–5 min…',
+      );
       run('pnpm', [swarmScript], {
         env: {
           GUARDIAN_POLICY_TIMING_ENVELOPE: 'false',
@@ -267,6 +279,24 @@ async function main() {
       finishedAt: new Date().toISOString(),
     });
     log(`Detailed analysis: ${latestPath}`);
+
+    if ((RUN_CONTINUOUS || process.env.LIVE_ATTACK_AUTO === 'true') && !SKIP_CONTINUOUS) {
+      log('Starting continuous live attack stream…');
+      process.env.REAL_LIFE_METRICS_ENABLED = 'false';
+      const continuousReport = await runContinuousLiveAttack();
+      log(
+        `Continuous live: block ${((continuousReport.summary.attackBlockRate ?? 0) * 100).toFixed(1)}%`
+        + ` FP ${((continuousReport.summary.benignFpRate ?? 0) * 100).toFixed(1)}%`,
+      );
+      const { latestPath: analysisAfter } = writeDetailedAnalysis({
+        liveOk,
+        swarmOk,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      });
+      log(`Updated analysis (continuous): ${analysisAfter}`);
+    }
+
     emitArtifact(['analysis.txt', 'latest.json']);
   } catch (err) {
     exitCode = 1;

@@ -173,7 +173,7 @@ run('node', ['security-swarm/agents/scout.mjs'], {
   totalSteps,
 });
 
-run('pnpm', ['build'], { label: 'pnpm-build', totalSteps });
+run('pnpm', ['build:guardian'], { label: 'pnpm-build', totalSteps });
 
 const vitestArgs = LIVE
   ? ['vitest', 'run', 'tests/policy/', 'tests/proxy/', 'tests/utils/', '--reporter=verbose']

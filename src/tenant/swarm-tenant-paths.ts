@@ -17,7 +17,7 @@ export function resolveTenantSwarmDir(tenantId: string): string {
   return join(REPO_ROOT, 'reports', 'tenants', tid, 'security-swarm');
 }
 
-/** Resolve dir for reads: tenant dir if it has artifacts, else legacy for default only. */
+/** Resolve dir for reads: tenant dir only (no committed legacy artifacts unless opted in). */
 export function getEffectiveSwarmDir(tenantId: string): string {
   const tid = validateTenantId(tenantId);
   const tenantDir = resolveTenantSwarmDir(tid);
@@ -27,7 +27,10 @@ export function getEffectiveSwarmDir(tenantId: string): string {
     || existsSync(join(tenantDir, 'visuals-data.json'))
     || existsSync(join(tenantDir, 'report.json'));
   if (hasTenantArtifacts) return tenantDir;
-  if (tid === DEFAULT_TENANT_ID) {
+  if (
+    tid === DEFAULT_TENANT_ID
+    && process.env.GUARDIAN_SWARM_USE_LEGACY_ARTIFACTS === 'true'
+  ) {
     const hasLegacy =
       existsSync(join(LEGACY_SWARM_DIR, 'job.json'))
       || existsSync(join(LEGACY_SWARM_DIR, 'latest.json'))

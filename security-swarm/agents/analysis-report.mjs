@@ -11,6 +11,7 @@ const REPO = join(__dir, '..', '..');
 const SWARM_DIR = join(REPO, 'reports', 'security-swarm');
 const ANALYSIS_PATH = join(SWARM_DIR, 'analysis.txt');
 const LIVE_JSON = join(REPO, 'scenarios', 'real-life', 'output', 'live-filesystem-session.json');
+const CONTINUOUS_JSON = join(REPO, 'scenarios', 'real-life', 'output', 'continuous-live-attack-session.json');
 
 function load(path) {
   if (!existsSync(path)) return null;
@@ -80,6 +81,48 @@ function sectionLiveMcp(live) {
     lines.push(`  Learning burst: ${live.burstResults.length} repeat blocks (instant learning signal)`);
   }
   lines.push('');
+  return lines;
+}
+
+function sectionContinuousLive(continuous) {
+  const lines = [];
+  lines.push('CONTINUOUS LIVE ATTACK STREAM (Live MCP traffic)');
+  lines.push('-'.repeat(72));
+  lines.push('  Note: sca/ and enterprise-attack-sim/ are synthetic — not used here.');
+  lines.push('');
+  if (!continuous) {
+    lines.push('  (skipped — no continuous-live-attack-session.json)');
+    lines.push('');
+    return lines;
+  }
+  const s = continuous.summary || {};
+  lines.push(`  Duration:       ${continuous.durationMinutes ?? '?'} min`);
+  lines.push(`  Total calls:    ${s.totalCalls ?? '?'}`);
+  lines.push(`  Attack block:   ${s.attackBlockRate != null ? `${(s.attackBlockRate * 100).toFixed(1)}%` : '?'}`);
+  lines.push(`  Benign FP:      ${s.benignFpRate != null ? `${(s.benignFpRate * 100).toFixed(1)}%` : '?'}`);
+  lines.push(`  p50 latency:    ${formatDurationMs(s.p50LatencyMs)}`);
+  lines.push(`  p95 latency:    ${formatDurationMs(s.p95LatencyMs)}`);
+  lines.push(`  Bypasses:       ${s.bypassCount ?? 0}`);
+  lines.push(`  Block target:   ${s.meetsBlockTarget ? 'PASS (≥95%)' : 'FAIL (<95%)'}`);
+  lines.push(`  FP target:      ${s.meetsFpTarget ? 'PASS (≤2%)' : 'FAIL (>2%)'}`);
+  lines.push('');
+  if ((continuous.rollingMetrics || []).length) {
+    lines.push('  Rolling metrics (5 min):');
+    for (const m of continuous.rollingMetrics) {
+      lines.push(
+        `    ${m.at || '?'} — block ${((m.attackBlockRate ?? 0) * 100).toFixed(1)}%`
+        + ` FP ${((m.benignFpRate ?? 0) * 100).toFixed(1)}% p95 ${m.p95LatencyMs}ms`,
+      );
+    }
+    lines.push('');
+  }
+  if ((continuous.bypasses || []).length) {
+    lines.push('  Sample bypasses (first 10):');
+    for (const b of continuous.bypasses.slice(0, 10)) {
+      lines.push(`    - ${b.fixtureId} (${b.category}) tool=${b.tool}`);
+    }
+    lines.push('');
+  }
   return lines;
 }
 
@@ -225,6 +268,8 @@ function sectionArtifacts() {
     ['summary.md', join(SWARM_DIR, 'summary.md')],
     ['latest.json', join(SWARM_DIR, 'latest.json')],
     ['live session', LIVE_JSON],
+    ['continuous live', CONTINUOUS_JSON],
+    ['continuous bypasses', join(SWARM_DIR, 'continuous-bypasses.json')],
     ['calibration.json', join(SWARM_DIR, 'calibration.json')],
     ['job.log', join(SWARM_DIR, 'job.log')],
   ];
@@ -260,6 +305,10 @@ function sectionRecommendations(live, latest, cal) {
   if (latest && !latest.overall) {
     recs.push('Investigate failed swarm steps in job.log and re-run pnpm security-swarm:fast.');
   }
+  const continuous = load(CONTINUOUS_JSON);
+  if (continuous && !continuous.summary?.meetsBlockTarget) {
+    recs.push('Review continuous-live bypasses in reports/security-swarm/continuous-bypasses.json.');
+  }
   if (!recs.length) {
     recs.push('All gates passed. Schedule weekly pnpm security-swarm:analyze and optional full nightly swarm.');
   }
@@ -276,6 +325,7 @@ function sectionRecommendations(live, latest, cal) {
 export function buildDetailedAnalysisTxt(meta = {}) {
   const latest = load(join(SWARM_DIR, 'latest.json'));
   const live = load(LIVE_JSON);
+  const continuous = load(CONTINUOUS_JSON);
   const cal = load(join(SWARM_DIR, 'calibration.json'));
   const metrics = load(join(REPO, 'reports', 'attack-learning-eval', 'metrics.json'));
 
@@ -304,6 +354,7 @@ export function buildDetailedAnalysisTxt(meta = {}) {
   lines.push(`Profile:         ${latest?.recommendedEnvProfile || 'hybrid'}`);
   lines.push('');
   lines.push(...sectionLiveMcp(live));
+  lines.push(...sectionContinuousLive(continuous));
   lines.push(...sectionLearning(live, cal));
   lines.push(...sectionGates(latest));
   lines.push(...sectionFindings(latest));

@@ -12,7 +12,9 @@ import {
 } from './db-aggregate.js';
 import { ConfigParser } from '../config-parser.js';
 import { readOnboardArtifact } from '../cli/onboard.js';
-import { REPO_ROOT, SWARM_DIR } from './swarm-artifacts.js';
+import { REPO_ROOT } from './swarm-artifacts.js';
+import { getEffectiveSwarmDir } from '../tenant/swarm-tenant-paths.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 
 export interface ServerRegistryEntry {
   name: string;
@@ -136,7 +138,7 @@ export async function getOnboardingStatus(projectRoot = REPO_ROOT): Promise<Onbo
 
   let lastAnalysisAt: string | null = null;
   let lastAnalysisState: string | null = null;
-  const jobPath = join(SWARM_DIR, 'job.json');
+  const jobPath = join(getEffectiveSwarmDir(DEFAULT_TENANT_ID), 'job.json');
   if (existsSync(jobPath)) {
     try {
       const job = JSON.parse(readFileSync(jobPath, 'utf-8')) as Record<string, unknown>;

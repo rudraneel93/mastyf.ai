@@ -33,6 +33,7 @@ export interface SwarmJobStatus {
   error: string | null;
   analysisPath: string;
   logTail: string;
+  hasRun?: boolean;
 }
 
 const WATCHED_ARTIFACTS = [
@@ -96,6 +97,7 @@ function getWatcherState(tenantId: string): TenantWatcherState {
 export function getSwarmJobStatus(tenantId: string = DEFAULT_TENANT_ID): SwarmJobStatus {
   const job = loadJobFile(tenantId);
   const analysis = analysisPath(tenantId);
+  const hasRun = !!(job?.jobId || job?.startedAt);
   return {
     jobId: String(job?.jobId ?? ''),
     tenantId,
@@ -109,6 +111,7 @@ export function getSwarmJobStatus(tenantId: string = DEFAULT_TENANT_ID): SwarmJo
     error: job?.error ? String(job.error) : null,
     analysisPath: analysis,
     logTail: readLogTail(tenantId),
+    hasRun,
   };
 }
 
@@ -289,7 +292,7 @@ export function startSwarmAnalysis(opts: {
 
   const swarmOut = ensureTenantSwarmDir(tenantId);
   const args = ['security-swarm/run-analysis.mjs', '--quiet'];
-  if (opts.full) args.push('--full');
+  if (opts.full) args.push('--nightly');
 
   const child = spawn(process.execPath, args, {
     cwd: REPO_ROOT,

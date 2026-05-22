@@ -19,7 +19,7 @@ const r = spawnSync('pnpm', ['audit', '--audit-level=high', '--json'], {
   env: process.env,
 });
 
-let audit = { ok: r.status === 0, status: r.status, advisories: [] };
+let audit = { ok: false, status: r.status, advisories: [] };
 try {
   const parsed = JSON.parse(r.stdout || '{}');
   const meta = parsed.metadata?.vulnerabilities || {};
@@ -27,6 +27,7 @@ try {
   audit.ok = (meta.high || 0) === 0 && (meta.critical || 0) === 0;
 } catch {
   audit.parseError = (r.stderr || r.stdout || '').slice(0, 2000);
+  audit.ok = false;
 }
 
 const out = {

@@ -22,7 +22,7 @@ import {
 import { tmpdir, homedir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '../..');
+export const ROOT = resolve(__dirname, '../..');
 const POLICY = resolve(ROOT, 'default-policy.yaml');
 const CLI = resolve(ROOT, 'dist/cli.js');
 const OUT_DIR = resolve(__dirname, 'output');
@@ -50,7 +50,7 @@ function rpc(id, method, params = {}) {
   return JSON.stringify({ jsonrpc: '2.0', id: String(id), method, params }) + '\n';
 }
 
-function pickTool(available, candidates) {
+export function pickTool(available, candidates) {
   for (const c of candidates) {
     if (available.includes(c)) return c;
   }
@@ -237,7 +237,7 @@ async function waitForResponse(responses, id, timeoutMs = 5000) {
   return null;
 }
 
-async function runOneCall(proc, responses, scenario, id) {
+export async function runOneCall(proc, responses, scenario, id) {
   const t0 = Date.now();
   responses.delete(String(id));
   proc.stdin.write(rpc(id, 'tools/call', { name: scenario.name, arguments: scenario.args }));
@@ -260,7 +260,7 @@ async function runOneCall(proc, responses, scenario, id) {
   };
 }
 
-function loadLearningSnapshot() {
+export function loadLearningSnapshot() {
   const base = join(homedir(), '.mcp-guardian');
   const paths = {
     attackState: join(base, '.attack-learning-state.json'),
@@ -287,16 +287,9 @@ function loadLearningSnapshot() {
   return snap;
 }
 
-export async function runOfficialFilesystemScenario(opts = {}) {
-  if (!existsSync(CLI)) {
-    throw new Error('dist/cli.js missing — run pnpm build first');
-  }
-
+export function buildHybridEnv(metricsPort) {
   const metricsEnabled = process.env.REAL_LIFE_METRICS_ENABLED === 'true';
-  const metricsPort =
-    process.env.METRICS_PORT || String(await pickFreeTcpPort());
-
-  const hybridEnv = {
+  return {
     ...process.env,
     DASHBOARD_ENABLED: 'false',
     GUARDIAN_WS_ENABLED: 'false',
@@ -312,6 +305,17 @@ export async function runOfficialFilesystemScenario(opts = {}) {
       process.env.GUARDIAN_SEMANTIC_STORE_CALIBRATION
       ?? (process.env.SWARM_CALIBRATE_CAPTURE !== 'false' ? 'true' : 'false'),
   };
+}
+
+/** Start Guardian proxy + official filesystem MCP; returns session handle for live calls. */
+export async function createLiveProxySession() {
+  if (!existsSync(CLI)) {
+    throw new Error('dist/cli.js missing — run pnpm build first');
+  }
+
+  const metricsPort =
+    process.env.METRICS_PORT || String(await pickFreeTcpPort());
+  const hybridEnv = buildHybridEnv(metricsPort);
 
   const responses = new Map();
   let stderr = '';
@@ -337,14 +341,37 @@ export async function runOfficialFilesystemScenario(opts = {}) {
   await waitForUpstreamReady(() => stderr);
   await mcpHandshake(proc, responses);
   const { toolNames } = await listToolsWithRetry(proc, responses);
+
+  return {
+    proc,
+    responses,
+    toolNames,
+    hybridEnv,
+    getStderr: () => stderr,
+    async drainAndKill() {
+      const drainMs = parseInt(
+        process.env.REAL_LIFE_SEMANTIC_DRAIN_MS
+          || (hybridEnv.GUARDIAN_SEMANTIC_ASYNC === 'true' ? '18000' : '1500'),
+        10,
+      );
+      await new Promise((r) => setTimeout(r, drainMs));
+      try { proc.kill(); } catch {}
+    },
+  };
+}
+
+export async function runOfficialFilesystemScenario(opts = {}) {
+  const session = await createLiveProxySession();
+  const { proc, responses, toolNames, hybridEnv } = session;
+  let stderr = session.getStderr();
   const scenarios = buildScenarios(toolNames);
 
   if (scenarios.length === 0) {
-    try { proc.kill(); } catch {}
+    await session.drainAndKill();
     const portHint = /EADDRINUSE/i.test(stderr)
       ? ' Metrics port conflict — stop dashboard:proxy or set REAL_LIFE_METRICS_ENABLED=false.'
       : '';
-    const session = {
+    const emptyReport = {
       timestamp: new Date().toISOString(),
       upstream: '@modelcontextprotocol/server-filesystem',
       mcpFsRoot: MCP_FS_ROOT,
@@ -362,8 +389,8 @@ export async function runOfficialFilesystemScenario(opts = {}) {
       },
     };
     mkdirSync(OUT_DIR, { recursive: true });
-    writeFileSync(SESSION_OUT, JSON.stringify(session, null, 2));
-    return session;
+    writeFileSync(SESSION_OUT, JSON.stringify(emptyReport, null, 2));
+    return emptyReport;
   }
 
   const results = [];
@@ -391,13 +418,8 @@ export async function runOfficialFilesystemScenario(opts = {}) {
     }
   }
 
-  const drainMs = parseInt(
-    process.env.REAL_LIFE_SEMANTIC_DRAIN_MS
-      || (hybridEnv.GUARDIAN_SEMANTIC_ASYNC === 'true' ? '18000' : '1500'),
-    10,
-  );
-  await new Promise((r) => setTimeout(r, drainMs));
-  proc.kill();
+  await session.drainAndKill();
+  stderr = session.getStderr();
 
   const learningBefore = opts.learningBefore ?? null;
   const learningAfter = loadLearningSnapshot();

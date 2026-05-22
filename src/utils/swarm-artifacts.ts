@@ -1,7 +1,7 @@
 /**
  * Read security-swarm report artifacts for dashboard API (per-tenant dirs).
  */
-import { existsSync, readFileSync, readdirSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,13 +48,36 @@ function swarmReportUrlPrefix(tenantId: string): string {
   return `/reports/tenants/${tid}/security-swarm`;
 }
 
-export function readLiveFilesystemSession(): Record<string, unknown> | null {
-  if (!existsSync(LIVE_SESSION_PATH)) return null;
-  try {
-    return JSON.parse(readFileSync(LIVE_SESSION_PATH, 'utf-8')) as Record<string, unknown>;
-  } catch {
-    return null;
+export function readLiveFilesystemSession(tenantId?: string): Record<string, unknown> | null {
+  const dir = readDir(tenantId);
+  const jobPath = join(dir, 'job.json');
+  let job: Record<string, unknown> | null = null;
+  if (existsSync(jobPath)) {
+    try {
+      job = JSON.parse(readFileSync(jobPath, 'utf-8')) as Record<string, unknown>;
+    } catch {
+      job = null;
+    }
   }
+  if (!job || job.state !== 'done') return null;
+
+  const startedAt = job.startedAt ? Date.parse(String(job.startedAt)) : 0;
+  const candidates = [
+    join(dir, 'live-filesystem-session.json'),
+    LIVE_SESSION_PATH,
+  ];
+
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    try {
+      const mtime = statSync(p).mtimeMs;
+      if (startedAt > 0 && mtime < startedAt - 60_000) continue;
+      return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
 }
 
 export function readSwarmLatest(tenantId?: string): Record<string, unknown> | null {

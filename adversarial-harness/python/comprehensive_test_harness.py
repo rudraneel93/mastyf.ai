@@ -396,23 +396,26 @@ def run_node_infrastructure_tests(skip_node: bool) -> dict[str, Any]:
     if skip_node:
         return {"skipped": True, "reason": "--skip-node"}
     json_out = REPORT_DIR / "node-vitest.json"
-    tests = [
-        "adversarial-harness/node/async-queue.test.mjs",
-        "adversarial-harness/node/streaming-race.test.mjs",
-        "adversarial-harness/node/secret-scanner.test.mjs",
-        "adversarial-harness/node/proxy-pipeline.test.mjs",
-        "adversarial-harness/node/concurrency-latency.test.mjs",
-    ]
+    summary_out = REPORT_DIR / "node-tests-summary.json"
     t0 = time.perf_counter()
     proc = subprocess.run(
-        ["pnpm", "exec", "vitest", "run", *tests, "--reporter=json", f"--outputFile={json_out}"],
+        ["node", "adversarial-harness/scripts/run-node-tests.mjs"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
     )
     elapsed = time.perf_counter() - t0
     summary = {"ok": proc.returncode == 0, "exitCode": proc.returncode, "elapsedSeconds": round(elapsed, 2)}
-    if json_out.is_file():
+    if summary_out.is_file():
+        try:
+            node_summary = json.loads(summary_out.read_text(encoding="utf-8"))
+            summary["numPassedTests"] = node_summary.get("passed")
+            summary["numFailedTests"] = node_summary.get("failed", 0)
+            summary["numTotalTests"] = node_summary.get("total")
+            summary["ok"] = node_summary.get("ok", summary["ok"])
+        except json.JSONDecodeError:
+            summary["parseError"] = True
+    elif json_out.is_file():
         try:
             report = json.loads(json_out.read_text(encoding="utf-8"))
             summary["numPassedTests"] = report.get("numPassedTests")
@@ -420,8 +423,8 @@ def run_node_infrastructure_tests(skip_node: bool) -> dict[str, Any]:
             summary["numTotalTests"] = report.get("numTotalTests")
         except json.JSONDecodeError:
             summary["parseError"] = True
-    else:
-        summary["stderr"] = (proc.stderr or "")[-1500:]
+    if not summary.get("ok"):
+        summary["stderr"] = (proc.stderr or proc.stdout or "")[-1500:]
     summary["components"] = {
         "asyncSerialQueue": "adversarial-harness/node/async-queue.test.mjs",
         "streamingRace": "adversarial-harness/node/streaming-race.test.mjs",
