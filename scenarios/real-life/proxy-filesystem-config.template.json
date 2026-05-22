@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "official-filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "__MCP_FS_ROOT__"],
+      "env": {},
+      "transport": "stdio"
+    }
+  }
+}

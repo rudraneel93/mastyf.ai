@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "updatedAt": "2026-05-22T00:00:00.000Z",
+  "description": "Known bypass fingerprints accepted by the PR gate. Net-new bypasses (not listed here) fail the swarm when count exceeds gates.evasion.maxBypasses.",
+  "bypasses": []
+}

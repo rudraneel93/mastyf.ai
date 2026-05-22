@@ -353,6 +353,49 @@ policyCmd
   });
 
 program
+  .command('onboard')
+  .description('Solo-developer onboarding: detect IDE MCP servers, wrap with audit policy, save status')
+  .option('--client <name>', 'Client: cline, cursor, claude-desktop, windsurf, auto', 'auto')
+  .option('-c, --config <path>', 'Explicit MCP client config path')
+  .option('--policy <path>', 'Policy YAML for wrapped proxies', 'policy-audit.yaml')
+  .option('--apply', 'Patch live client MCP JSON', false)
+  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .option('--skip <names>', 'Comma-separated server names to skip', 'mcp-guardian,guardian')
+  .option('--start-proxy', 'Print command to start proxy for first wrapped server', false)
+  .action(async (opts: {
+    client: string;
+    config?: string;
+    policy: string;
+    apply: boolean;
+    projectRoot: string;
+    skip: string;
+    startProxy: boolean;
+  }) => {
+    const { runOnboard } = await import('./cli/onboard.js');
+    type WrapClient = import('./wrap/client-wrap.js').WrapClient;
+    const client = opts.client as WrapClient;
+    const valid = ['cline', 'cursor', 'claude-desktop', 'windsurf', 'auto'];
+    if (!valid.includes(client)) {
+      console.error(chalk.red(`Invalid --client "${opts.client}". Use: ${valid.join(', ')}`));
+      process.exit(1);
+    }
+    try {
+      runOnboard({
+        client,
+        configPath: opts.config,
+        policyPath: opts.policy,
+        projectRoot: opts.projectRoot,
+        apply: opts.apply,
+        skipNames: opts.skip.split(',').map((s) => s.trim()).filter(Boolean),
+        startProxy: opts.startProxy,
+      });
+    } catch (err: unknown) {
+      console.error(chalk.red((err as Error).message));
+      process.exit(1);
+    }
+  });
+
+program
   .command('wrap')
   .description('Wrap Cline/Cursor/Claude MCP servers with Guardian proxy (per-server configs + optional client patch)')
   .option('--client <name>', 'Client config to wrap: cline, cursor, claude-desktop, windsurf, auto', 'auto')
@@ -630,21 +673,31 @@ program
     // Wire dashboard to real HistoryDatabase for live API data
     setDashboardDataSource(db);
 
+    const rewireDashboardWs = async () => {
+      const { getWsBroadcaster } = await import('./utils/dashboard-events.js');
+      const { wireDashboardWsProviders } = await import('./utils/dashboard-ws-wire.js');
+      wireDashboardWsProviders(getWsBroadcaster(), db);
+    };
+
     // WebSocket for TUI live updates (full dashboard API optional via DASHBOARD_ENABLED=true)
     if (process.env['GUARDIAN_WS_ENABLED'] === undefined) {
       process.env['GUARDIAN_WS_ENABLED'] = 'true';
     }
     const dashboardPort = parseInt(process.env['DASHBOARD_PORT'] || '4000', 10);
-    startDashboardServer(dashboardPort, policyWatcher).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(chalk.yellow(`Dashboard/WS server warning: ${msg}`));
-    });
+    startDashboardServer(dashboardPort, policyWatcher)
+      .then(() => void rewireDashboardWs())
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(chalk.yellow(`Dashboard/WS server warning: ${msg}`));
+      });
 
     if (isAiLearningEnabled()) {
       const { initializeAiEngine } = await import('./ai/suggestion-engine.js');
-      initializeAiEngine(db, servers).catch((err: any) => {
-        console.error(chalk.yellow(`AI learning engine warning: ${err?.message}`));
-      });
+      initializeAiEngine(db, servers)
+        .then(() => void rewireDashboardWs())
+        .catch((err: any) => {
+          console.error(chalk.yellow(`AI learning engine warning: ${err?.message}`));
+        });
     } else {
       console.error(chalk.dim('AI learning disabled (GUARDIAN_AI_ENABLED=false)'));
     }

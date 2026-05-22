@@ -20,16 +20,16 @@ export class WsBroadcaster {
 
   /** Live data providers (set externally before starting broadcast loop) */
   private dataProviders: {
-    suggestions?: () => any[];
-    baselines?: () => any[];
-    aiReport?: () => any;
-    aiState?: () => any;
-    threats?: () => any[];
-    policyRules?: () => any;
-    metrics?: () => any;
-    auditTrail?: () => any[];
-    logs?: () => any[];
-    instances?: () => any[];
+    suggestions?: () => unknown[];
+    baselines?: () => unknown[];
+    aiReport?: () => unknown;
+    aiState?: () => unknown;
+    threats?: () => unknown[];
+    policyRules?: () => unknown;
+    metrics?: () => Promise<unknown> | unknown;
+    auditTrail?: () => Promise<unknown[]> | unknown[];
+    logs?: () => string[];
+    instances?: () => unknown[];
   } = {};
 
   constructor(server: Server) {
@@ -179,28 +179,43 @@ export class WsBroadcaster {
       });
     }
 
-    // Aggregated metrics from TelemetryCollector
-    if (this.telemetryCollector) {
+    // Aggregated metrics (history DB provider preferred; telemetry fallback)
+    if (this.dataProviders.metrics) {
       try {
-        const metrics = await this.telemetryCollector.getActiveInstances();
+        const metrics = await Promise.resolve(this.dataProviders.metrics());
         batch.push({
           type: 'metrics:live',
-          payload: { instances: metrics },
+          payload: { metrics },
           timestamp: Date.now(),
         });
       } catch {
-        // Skip if not available
+        /* skip */
+      }
+    } else if (this.telemetryCollector) {
+      try {
+        const instances = await this.telemetryCollector.getActiveInstances();
+        batch.push({
+          type: 'metrics:live',
+          payload: { instances },
+          timestamp: Date.now(),
+        });
+      } catch {
+        /* skip */
       }
     }
 
     // Audit trail events
     if (this.dataProviders.auditTrail) {
-      const trail = this.dataProviders.auditTrail();
-      batch.push({
-        type: 'audit:events',
-        payload: { events: trail || [] },
-        timestamp: Date.now(),
-      });
+      try {
+        const trail = await Promise.resolve(this.dataProviders.auditTrail());
+        batch.push({
+          type: 'audit:events',
+          payload: { events: trail || [] },
+          timestamp: Date.now(),
+        });
+      } catch {
+        /* skip */
+      }
     }
 
     // Real-time logs
@@ -251,16 +266,26 @@ export class WsBroadcaster {
       }));
     }
     if (this.dataProviders.metrics) {
-      ws.send(JSON.stringify({
-        type: 'metrics:live',
-        payload: { metrics: this.dataProviders.metrics() },
-        timestamp: Date.now(),
-      }));
+      Promise.resolve(this.dataProviders.metrics())
+        .then((metrics) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'metrics:live',
+              payload: { metrics },
+              timestamp: Date.now(),
+            }));
+          }
+        })
+        .catch(() => {});
     }
   }
 
-  /** Map event type to channel */
-  private eventToChannel(type: DashboardEventType): string {
+  /** Map event type to channel (public for tests) */
+  eventToChannel(type: DashboardEventType): string {
+    if (type.startsWith('flow:')) return 'flow';
+    if (type.startsWith('swarm:')) return 'swarm';
+    if (type.startsWith('semantic:')) return 'flow';
+    if (type.startsWith('analysis:')) return 'swarm';
     if (type.startsWith('ai:')) return 'ai';
     if (type.startsWith('audit:')) return 'audit';
     if (type.startsWith('metrics:')) return 'metrics';
@@ -296,6 +321,13 @@ export type DashboardEventType =
   | 'logs:alert'
   | 'instances:list'
   | 'instances:status'
+  | 'flow:step'
+  | 'swarm:progress'
+  | 'swarm:done'
+  | 'swarm:failed'
+  | 'semantic:queued'
+  | 'semantic:complete'
+  | 'analysis:artifact'
   | 'snapshot';
 
 export interface DashboardEvent {

@@ -4,6 +4,8 @@
  */
 import { Counter, Gauge } from 'prom-client';
 import { LlmAssistant } from './llm-assistant.js';
+import { getLlmCache, semanticToLlmCacheKey } from './llm-cache.js';
+import { getLlmConfig } from '../config/llm-config.js';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { registry } from '../utils/metrics.js';
@@ -17,6 +19,7 @@ import {
   scoreLocalSemanticRisk,
 } from './local-semantic-classifier.js';
 import { withSemanticTimeout } from '../utils/semantic-timeout.js';
+import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
 
 export interface SemanticAuditJob {
@@ -100,6 +103,50 @@ export function getSemanticAuditStats(): SemanticAuditStats {
   };
 }
 
+function shouldStoreCalibrationRecord(): boolean {
+  return process.env.GUARDIAN_SEMANTIC_STORE_CALIBRATION === 'true';
+}
+
+async function persistSemanticAudit(
+  job: SemanticAuditJob,
+  result: SemanticAuditResult,
+  meta?: { model?: string; durationMs?: number },
+): Promise<void> {
+  try {
+    const { appendSemanticAuditRecord } = await import('./semantic-audit-store.js');
+    appendSemanticAuditRecord({
+      requestId: job.requestId,
+      serverName: job.serverName,
+      toolName: job.toolName,
+      syncDecision: job.syncDecision,
+      semanticAudit: result,
+      model: meta?.model,
+      durationMs: meta?.durationMs,
+      timestamp: job.timestamp,
+    });
+  } catch (err) {
+    Logger.debug(
+      `[async-semantic] Failed to persist audit record: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** Wait for debounced async semantic queue (used by swarm live scenario before proxy exit). */
+export async function flushSemanticAuditQueue(maxWaitMs = 15000): Promise<SemanticAuditStats> {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+      await drainQueue();
+    } else if (!processing && queue.length === 0) {
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return getSemanticAuditStats();
+}
+
 function getLlm(): LlmAssistant {
   if (!llm) llm = new LlmAssistant();
   return llm;
@@ -130,6 +177,26 @@ export function enqueueSemanticAudit(job: SemanticAuditJob): void {
   queue.push(job);
   semanticAuditQueued.inc(getGuardianRegionLabels());
   semanticAuditQueueDepth.set(queue.length);
+
+  broadcastDashboardEvent({
+    type: 'semantic:queued',
+    serverName: job.serverName,
+    payload: {
+      requestId: job.requestId,
+      toolName: job.toolName,
+      syncRule: job.syncDecision.rule,
+    },
+    timestamp: Date.now(),
+  });
+  emitFlowStep({
+    kind: 'semantic_queued',
+    title: `Semantic audit queued: ${job.toolName}`,
+    summary: `Async review after ${job.syncDecision.action} (${job.syncDecision.rule})`,
+    severity: 'info',
+    serverName: job.serverName,
+    toolName: job.toolName,
+    requestId: String(job.requestId),
+  });
 
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
@@ -189,6 +256,16 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
     timestamp: job.timestamp,
     region: getGuardianRegionLabels().region,
   });
+  const result = {
+    suspicious: true,
+    confidence: score.risk,
+    categories: score.categories,
+    reasoning: score.reasoning,
+  };
+  if (score.risk >= MIN_CONFIDENCE || shouldStoreCalibrationRecord()) {
+    await persistSemanticAudit(job, result, { model: 'local-semantic' });
+  }
+  broadcastSemanticComplete(job, result);
 }
 
 async function runAudit(job: SemanticAuditJob): Promise<void> {
@@ -200,11 +277,36 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   const userPrompt =
     `Server: ${job.serverName}\nTool: ${job.toolName}\nSync decision: ${job.syncDecision.action} (${job.syncDecision.rule})\nArguments: ${argsPreview}`;
 
-  const response = await withSemanticTimeout(
-    'async_semantic_audit',
-    () => getLlm().generate(systemPrompt, userPrompt),
-    null,
+  const llmCfg = getLlmConfig();
+  const cache = getLlmCache();
+  const cacheKey = semanticToLlmCacheKey(
+    {
+      model: llmCfg.model,
+      serverName: job.serverName,
+      toolName: job.toolName,
+      arguments: job.arguments,
+      temperature: llmCfg.temperature,
+    },
+    systemPrompt,
+    userPrompt,
   );
+  const cachedText = await cache.get(cacheKey);
+  let response: Awaited<ReturnType<LlmAssistant['generate']>> = null;
+  if (cachedText) {
+    response = {
+      text: cachedText,
+      model: llmCfg.model,
+      tokensUsed: 0,
+      durationMs: 0,
+    };
+  } else {
+    response = await withSemanticTimeout(
+      'async_semantic_audit',
+      () => getLlm().generate(systemPrompt, userPrompt),
+      null,
+    );
+    if (response?.text) await cache.set(cacheKey, response.text);
+  }
   stats.processed++;
   if (!response) {
     semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'no_llm' });
@@ -226,15 +328,22 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     return;
   }
 
-  if (!result.suspicious || result.confidence < MIN_CONFIDENCE) {
+  const flagged = result.suspicious && result.confidence >= MIN_CONFIDENCE;
+  if (!flagged) {
     semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'clean' });
+    if (shouldStoreCalibrationRecord()) {
+      await persistSemanticAudit(job, result, {
+        model: response.model,
+        durationMs: response.durationMs,
+      });
+    }
     return;
   }
 
   stats.flagged++;
   semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'flagged' });
 
-  const auditPayload = {
+  StructuredLogger.info({
     event: 'async_semantic_flag' as const,
     requestId: job.requestId,
     serverName: job.serverName,
@@ -245,27 +354,43 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     durationMs: response.durationMs,
     timestamp: job.timestamp,
     region: getGuardianRegionLabels().region,
-  };
+  });
 
-  StructuredLogger.info(auditPayload);
+  await persistSemanticAudit(job, result, {
+    model: response.model,
+    durationMs: response.durationMs,
+  });
+  broadcastSemanticComplete(job, result);
+}
 
-  try {
-    const { appendSemanticAuditRecord } = await import('./semantic-audit-store.js');
-    appendSemanticAuditRecord({
+function broadcastSemanticComplete(
+  job: SemanticAuditJob,
+  result: { suspicious: boolean; confidence: number; categories: string[]; reasoning: string },
+): void {
+  broadcastDashboardEvent({
+    type: 'semantic:complete',
+    serverName: job.serverName,
+    payload: {
       requestId: job.requestId,
-      serverName: job.serverName,
       toolName: job.toolName,
-      syncDecision: job.syncDecision,
-      semanticAudit: result,
-      model: response.model,
-      durationMs: response.durationMs,
-      timestamp: job.timestamp,
-    });
-  } catch (err) {
-    Logger.debug(
-      `[async-semantic] Failed to persist audit record: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+      suspicious: result.suspicious,
+      confidence: result.confidence,
+      categories: result.categories,
+    },
+    timestamp: Date.now(),
+  });
+  emitFlowStep({
+    kind: 'semantic_complete',
+    title: result.suspicious
+      ? `Semantic flag: ${job.toolName}`
+      : `Semantic clear: ${job.toolName}`,
+    summary: result.reasoning || result.categories.join(', ') || 'No categories',
+    severity: result.suspicious ? 'warn' : 'success',
+    serverName: job.serverName,
+    toolName: job.toolName,
+    requestId: String(job.requestId),
+    metadata: { confidence: result.confidence, categories: result.categories },
+  });
 }
 
 /** Build job from proxy context after sync policy evaluation. */

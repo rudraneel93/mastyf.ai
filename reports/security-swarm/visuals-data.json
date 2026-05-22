@@ -1,0 +1,477 @@
+{
+  "generatedAt": "2026-05-22T12:41:53.508Z",
+  "windowDays": 7,
+  "meta": {
+    "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
+    "hasTraffic": true,
+    "hasInstantLearning": true,
+    "hasSemantic": true,
+    "emptyReasons": {}
+  },
+  "traffic": {
+    "hasData": true,
+    "totalCalls": 2809,
+    "totalBlocked": 236,
+    "hourly": [
+      {
+        "hourStart": "2026-05-16T08:00:00.000Z",
+        "calls": 21,
+        "blocked": 10,
+        "passed": 11,
+        "passRatePct": 52.4,
+        "costUsd": 0.000806,
+        "latencyP50Ms": 1,
+        "latencyP95Ms": 90
+      },
+      {
+        "hourStart": "2026-05-16T09:00:00.000Z",
+        "calls": 21,
+        "blocked": 21,
+        "passed": 0,
+        "passRatePct": 0,
+        "costUsd": 0.000343,
+        "latencyP50Ms": 2,
+        "latencyP95Ms": 91
+      },
+      {
+        "hourStart": "2026-05-17T11:00:00.000Z",
+        "calls": 264,
+        "blocked": 50,
+        "passed": 214,
+        "passRatePct": 81.1,
+        "costUsd": 0.01038,
+        "latencyP50Ms": 20,
+        "latencyP95Ms": 907
+      },
+      {
+        "hourStart": "2026-05-18T13:00:00.000Z",
+        "calls": 2320,
+        "blocked": 0,
+        "passed": 2320,
+        "passRatePct": 100,
+        "costUsd": 0.104706,
+        "latencyP50Ms": 23390,
+        "latencyP95Ms": 33458
+      },
+      {
+        "hourStart": "2026-05-22T04:00:00.000Z",
+        "calls": 34,
+        "blocked": 30,
+        "passed": 4,
+        "passRatePct": 11.8,
+        "costUsd": 0.000799,
+        "latencyP50Ms": 35,
+        "latencyP95Ms": 163
+      },
+      {
+        "hourStart": "2026-05-22T05:00:00.000Z",
+        "calls": 36,
+        "blocked": 30,
+        "passed": 6,
+        "passRatePct": 16.7,
+        "costUsd": 0.001108,
+        "latencyP50Ms": 41,
+        "latencyP95Ms": 174
+      },
+      {
+        "hourStart": "2026-05-22T06:00:00.000Z",
+        "calls": 113,
+        "blocked": 95,
+        "passed": 18,
+        "passRatePct": 15.9,
+        "costUsd": 0.003425,
+        "latencyP50Ms": 35,
+        "latencyP95Ms": 148
+      }
+    ],
+    "byServer": [
+      {
+        "serverName": "bench-echo",
+        "calls": 2584,
+        "blocked": 50,
+        "costUsd": 0.115086,
+        "latencyP50Ms": 22211,
+        "latencyP95Ms": 33174
+      },
+      {
+        "serverName": "official-filesystem",
+        "calls": 183,
+        "blocked": 155,
+        "costUsd": 0.005332,
+        "latencyP50Ms": 35,
+        "latencyP95Ms": 154
+      },
+      {
+        "serverName": "filesystem",
+        "calls": 16,
+        "blocked": 13,
+        "costUsd": 0.000393,
+        "latencyP50Ms": 1,
+        "latencyP95Ms": 69
+      },
+      {
+        "serverName": "github",
+        "calls": 12,
+        "blocked": 8,
+        "costUsd": 0.00036,
+        "latencyP50Ms": 1,
+        "latencyP95Ms": 91
+      },
+      {
+        "serverName": "postgres",
+        "calls": 8,
+        "blocked": 6,
+        "costUsd": 0.000203,
+        "latencyP50Ms": 1,
+        "latencyP95Ms": 81
+      },
+      {
+        "serverName": "puppeteer",
+        "calls": 6,
+        "blocked": 4,
+        "costUsd": 0.000193,
+        "latencyP50Ms": 1,
+        "latencyP95Ms": 81
+      }
+    ],
+    "topTools": [
+      {
+        "tool": "search",
+        "count": 2594
+      },
+      {
+        "tool": "read_text_file",
+        "count": 136
+      },
+      {
+        "tool": "write_file",
+        "count": 30
+      },
+      {
+        "tool": "list_directory",
+        "count": 16
+      },
+      {
+        "tool": "read_file",
+        "count": 6
+      },
+      {
+        "tool": "write_to_file",
+        "count": 4
+      },
+      {
+        "tool": "execute_command",
+        "count": 4
+      },
+      {
+        "tool": "get_file_contents",
+        "count": 2
+      },
+      {
+        "tool": "search_repositories",
+        "count": 2
+      },
+      {
+        "tool": "search_files",
+        "count": 2
+      },
+      {
+        "tool": "execute",
+        "count": 2
+      },
+      {
+        "tool": "list_tables",
+        "count": 2
+      }
+    ],
+    "topBlockRules": [
+      {
+        "rule": "semantic-path-guard",
+        "count": 104,
+        "plainEnglish": "semantic-path-guard"
+      },
+      {
+        "rule": "rate-limit",
+        "count": 50,
+        "plainEnglish": "rate-limit"
+      },
+      {
+        "rule": "multimodal-injection",
+        "count": 30,
+        "plainEnglish": "multimodal-injection"
+      },
+      {
+        "rule": "cve-gate",
+        "count": 20,
+        "plainEnglish": "cve-gate"
+      },
+      {
+        "rule": "request-prompt-injection",
+        "count": 20,
+        "plainEnglish": "Prompt injection in tool args"
+      },
+      {
+        "rule": "deny-dangerous-tools",
+        "count": 4,
+        "plainEnglish": "deny-dangerous-tools"
+      },
+      {
+        "rule": "block-shell-injection",
+        "count": 3,
+        "plainEnglish": "block-shell-injection"
+      },
+      {
+        "rule": "secret-scan",
+        "count": 2,
+        "plainEnglish": "Secret scan"
+      },
+      {
+        "rule": "block-path-traversal",
+        "count": 2,
+        "plainEnglish": "block-path-traversal"
+      },
+      {
+        "rule": "default",
+        "count": 1,
+        "plainEnglish": "default"
+      }
+    ]
+  },
+  "instantLearning": {
+    "source": "live",
+    "totalEvents": 301,
+    "queuedSuggestions": 11,
+    "blocksPerMinute": [
+      {
+        "t": 0,
+        "value": 22
+      },
+      {
+        "t": 120000,
+        "value": 10
+      },
+      {
+        "t": 240000,
+        "value": 13
+      }
+    ],
+    "ruleToolPairs": [
+      {
+        "key": "semantic-path-guard:read_text_file",
+        "rule": "semantic-path-guard",
+        "tool": "read_text_file",
+        "count": 103
+      },
+      {
+        "key": "multimodal-injection:write_file",
+        "rule": "multimodal-injection",
+        "tool": "write_file",
+        "count": 30
+      },
+      {
+        "key": "request-prompt-injection:read_text_file",
+        "rule": "request-prompt-injection",
+        "tool": "read_text_file",
+        "count": 18
+      },
+      {
+        "key": "request-timeout:hang",
+        "rule": "request-timeout",
+        "tool": "hang",
+        "count": 16
+      },
+      {
+        "key": "tool-fingerprint-mismatch:search",
+        "rule": "tool-fingerprint-mismatch",
+        "tool": "search",
+        "count": 16
+      },
+      {
+        "key": "request-prompt-injection:search",
+        "rule": "request-prompt-injection",
+        "tool": "search",
+        "count": 15
+      },
+      {
+        "key": "request-prompt-injection:search_files",
+        "rule": "request-prompt-injection",
+        "tool": "search_files",
+        "count": 2
+      },
+      {
+        "key": "semantic-path-guard:list_directory",
+        "rule": "semantic-path-guard",
+        "tool": "list_directory",
+        "count": 1
+      },
+      {
+        "key": "default:list_allowed_directories",
+        "rule": "default",
+        "tool": "list_allowed_directories",
+        "count": 1
+      }
+    ],
+    "classConfidence": []
+  },
+  "semantic": {
+    "hasData": true,
+    "totals": {
+      "records": 13,
+      "flagged": 11,
+      "labeled": 11,
+      "truePositive": 11,
+      "falsePositive": 0
+    },
+    "confidenceBuckets": [
+      {
+        "bucket": "0.85-1.0",
+        "count": 5
+      }
+    ],
+    "labelMix": [
+      {
+        "label": "true_positive",
+        "count": 5
+      }
+    ],
+    "avgFlagConfidence": 0.88
+  },
+  "regression": {
+    "gates": {
+      "corpus": true,
+      "parity": true,
+      "steps": true,
+      "scout": true,
+      "bypassCount": 0,
+      "netNewBypassCount": 0,
+      "maxBypasses": 0,
+      "bypassBaseline": true
+    },
+    "overall": true,
+    "categoryRecall": [
+      {
+        "category": "credential-exfil",
+        "recallPct": 100,
+        "total": 24
+      },
+      {
+        "category": "cross-tool-chain",
+        "recallPct": 100,
+        "total": 16
+      },
+      {
+        "category": "edge-cases",
+        "recallPct": 100,
+        "total": 22
+      },
+      {
+        "category": "prompt-injection",
+        "recallPct": 100,
+        "total": 32
+      },
+      {
+        "category": "shell-obfuscation",
+        "recallPct": 100,
+        "total": 26
+      },
+      {
+        "category": "sql-nosql",
+        "recallPct": 100,
+        "total": 27
+      },
+      {
+        "category": "ssrf-url",
+        "recallPct": 100,
+        "total": 26
+      }
+    ],
+    "userServers": [
+      {
+        "serverName": "echo-test",
+        "status": "failed",
+        "toolCount": 0
+      },
+      {
+        "serverName": "filesystem",
+        "status": "ok",
+        "toolCount": 14
+      },
+      {
+        "serverName": "fixture_echo",
+        "status": "ok",
+        "toolCount": 3
+      },
+      {
+        "serverName": "github",
+        "status": "ok",
+        "toolCount": 26
+      },
+      {
+        "serverName": "puppeteer",
+        "status": "failed",
+        "toolCount": 0
+      }
+    ]
+  },
+  "pipeline": {
+    "phases": [
+      {
+        "id": "preflight",
+        "label": "Preflight",
+        "progressPct": 5
+      },
+      {
+        "id": "live-mcp",
+        "label": "Live MCP",
+        "progressPct": 25
+      },
+      {
+        "id": "traffic",
+        "label": "Traffic",
+        "progressPct": 42
+      },
+      {
+        "id": "swarm",
+        "label": "Swarm gates",
+        "progressPct": 75
+      },
+      {
+        "id": "visuals",
+        "label": "Visuals",
+        "progressPct": 88
+      }
+    ],
+    "jobState": "done",
+    "stepTimings": [
+      {
+        "label": "scout-audit",
+        "elapsedSec": 1.7
+      },
+      {
+        "label": "pnpm-build",
+        "elapsedSec": 2.5
+      },
+      {
+        "label": "vitest-policy-proxy-utils",
+        "elapsedSec": 21.3
+      },
+      {
+        "label": "corpus-eval",
+        "elapsedSec": 1.3
+      },
+      {
+        "label": "setup-python-venv",
+        "elapsedSec": 0.4
+      },
+      {
+        "label": "harness-node-tests",
+        "elapsedSec": 25.8
+      },
+      {
+        "label": "harness-parity",
+        "elapsedSec": 61.4
+      }
+    ],
+    "totalSec": 114.4
+  }
+}

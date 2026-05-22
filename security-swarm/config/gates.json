@@ -2,6 +2,9 @@
   "version": 1,
   "corpus": { "minAttackBlockRate": 1, "maxBenignFalsePositiveRate": 0, "minEntries": 228 },
   "parity": { "minCorpusAgreementRate": 1, "minOverallAgreementRate": 0.97 },
-  "evasion": { "maxBypasses": 0 },
+  "evasion": {
+    "maxBypasses": 0,
+    "baselineManifest": "security-swarm/config/bypass-baseline.json"
+  },
   "vitest": { "maxFailures": 0 }
 }

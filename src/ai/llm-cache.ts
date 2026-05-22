@@ -14,6 +14,15 @@ export interface LlmCacheKeyInput {
   temperature: number;
 }
 
+/** Semantic audit cache input — keyed by normalized tool-call fingerprint, not full prompt text. */
+export interface SemanticLlmCacheKeyInput {
+  model: string;
+  serverName: string;
+  toolName: string;
+  arguments?: Record<string, unknown>;
+  temperature: number;
+}
+
 const cacheHits = new Counter({
   name: 'mcp_guardian_llm_cache_hits_total',
   help: 'LLM response cache hits',
@@ -53,6 +62,38 @@ export function resetLlmCacheForTests(): void {
 function hashCacheKey(input: LlmCacheKeyInput): string {
   const payload = `${input.model}\0${input.system}\0${input.prompt}\0${input.temperature}`;
   return createHash('sha256').update(payload).digest('hex');
+}
+
+function normalizeArgLeaves(args?: Record<string, unknown>): string {
+  if (!args || typeof args !== 'object') return '';
+  const parts: string[] = [];
+  const walk = (v: unknown): void => {
+    if (typeof v === 'string') parts.push(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(args);
+  return parts.join('\n').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+export function hashSemanticAuditKey(input: SemanticLlmCacheKeyInput): string {
+  const argNorm = normalizeArgLeaves(input.arguments);
+  const payload = `${input.model}\0${input.serverName}\0${input.toolName}\0${argNorm}\0${input.temperature}`;
+  return createHash('sha256').update(payload).digest('hex');
+}
+
+export function semanticToLlmCacheKey(
+  input: SemanticLlmCacheKeyInput,
+  system: string,
+  userPrompt: string,
+): LlmCacheKeyInput {
+  const fp = hashSemanticAuditKey(input);
+  return {
+    model: input.model,
+    system,
+    prompt: `semantic-fp:${fp}\n${userPrompt}`,
+    temperature: input.temperature,
+  };
 }
 
 function ttlSec(): number {

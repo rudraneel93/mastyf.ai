@@ -1,0 +1,346 @@
+{
+  "generatedAt": "2026-05-22T12:53:58.767Z",
+  "windowDays": 7,
+  "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
+  "hasData": true,
+  "totalCalls": 2825,
+  "totalBlocked": 246,
+  "totalPassed": 2579,
+  "servers": [
+    {
+      "serverName": "bench-echo",
+      "calls": 2584,
+      "blocked": 50,
+      "passed": 2534,
+      "blockRatePct": 1.9,
+      "costUsd": 0.115086,
+      "lastSeen": "2026-05-18T13:51:41.000Z",
+      "topTools": [
+        {
+          "tool": "search",
+          "count": 2584
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "rate-limit",
+          "count": 50,
+          "plainEnglish": "rate-limit"
+        }
+      ]
+    },
+    {
+      "serverName": "official-filesystem",
+      "calls": 195,
+      "blocked": 165,
+      "passed": 30,
+      "blockRatePct": 84.6,
+      "costUsd": 0.005701,
+      "lastSeen": "2026-05-22T07:23:36.000Z",
+      "topTools": [
+        {
+          "tool": "read_text_file",
+          "count": 145
+        },
+        {
+          "tool": "write_file",
+          "count": 32
+        },
+        {
+          "tool": "list_directory",
+          "count": 15
+        },
+        {
+          "tool": "search_files",
+          "count": 2
+        },
+        {
+          "tool": "list_allowed_directories",
+          "count": 1
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "semantic-path-guard",
+          "count": 111,
+          "plainEnglish": "semantic-path-guard"
+        },
+        {
+          "rule": "multimodal-injection",
+          "count": 32,
+          "plainEnglish": "multimodal-injection"
+        },
+        {
+          "rule": "request-prompt-injection",
+          "count": 21,
+          "plainEnglish": "attempt to override AI instructions in tool arguments"
+        },
+        {
+          "rule": "default",
+          "count": 1,
+          "plainEnglish": "default"
+        }
+      ]
+    },
+    {
+      "serverName": "filesystem",
+      "calls": 20,
+      "blocked": 13,
+      "passed": 7,
+      "blockRatePct": 65,
+      "costUsd": 0.000789,
+      "lastSeen": "2026-05-22T07:22:30.000Z",
+      "topTools": [
+        {
+          "tool": "read_file",
+          "count": 6
+        },
+        {
+          "tool": "list_directory",
+          "count": 4
+        },
+        {
+          "tool": "write_to_file",
+          "count": 4
+        },
+        {
+          "tool": "read_text_file",
+          "count": 2
+        },
+        {
+          "tool": "search",
+          "count": 2
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "cve-gate",
+          "count": 7,
+          "plainEnglish": "cve-gate"
+        },
+        {
+          "rule": "secret-scan",
+          "count": 2,
+          "plainEnglish": "secret-scan"
+        },
+        {
+          "rule": "block-path-traversal",
+          "count": 2,
+          "plainEnglish": "block-path-traversal"
+        },
+        {
+          "rule": "block-shell-injection",
+          "count": 1,
+          "plainEnglish": "block-shell-injection"
+        },
+        {
+          "rule": "deny-dangerous-tools",
+          "count": 1,
+          "plainEnglish": "deny-dangerous-tools"
+        }
+      ]
+    },
+    {
+      "serverName": "github",
+      "calls": 12,
+      "blocked": 8,
+      "passed": 4,
+      "blockRatePct": 66.7,
+      "costUsd": 0.00036,
+      "lastSeen": "2026-05-16T09:14:08.000Z",
+      "topTools": [
+        {
+          "tool": "search",
+          "count": 6
+        },
+        {
+          "tool": "execute_command",
+          "count": 2
+        },
+        {
+          "tool": "get_file_contents",
+          "count": 2
+        },
+        {
+          "tool": "search_repositories",
+          "count": 2
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "cve-gate",
+          "count": 6,
+          "plainEnglish": "cve-gate"
+        },
+        {
+          "rule": "block-shell-injection",
+          "count": 1,
+          "plainEnglish": "block-shell-injection"
+        },
+        {
+          "rule": "deny-dangerous-tools",
+          "count": 1,
+          "plainEnglish": "deny-dangerous-tools"
+        }
+      ]
+    },
+    {
+      "serverName": "postgres",
+      "calls": 8,
+      "blocked": 6,
+      "passed": 2,
+      "blockRatePct": 75,
+      "costUsd": 0.000203,
+      "lastSeen": "2026-05-16T09:14:11.000Z",
+      "topTools": [
+        {
+          "tool": "execute",
+          "count": 2
+        },
+        {
+          "tool": "list_tables",
+          "count": 2
+        },
+        {
+          "tool": "bash",
+          "count": 2
+        },
+        {
+          "tool": "query",
+          "count": 2
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "cve-gate",
+          "count": 4,
+          "plainEnglish": "cve-gate"
+        },
+        {
+          "rule": "deny-dangerous-tools",
+          "count": 2,
+          "plainEnglish": "deny-dangerous-tools"
+        }
+      ]
+    },
+    {
+      "serverName": "puppeteer",
+      "calls": 6,
+      "blocked": 4,
+      "passed": 2,
+      "blockRatePct": 66.7,
+      "costUsd": 0.000193,
+      "lastSeen": "2026-05-16T09:14:06.000Z",
+      "topTools": [
+        {
+          "tool": "puppeteer_screenshot",
+          "count": 2
+        },
+        {
+          "tool": "search",
+          "count": 2
+        },
+        {
+          "tool": "puppeteer_navigate",
+          "count": 2
+        }
+      ],
+      "topBlockRules": [
+        {
+          "rule": "cve-gate",
+          "count": 3,
+          "plainEnglish": "cve-gate"
+        },
+        {
+          "rule": "block-shell-injection",
+          "count": 1,
+          "plainEnglish": "block-shell-injection"
+        }
+      ]
+    }
+  ],
+  "topBlockRules": [
+    {
+      "rule": "semantic-path-guard",
+      "count": 111,
+      "plainEnglish": "semantic-path-guard"
+    },
+    {
+      "rule": "rate-limit",
+      "count": 50,
+      "plainEnglish": "rate-limit"
+    },
+    {
+      "rule": "multimodal-injection",
+      "count": 32,
+      "plainEnglish": "multimodal-injection"
+    },
+    {
+      "rule": "request-prompt-injection",
+      "count": 21,
+      "plainEnglish": "attempt to override AI instructions in tool arguments"
+    },
+    {
+      "rule": "cve-gate",
+      "count": 20,
+      "plainEnglish": "cve-gate"
+    },
+    {
+      "rule": "deny-dangerous-tools",
+      "count": 4,
+      "plainEnglish": "deny-dangerous-tools"
+    },
+    {
+      "rule": "block-shell-injection",
+      "count": 3,
+      "plainEnglish": "block-shell-injection"
+    },
+    {
+      "rule": "secret-scan",
+      "count": 2,
+      "plainEnglish": "secret-scan"
+    }
+  ],
+  "topTools": [
+    {
+      "tool": "search",
+      "count": 2594
+    },
+    {
+      "tool": "read_text_file",
+      "count": 147
+    },
+    {
+      "tool": "write_file",
+      "count": 32
+    },
+    {
+      "tool": "list_directory",
+      "count": 19
+    },
+    {
+      "tool": "read_file",
+      "count": 6
+    },
+    {
+      "tool": "write_to_file",
+      "count": 4
+    },
+    {
+      "tool": "execute_command",
+      "count": 4
+    },
+    {
+      "tool": "get_file_contents",
+      "count": 2
+    },
+    {
+      "tool": "search_repositories",
+      "count": 2
+    },
+    {
+      "tool": "search_files",
+      "count": 2
+    }
+  ]
+}

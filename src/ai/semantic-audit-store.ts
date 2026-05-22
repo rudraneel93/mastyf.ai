@@ -1,6 +1,6 @@
 /**
  * Persist async semantic audit outcomes for swarm calibrator and dashboard labels.
- * File-backed JSONL under ~/.mcp-guardian (no fabricated data).
+ * PostgreSQL when DB_TYPE=postgres + DATABASE_URL; JSONL fallback for local dev.
  */
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
@@ -38,18 +38,23 @@ function storePath(tenantId?: string): string {
   return join(base, 'semantic-audit-outcomes.jsonl');
 }
 
-export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id' | 'tenantId'>): void {
-  const tenantId = resolveTenantId();
-  const path = storePath(tenantId);
+function appendJsonl(record: StoredSemanticAudit): void {
+  const path = storePath(record.tenantId);
   const dir = dirname(path);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  const line: StoredSemanticAudit = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    tenantId,
-    ...record,
-  };
-  appendFileSync(path, `${JSON.stringify(line)}\n`, 'utf-8');
+  appendFileSync(path, `${JSON.stringify(record)}\n`, 'utf-8');
   trimStore(path);
+}
+
+export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id' | 'tenantId'>): void {
+  const tenantId = resolveTenantId();
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const line: StoredSemanticAudit = { id, tenantId, ...record };
+  appendJsonl(line);
+  void import('./semantic-audit-pg.js').then(async ({ pgAppendSemanticAuditRecord, isSemanticAuditPostgresEnabled }) => {
+    if (!isSemanticAuditPostgresEnabled()) return;
+    await pgAppendSemanticAuditRecord({ ...record, id, timestamp: record.timestamp });
+  });
 }
 
 function trimStore(path: string): void {
@@ -64,7 +69,7 @@ function trimStore(path: string): void {
   }
 }
 
-export function loadSemanticAuditRecords(opts?: {
+function loadJsonlRecords(opts?: {
   tenantId?: string;
   sinceMs?: number;
   limit?: number;
@@ -87,7 +92,54 @@ export function loadSemanticAuditRecords(opts?: {
   return out.reverse();
 }
 
-export function labelSemanticAuditRecord(
+/** Merge Postgres + JSONL (dedupe by id; Postgres wins). */
+export async function loadSemanticAuditRecordsAsync(opts?: {
+  tenantId?: string;
+  sinceMs?: number;
+  limit?: number;
+}): Promise<StoredSemanticAudit[]> {
+  const limit = opts?.limit ?? 2000;
+  const { pgLoadSemanticAuditRecords, isSemanticAuditPostgresEnabled } = await import(
+    './semantic-audit-pg.js'
+  );
+  const jsonl = loadJsonlRecords(opts);
+  if (!isSemanticAuditPostgresEnabled()) return jsonl;
+  const pg = await pgLoadSemanticAuditRecords(opts);
+  if (!pg.length) return jsonl;
+  const byId = new Map<string, StoredSemanticAudit>();
+  for (const r of jsonl) byId.set(r.id, r);
+  for (const r of pg) byId.set(r.id, r);
+  return [...byId.values()]
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .slice(-limit);
+}
+
+/** Sync load — JSONL only (tests / local scripts without async). */
+export function loadSemanticAuditRecords(opts?: {
+  tenantId?: string;
+  sinceMs?: number;
+  limit?: number;
+}): StoredSemanticAudit[] {
+  return loadJsonlRecords(opts);
+}
+
+export async function labelSemanticAuditRecord(
+  id: string,
+  label: 'true_positive' | 'false_positive' | 'ignored',
+  userId: string,
+  tenantId?: string,
+): Promise<boolean> {
+  const { pgLabelSemanticAuditRecord, isSemanticAuditPostgresEnabled } = await import(
+    './semantic-audit-pg.js'
+  );
+  if (isSemanticAuditPostgresEnabled()) {
+    const pgOk = await pgLabelSemanticAuditRecord(id, label, userId, tenantId);
+    if (pgOk) return true;
+  }
+  return labelSemanticAuditRecordJsonl(id, label, userId, tenantId);
+}
+
+function labelSemanticAuditRecordJsonl(
   id: string,
   label: 'true_positive' | 'false_positive' | 'ignored',
   userId: string,

@@ -36,5 +36,10 @@ const out = {
 };
 
 writeFileSync(join(OUT_DIR, 'scout.json'), JSON.stringify(out, null, 2));
-console.log(`[scout] audit ok=${audit.ok}`);
+console.log(`[scout] dependency audit: ${audit.ok ? 'PASS' : 'FAIL'}`);
+if (audit.summary) {
+  console.log(
+    `[scout] critical=${audit.summary.critical ?? 0} high=${audit.summary.high ?? 0} moderate=${audit.summary.moderate ?? 0} low=${audit.summary.low ?? 0}`,
+  );
+}
 process.exit(audit.ok ? 0 : 1);

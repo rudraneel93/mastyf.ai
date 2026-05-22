@@ -6,7 +6,7 @@
         "--config",
         "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/github.json",
         "--policy",
-        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+        "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
       "transport": "stdio"
     },
@@ -16,7 +16,7 @@
         "--config",
         "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/filesystem.json",
         "--policy",
-        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+        "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
       "transport": "stdio"
     },
@@ -26,7 +26,7 @@
         "--config",
         "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs/puppeteer.json",
         "--policy",
-        "/Users/rudraneeldas/Desktop/mcp-guardian/policy-audit.yaml"
+        "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
       "transport": "stdio"
     },

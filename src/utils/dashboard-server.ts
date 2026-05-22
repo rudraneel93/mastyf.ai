@@ -19,6 +19,7 @@ import { tenantRateLimitKey } from './redis-rate-limiter.js';
 import { Registry } from 'prom-client';
 import { WsBroadcaster } from '../dashboard/ws-broadcaster.js';
 import { setWsBroadcaster } from './dashboard-events.js';
+import { wireDashboardWsProviders } from './dashboard-ws-wire.js';
 import {
   getAllActiveServerNames,
   loadAllCallRecords,
@@ -26,6 +27,7 @@ import {
   summarizeRecords,
 } from './db-aggregate.js';
 import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
+import { REPO_ROOT } from './security-swarm-runner.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -62,43 +64,102 @@ function loadDashboardHtml(): string {
 }
 
 const SPA_MIME: Record<string, string> = {
-  '.html': 'text/html',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.png': 'image/png',
+  '.md': 'text/markdown; charset=utf-8',
 };
 
 function serveDashboardAsset(
   spaRoot: string,
   relPath: string,
   res: ServerResponse,
+  method: string = 'GET',
 ): boolean {
   if (!relPath || relPath.includes('..')) return false;
   const filePath = join(spaRoot, relPath);
   if (!existsSync(filePath)) return false;
   const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
-  res.writeHead(200, { 'Content-Type': mime });
-  res.end(readFileSync(filePath));
+  const headers: Record<string, string> = { 'Content-Type': mime };
+  if (relPath.includes('_next/static/')) {
+    headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+  }
+  res.writeHead(200, headers);
+  if (method === 'HEAD') {
+    res.end();
+  } else {
+    res.end(readFileSync(filePath));
+  }
   return true;
 }
 
-function tryServeDashboardSpa(url: string, res: ServerResponse): boolean {
+function writeSpaNotFound(res: ServerResponse): void {
+  res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ error: 'Static asset not found' }));
+}
+
+function tryServeDashboardSpa(
+  url: string,
+  res: ServerResponse,
+  opts?: { notFoundOnMiss?: boolean },
+): boolean {
   const dir = deployDir();
   if (!dir) return false;
   const spaRoot = dashboardSpaDir(dir);
   const legacyRoot = join(dir, 'dashboard-spa');
 
+  const method = res.req?.method || 'GET';
+
   if (url.startsWith('/_next/')) {
-    return serveDashboardAsset(spaRoot, url.slice(1), res);
+    const ok = serveDashboardAsset(spaRoot, url.slice(1), res, method);
+    if (!ok && opts?.notFoundOnMiss) writeSpaNotFound(res);
+    return ok || !!opts?.notFoundOnMiss;
+  }
+
+  if (url === '/favicon.ico') {
+    if (serveDashboardAsset(spaRoot, 'favicon.ico', res, method)) return true;
+    if (method === 'GET' || method === 'HEAD') {
+      res.writeHead(204, { 'Content-Type': 'image/x-icon' });
+      res.end();
+      return true;
+    }
   }
 
   if (!url.startsWith('/dashboard-spa/')) return false;
   const rel = url.replace(/^\/dashboard-spa\//, '');
-  if (serveDashboardAsset(spaRoot, rel, res)) return true;
+  if (serveDashboardAsset(spaRoot, rel, res, method)) return true;
   if (spaRoot !== legacyRoot) {
-    return serveDashboardAsset(legacyRoot, rel, res);
+    return serveDashboardAsset(legacyRoot, rel, res, method);
   }
   return false;
+}
+
+function tryServeSwarmArtifact(url: string, res: ServerResponse, method: string = 'GET'): boolean {
+  const prefix = '/reports/security-swarm/';
+  if (!url.startsWith(prefix)) return false;
+  const rel = url.slice(prefix.length);
+  if (!rel || rel.includes('..')) return false;
+
+  const root = join(REPO_ROOT, 'reports', 'security-swarm');
+  const filePath = join(root, rel);
+  if (!existsSync(filePath)) return false;
+
+  const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime });
+  if (method === 'HEAD') {
+    res.end();
+  } else {
+    res.end(readFileSync(filePath));
+  }
+  return true;
 }
 
 function getCorsOrigin(req: IncomingMessage): string {
@@ -128,6 +189,10 @@ let activeDashboard: DashboardHandle | null = null;
 
 export function setDashboardDataSource(historyDb: any): void {
   runtimeHistoryDb = historyDb;
+  const handle = activeDashboard;
+  if (handle?.ws) {
+    wireDashboardWsProviders(handle.ws, historyDb);
+  }
 }
 
 export async function startDashboardServer(
@@ -162,8 +227,6 @@ export async function startDashboardServer(
       '[dashboard] Dashboard API is UNauthenticated (DASHBOARD_AUTH_DISABLED=true) — do not expose to a network',
     );
   }
-
-  const dashboardHtml = loadDashboardHtml();
 
   const MAX_BODY_SIZE = 1024 * 1024; // 1 MB
 
@@ -231,9 +294,29 @@ export async function startDashboardServer(
   });
 
   const dashboardApiRateLimit = (): number => {
-    const n = parseInt(process.env.GUARDIAN_DASHBOARD_API_RATE_LIMIT || '120', 10);
-    return Number.isFinite(n) && n > 0 ? n : 120;
+    if (process.env.DASHBOARD_AUTH_DISABLED === 'true') {
+      return 5000;
+    }
+    const n = parseInt(process.env.GUARDIAN_DASHBOARD_API_RATE_LIMIT || '600', 10);
+    return Number.isFinite(n) && n > 0 ? n : 600;
   };
+
+  /** Read-only endpoints used for health/polling — not counted toward API rate limit. */
+  function isDashboardRateLimitExempt(path: string, method: string): boolean {
+    if (method !== 'GET') return false;
+    return (
+      path === '/api/auth/status'
+      || path === '/api/auth/csrf'
+      ||       path === '/api/security-swarm/status'
+      || path === '/api/security-swarm/live-session'
+      || path === '/api/security-swarm/report-json'
+      || path === '/api/security-swarm/traffic-summary'
+      || path === '/api/security-swarm/user-servers'
+      || path === '/api/onboarding/status'
+      || path === '/api/servers/registry'
+      || path === '/api/visuals/live'
+    );
+  }
 
   async function checkDashboardApiRateLimit(ip: string, tenantId: string): Promise<boolean> {
     const limit = dashboardApiRateLimit();
@@ -260,12 +343,35 @@ export async function startDashboardServer(
     const url = (req.url || '/').split('?')[0] || '/';
     const method = req.method || 'GET';
 
+    // Next.js static export: serve before helmet/auth (correct MIME; nosniff-safe)
+    if (method === 'GET' || method === 'HEAD') {
+      if (tryServeDashboardSpa(url, res, { notFoundOnMiss: url.startsWith('/_next/') })) {
+        return;
+      }
+      if (tryServeSwarmArtifact(url, res, method)) {
+        return;
+      }
+    }
+
     helmet({
       contentSecurityPolicy: {
         directives: {
-          defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
+          defaultSrc: ["'self'"],
+          // Next.js static export (RSC payload) uses inline <script> blocks — hashes change each build
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrcElem: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", "data:"],
-          connectSrc: ["'self'", "ws:", "wss:", "http://localhost:4000", "http://127.0.0.1:4000", "http://localhost:9090"],
+          connectSrc: [
+            "'self'",
+            'ws:',
+            'wss:',
+            'http://localhost:4000',
+            'http://127.0.0.1:4000',
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:9090',
+          ],
           frameAncestors: ["'none'"],
         },
       },
@@ -380,13 +486,14 @@ export async function startDashboardServer(
         return;
       }
 
-      if (tryServeDashboardSpa(url, res)) return;
-
       if (!dashboardEnabled) {
         setCors();
         if (url === '/' || url === '/dashboard.html') {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(dashboardHtml);
+          res.writeHead(200, {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          });
+          res.end(loadDashboardHtml());
           return;
         }
         writeJson(res, 404, { error: 'Dashboard API disabled; WebSocket at /ws only' });
@@ -402,9 +509,15 @@ export async function startDashboardServer(
         return;
       }
 
-      if (tryServeDashboardSpa(url, res)) return;
-
-      if (url === '/' || url === '/dashboard.html') { setCors(); res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(dashboardHtml); return; }
+      if (url === '/' || url === '/dashboard.html') {
+        setCors();
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        });
+        res.end(loadDashboardHtml());
+        return;
+      }
 
       const roles = auth.getRolesForAuth(authResult);
       const tenantScope = assertTenantAdminScope(
@@ -428,7 +541,7 @@ export async function startDashboardServer(
       if (
         url.startsWith('/api/')
         && url !== '/api/login'
-        && url !== '/api/auth/csrf'
+        && !isDashboardRateLimitExempt(url, method)
       ) {
         const apiAllowed = await checkDashboardApiRateLimit(getClientIp(req), requestTenantId);
         if (!apiAllowed) {
@@ -440,8 +553,26 @@ export async function startDashboardServer(
 
       if (url === '/api/policy' && method === 'GET') {
         setCors();
-        if (!policyWatcher?.get()) { writeJson(res, 404, { error: 'No active policy' }); return; }
-        writeJson(res, 200, { mode: policyWatcher.get()!.getMode(), rules: 'Policy active' }); return;
+        const policyPath =
+          process.env['GUARDIAN_POLICY_PATH'] ||
+          process.env['MCP_GUARDIAN_POLICY_PATH'] ||
+          'policy-demo.yaml';
+        let yaml = '';
+        if (existsSync(policyPath)) {
+          try {
+            yaml = readFileSync(policyPath, 'utf-8');
+          } catch {
+            yaml = '';
+          }
+        }
+        const mode = policyWatcher?.get()?.getMode() || 'audit';
+        writeJson(res, 200, {
+          mode,
+          rules: yaml ? `${yaml.split('\n').length} lines` : 'No policy file',
+          yaml,
+          path: policyPath,
+        });
+        return;
       }
 
       if (url === '/api/policy/reload' && method === 'POST') {
@@ -641,19 +772,71 @@ export async function startDashboardServer(
       if (url === '/api/aggregate/audit' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb; if (!db) { writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0 }); return; }
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0, flagged: 0 });
+            return;
+          }
+          const q = new URL(req.url || url, 'http://localhost').searchParams;
+          const limit = Math.min(200, Math.max(1, parseInt(q.get('limit') || '50', 10) || 50));
+          const actionFilter = q.get('action') || '';
+          const serverFilter = q.get('server') || '';
+
           const srvs = await getAllActiveServerNames(db, requestTenantId);
-          const records = await loadAllCallRecords(db, srvs, requestTenantId);
+          let records = await loadAllCallRecords(db, srvs, requestTenantId);
+          if (serverFilter) {
+            records = records.filter((r) => r.serverName === serverFilter);
+          }
+          if (actionFilter === 'block') {
+            records = records.filter((r) => r.blocked);
+          } else if (actionFilter === 'pass') {
+            records = records.filter((r) => !r.blocked);
+          }
           const sorted = [...records].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-          const evts = sorted.slice(0, 50).map((r) => ({
-            timestamp: r.timestamp, server_name: r.serverName, tool_name: r.toolName,
-            action: r.blocked ? 'block' : 'pass', rule: r.blockRule, reason: r.blockReason,
-            request_tokens: r.requestTokens, response_tokens: r.responseTokens,
-            total_tokens: r.totalTokens, duration_ms: r.durationMs,
+          const evts = sorted.slice(0, limit).map((r) => ({
+            timestamp: r.timestamp,
+            server_name: r.serverName,
+            tool_name: r.toolName,
+            action: r.blocked ? 'block' : 'pass',
+            rule: r.blockRule,
+            reason: r.blockReason,
+            request_tokens: r.requestTokens,
+            response_tokens: r.responseTokens,
+            total_tokens: r.totalTokens,
+            duration_ms: r.durationMs,
           }));
           const blocked = records.filter((r) => r.blocked).length;
-          writeJson(res, 200, { events: evts, total: records.length, blocked, passed: records.length - blocked, flagged: 0 });
-        } catch { writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0 }); } return;
+
+          let flagged = 0;
+          let semanticAudit = { queued: 0, processed: 0, flagged: 0, enabled: false };
+          try {
+            const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+            const sem = await loadSemanticAuditRecordsAsync({ limit: 500 });
+            flagged = sem.filter(
+              (r) => r.semanticAudit?.suspicious || r.label === 'true_positive',
+            ).length;
+            semanticAudit = {
+              queued: sem.filter((r) => !r.label && !r.labeled).length,
+              processed: sem.filter((r) => r.label || r.labeled).length,
+              flagged,
+              enabled: process.env['GUARDIAN_SEMANTIC_ASYNC'] === 'true',
+            };
+          } catch {
+            /* non-fatal */
+          }
+
+          writeJson(res, 200, {
+            events: evts,
+            total: records.length,
+            blocked,
+            passed: records.length - blocked,
+            flagged,
+            semanticAudit,
+          });
+        } catch {
+          writeJson(res, 200, { events: [], total: 0, blocked: 0, passed: 0, flagged: 0 });
+        }
+        return;
       }
 
       if (url === '/api/security' && method === 'GET') {
@@ -779,8 +962,8 @@ export async function startDashboardServer(
       }
       if (url === '/api/learning/semantic/outcomes' && method === 'GET') {
         setCors();
-        const { loadSemanticAuditRecords } = await import('../ai/semantic-audit-store.js');
-        const records = loadSemanticAuditRecords({ limit: 200 });
+        const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+        const records = await loadSemanticAuditRecordsAsync({ limit: 200 });
         writeJson(res, 200, { records, total: records.length });
         return;
       }
@@ -793,7 +976,7 @@ export async function startDashboardServer(
 
         if (body.semanticAuditId) {
           const { labelSemanticAuditRecord } = await import('../ai/semantic-audit-store.js');
-          const ok = labelSemanticAuditRecord(String(body.semanticAuditId), label, userId);
+          const ok = await labelSemanticAuditRecord(String(body.semanticAuditId), label, userId);
           if (!ok) {
             writeJson(res, 404, { error: 'Semantic audit record not found' });
             return;
@@ -873,7 +1056,189 @@ export async function startDashboardServer(
         writeJson(res, 200, { status: 'recorded', ...fp });
         return;
       }
-      if (url === '/api/logs' && method === 'GET') { setCors(); writeJson(res, 200, { logs: [], total: 0 }); return; }
+      if (url.startsWith('/api/flow/session') && method === 'GET') {
+        setCors();
+        try {
+          const q = new URL(req.url || url, 'http://localhost').searchParams;
+          const sessionKey = q.get('sessionKey') || q.get('requestId') || '';
+          if (!sessionKey) {
+            writeJson(res, 400, { error: 'sessionKey or requestId required' });
+            return;
+          }
+          const { getFlowHistory } = await import('../policy/session-flow-store.js');
+          const events = await getFlowHistory(sessionKey);
+          writeJson(res, 200, { sessionKey, events });
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to load session flow',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/logs' && method === 'GET') {
+        setCors();
+        const lines: string[] = [];
+        const jobLog = join(REPO_ROOT, 'reports', 'security-swarm', 'job.log');
+        if (existsSync(jobLog)) {
+          const tail = readFileSync(jobLog, 'utf-8').split('\n').filter(Boolean).slice(-80);
+          lines.push(...tail.map((l) => `[swarm] ${l}`));
+        }
+        writeJson(res, 200, { logs: lines, total: lines.length });
+        return;
+      }
+
+      if (url === '/api/security-swarm/run' && method === 'POST') {
+        setCors();
+        const body = await readBody(req).catch(() => ({}));
+        const { startSwarmAnalysis } = await import('./security-swarm-runner.js');
+        const result = startSwarmAnalysis({ full: !!(body as { full?: boolean }).full });
+        if (!result.ok) {
+          writeJson(res, result.status ?? 409, {
+            error: result.error,
+            jobId: result.jobId,
+          });
+          return;
+        }
+        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt });
+        return;
+      }
+      if (url === '/api/security-swarm/status' && method === 'GET') {
+        setCors();
+        const { getSwarmJobStatus } = await import('./security-swarm-runner.js');
+        writeJson(res, 200, getSwarmJobStatus());
+        return;
+      }
+      if (
+        url === '/api/security-swarm/report' ||
+        url === '/api/security-swarm/report/download'
+      ) {
+        setCors();
+        const { readAnalysisReport } = await import('./security-swarm-runner.js');
+        const report = readAnalysisReport();
+        if (!report.ok || !report.text) {
+          writeJson(res, 404, { error: report.error || 'Report not ready' });
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        if (url.endsWith('/download')) {
+          res.setHeader(
+            'Content-Disposition',
+            'attachment; filename="mcp-guardian-swarm-analysis.txt"',
+          );
+        }
+        res.end(report.text);
+        return;
+      }
+      if (url === '/api/security-swarm/latest' && method === 'GET') {
+        setCors();
+        const { readSwarmLatest } = await import('./security-swarm-runner.js');
+        const latest = readSwarmLatest();
+        if (!latest) {
+          writeJson(res, 404, { error: 'latest.json not found — run analysis first' });
+          return;
+        }
+        writeJson(res, 200, latest);
+        return;
+      }
+      if (url === '/api/security-swarm/figures' && method === 'GET') {
+        setCors();
+        const { readFiguresManifest } = await import('./swarm-artifacts.js');
+        const manifest = readFiguresManifest();
+        writeJson(res, 200, {
+          generatedAt: manifest.generatedAt ?? null,
+          figures: manifest.figures,
+        });
+        return;
+      }
+      if (url === '/api/visuals/live' && method === 'GET') {
+        setCors();
+        try {
+          const { readVisualsData } = await import('./swarm-artifacts.js');
+          const { writeVisualsData } = await import('./export-visuals-data.js');
+          let data = readVisualsData();
+          if (!data) {
+            data = await writeVisualsData() as unknown as Record<string, unknown>;
+          }
+          writeJson(res, 200, data);
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to load visuals data',
+          });
+        }
+        return;
+      }
+      if (url === '/api/security-swarm/summary' && method === 'GET') {
+        setCors();
+        const { readSwarmSummaryMd } = await import('./security-swarm-runner.js');
+        const md = readSwarmSummaryMd();
+        if (!md) {
+          writeJson(res, 404, { error: 'summary.md not found' });
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+        res.end(md);
+        return;
+      }
+      if (url === '/api/security-swarm/live-session' && method === 'GET') {
+        setCors();
+        const { readLiveFilesystemSession } = await import('./swarm-artifacts.js');
+        const live = readLiveFilesystemSession();
+        if (!live) {
+          writeJson(res, 404, { error: 'live-filesystem-session.json not found' });
+          return;
+        }
+        writeJson(res, 200, live);
+        return;
+      }
+      if (url === '/api/security-swarm/report-json' && method === 'GET') {
+        setCors();
+        const { ensurePlainEnglishReport } = await import('./swarm-artifacts.js');
+        const report = ensurePlainEnglishReport();
+        if (!report) {
+          writeJson(res, 404, { error: 'report.json not found — run analysis first' });
+          return;
+        }
+        writeJson(res, 200, report);
+        return;
+      }
+      if (url === '/api/security-swarm/traffic-summary' && method === 'GET') {
+        setCors();
+        const { readTrafficSummary } = await import('./swarm-artifacts.js');
+        const traffic = readTrafficSummary();
+        if (!traffic) {
+          writeJson(res, 404, { error: 'traffic-summary.json not found' });
+          return;
+        }
+        writeJson(res, 200, traffic);
+        return;
+      }
+      if (url === '/api/security-swarm/user-servers' && method === 'GET') {
+        setCors();
+        const { readUserServersSession } = await import('./swarm-artifacts.js');
+        const session = readUserServersSession();
+        if (!session) {
+          writeJson(res, 404, { error: 'user-servers-session.json not found' });
+          return;
+        }
+        writeJson(res, 200, session);
+        return;
+      }
+      if (url === '/api/onboarding/status' && method === 'GET') {
+        setCors();
+        const { getOnboardingStatus } = await import('./server-registry.js');
+        writeJson(res, 200, await getOnboardingStatus());
+        return;
+      }
+      if (url === '/api/servers/registry' && method === 'GET') {
+        setCors();
+        const { getServerRegistry } = await import('./server-registry.js');
+        const servers = await getServerRegistry();
+        writeJson(res, 200, { servers });
+        return;
+      }
 
       setCors(); writeJson(res, 404, { error: 'Not found' });
     } catch (err: any) { setCors(); writeJson(res, 500, { error: err?.message || 'Internal error' }); }
@@ -914,8 +1279,12 @@ export async function startDashboardServer(
 
   ws = new WsBroadcaster(server);
   setWsBroadcaster(ws);
+  if (runtimeHistoryDb) {
+    wireDashboardWsProviders(ws, runtimeHistoryDb);
+  }
   if (dashboardEnabled) {
-    ws.startDataPushLoop(parseInt(process.env['GUARDIAN_WS_PUSH_INTERVAL_MS'] || '5000', 10));
+    const pushMs = parseInt(process.env['GUARDIAN_WS_PUSH_INTERVAL_MS'] || '5000', 10);
+    ws.startDataPushLoop(pushMs);
   }
   const mode = dashboardEnabled ? 'dashboard + WS' : 'WS only';
   Logger.info(`[dashboard] ${mode} at http://localhost:${listenPort}/ws`);

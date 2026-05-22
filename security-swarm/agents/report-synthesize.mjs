@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { bypassFingerprint, diffBypasses } from '../lib/bypass-fingerprint.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
@@ -16,8 +17,136 @@ function load(path) {
   return JSON.parse(readFileSync(path, 'utf-8'));
 }
 
+function gateStatus(ok) {
+  return ok ? 'PASS' : 'FAIL';
+}
+
+function formatBypassLine(b) {
+  if (b.id) return b.id;
+  if (b.fixtureId) return b.fixtureId;
+  return JSON.stringify(b).slice(0, 120);
+}
+
+function buildTextReport(latest, gates, bypasses, live) {
+  const lines = [];
+  const hr = '='.repeat(72);
+  const sub = '-'.repeat(72);
+
+  lines.push(hr);
+  lines.push('MCP Guardian — Security Swarm Report');
+  lines.push(hr);
+  lines.push('');
+  lines.push(`Generated:  ${latest.timestamp}`);
+  lines.push(`Commit:     ${latest.commitSha}`);
+  lines.push(`Mode:       ${latest.mode}`);
+  lines.push(`Output:     ${live ? 'live' : 'quiet'}`);
+  lines.push('');
+  lines.push(`Overall:    ${latest.overall ? 'PASS' : 'FAIL'}`);
+  lines.push('');
+  lines.push(sub);
+  lines.push('Gates');
+  lines.push(sub);
+  lines.push(`  Corpus       ${gateStatus(latest.gates?.corpus)}`);
+  lines.push(`  Parity       ${gateStatus(latest.gates?.parity)}`);
+  lines.push(`  Steps        ${gateStatus(latest.gates?.steps)}`);
+  lines.push(
+    `  Bypasses     ${latest.gates?.bypassCount ?? 0} (max ${latest.gates?.maxBypasses ?? gates.evasion?.maxBypasses ?? 0})`,
+  );
+  lines.push(`  Scout        ${latest.gates?.scout !== false ? 'PASS' : 'FAIL'}`);
+  lines.push('');
+  lines.push(sub);
+  lines.push('Steps');
+  lines.push(sub);
+  for (const s of latest.steps ?? []) {
+    const status = s.ok ? 'PASS' : 'FAIL';
+    const elapsed = s.elapsedSec != null ? `${s.elapsedSec}s` : '?';
+    lines.push(`  [${status}] ${s.label.padEnd(32)} ${elapsed.padStart(7)}  (exit ${s.status ?? '?'})`);
+  }
+  lines.push('');
+  if (latest.corpus) {
+    lines.push(sub);
+    lines.push('Corpus');
+    lines.push(sub);
+    lines.push(`  entries:           ${latest.corpus.totalEntries ?? '?'}`);
+    lines.push(`  fn:                ${latest.corpus.fn ?? '?'}`);
+    lines.push(`  fp:                ${latest.corpus.fp ?? '?'}`);
+    if (latest.corpus.attackBlockRate != null) {
+      lines.push(`  attack block rate: ${(latest.corpus.attackBlockRate * 100).toFixed(1)}%`);
+    }
+    if (latest.corpus.benignPassRate != null) {
+      lines.push(`  benign pass rate:  ${(latest.corpus.benignPassRate * 100).toFixed(1)}%`);
+    }
+    lines.push('');
+  }
+  if (latest.parity) {
+    lines.push(sub);
+    lines.push('Parity');
+    lines.push(sub);
+    lines.push(`  agreement:         ${latest.parity.agreement}/${latest.parity.total}`);
+    if (latest.parity.agreementRate != null) {
+      lines.push(`  agreement rate:    ${(latest.parity.agreementRate * 100).toFixed(1)}%`);
+    }
+    lines.push(`  corpus mismatches: ${latest.parity.corpusMismatches ?? 0}`);
+    lines.push('');
+  }
+  lines.push(sub);
+  lines.push('Bypasses');
+  lines.push(sub);
+  if (latest.bypasses) {
+    lines.push(`  detected:          ${latest.bypasses.detected ?? 0}`);
+    lines.push(`  baseline-known:    ${latest.bypasses.baselineKnown ?? 0}`);
+    lines.push(`  net-new:           ${latest.bypasses.netNew ?? 0}`);
+    lines.push('');
+  }
+  if (bypasses.length === 0) {
+    lines.push('  (none detected)');
+  } else {
+    for (const b of bypasses) {
+      const tag = b._netNew ? '[NEW] ' : '';
+      lines.push(`  - ${tag}${formatBypassLine(b)}`);
+    }
+  }
+  if (latest.findings?.length) {
+    lines.push('');
+    lines.push(sub);
+    lines.push('Findings');
+    lines.push(sub);
+    for (const f of latest.findings) {
+      lines.push(`  [${f.severity}] ${f.source}: ${f.summary}`);
+    }
+  }
+  if (latest.timings) {
+    lines.push('');
+    lines.push(sub);
+    lines.push('Timings');
+    lines.push(sub);
+    lines.push(`  total:             ${latest.timings.totalSec}s`);
+    for (const s of latest.timings.steps ?? []) {
+      lines.push(`  ${s.label.padEnd(32)} ${String(s.elapsedSec).padStart(7)}s`);
+    }
+  }
+  lines.push('');
+  lines.push(sub);
+  lines.push(`Recommended profile: ${latest.recommendedEnvProfile}`);
+  lines.push('');
+  lines.push(`Summary (markdown): reports/security-swarm/summary.md`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function writeTextReport(latest, gates, bypasses, live) {
+  const text = buildTextReport(latest, gates, bypasses, live);
+  const tsSlug = latest.timestamp.replace(/[:.]/g, '-');
+  const latestPath = join(OUT_DIR, 'swarm-report.txt');
+  const stampedPath = join(OUT_DIR, `report-${tsSlug}.txt`);
+  writeFileSync(latestPath, text);
+  writeFileSync(stampedPath, text);
+  return { latestPath, stampedPath };
+}
+
 export function synthesizeReport(input) {
-  const { steps = [], mode = 'full', gates = {} } = input;
+  const { steps = [], mode = 'full', gates = {}, live = false } = input;
   const scout = load(join(OUT_DIR, 'scout.json'));
   const corpus = load(join(REPO, 'corpus-eval-report.json'));
   const parity = load(join(REPO, 'adversarial-harness', 'reports', 'parity-report.json'));
@@ -64,22 +193,101 @@ export function synthesizeReport(input) {
     }
   }
 
-  writeFileSync(join(OUT_DIR, 'bypasses.json'), JSON.stringify({ bypasses, count: bypasses.length }, null, 2));
+  const baselinePath =
+    gates.evasion?.baselineManifest || join(__dir, '..', 'config', 'bypass-baseline.json');
+  const baseline = load(baselinePath) || { bypasses: [] };
+  const baselineFps = (baseline.bypasses || []).map((b) =>
+    typeof b === 'string' ? b : bypassFingerprint(b),
+  );
+  const { netNew, known } = diffBypasses(bypasses, baselineFps);
+  const bypassesTagged = [
+    ...known.map((b) => ({ ...b, _netNew: false })),
+    ...netNew.map((b) => ({ ...b, _netNew: true })),
+  ];
+
+  writeFileSync(
+    join(OUT_DIR, 'bypasses.json'),
+    JSON.stringify(
+      {
+        bypasses: bypassesTagged,
+        count: bypasses.length,
+        netNew: netNew.length,
+        baselineKnown: known.length,
+        baselineManifest: baselinePath,
+      },
+      null,
+      2,
+    ),
+  );
+
+  const totalSec = steps.reduce((sum, s) => sum + (s.elapsedSec ?? 0), 0);
+  const findings = [];
+  if (scout?.audit && !scout.audit.ok) {
+    findings.push({
+      severity: 'high',
+      source: 'scout',
+      summary: `Dependency audit failed (critical=${scout.audit.summary?.critical ?? 0} high=${scout.audit.summary?.high ?? 0})`,
+    });
+  }
+  if (scout?.audit?.summary?.moderate > 0) {
+    findings.push({
+      severity: 'info',
+      source: 'scout',
+      summary: `Moderate advisories: ${scout.audit.summary.moderate}`,
+    });
+  }
+  for (const s of steps.filter((x) => !x.ok)) {
+    findings.push({
+      severity: 'critical',
+      source: 'step',
+      summary: `${s.label} failed (exit ${s.status})`,
+    });
+  }
+  if (netNew.length > 0) {
+    findings.push({
+      severity: 'critical',
+      source: 'evasion',
+      summary: `${netNew.length} net-new bypass(es) vs baseline manifest`,
+    });
+  }
+  if (corpus && !corpusOk) {
+    findings.push({
+      severity: 'critical',
+      source: 'corpus',
+      summary: `Corpus gate failed (fn=${corpusFn} fp=${corpusFp})`,
+    });
+  }
+
+  const maxBypasses = gates.evasion?.maxBypasses ?? 0;
+  const bypassGateOk = netNew.length <= maxBypasses;
 
   const latest = {
     version: 1,
     mode,
     timestamp: new Date().toISOString(),
     commitSha,
+    findings,
+    timings: {
+      totalSec: Math.round(totalSec * 10) / 10,
+      steps: steps.map((s) => ({ label: s.label, elapsedSec: s.elapsedSec ?? 0 })),
+    },
     gates: {
       corpus: corpusOk,
       parity: parityOk,
       steps: stepsOk,
       scout: scout?.audit?.ok ?? true,
       bypassCount: bypasses.length,
-      maxBypasses: gates.evasion?.maxBypasses ?? 0,
+      netNewBypassCount: netNew.length,
+      maxBypasses,
+      bypassBaseline: bypassGateOk,
     },
-    overall: corpusOk && parityOk && stepsOk && bypasses.length <= (gates.evasion?.maxBypasses ?? 0),
+    bypasses: {
+      detected: bypasses.length,
+      baselineKnown: known.length,
+      netNew: netNew.length,
+      items: bypassesTagged,
+    },
+    overall: corpusOk && parityOk && stepsOk && bypassGateOk,
     steps,
     scout,
     corpus: corpus
@@ -101,7 +309,7 @@ export function synthesizeReport(input) {
       : null,
     harness: harness ? { allOk: harness.allOk } : null,
     evasionPromotions: promotions?.count ?? 0,
-    recommendedEnvProfile: bypasses.length > 0 ? 'high-paranoia' : 'hybrid',
+    recommendedEnvProfile: netNew.length > 0 ? 'high-paranoia' : bypasses.length > 0 ? 'hybrid' : 'hybrid',
   };
 
   mkdirSync(OUT_DIR, { recursive: true });
@@ -121,7 +329,8 @@ Overall: **${latest.overall ? 'PASS' : 'FAIL'}**
 | Corpus (${corpus?.totalEntries ?? '?'} entries) | ${corpusOk ? 'PASS' : 'FAIL'} |
 | Parity (corpus 100%) | ${parityOk ? 'PASS' : 'FAIL'} |
 | Steps | ${stepsOk ? 'PASS' : 'FAIL'} |
-| Bypasses (max ${gates.evasion?.maxBypasses ?? 0}) | ${bypasses.length} |
+| Bypasses (detected / net-new / max) | ${bypasses.length} / ${netNew.length} / ${gates.evasion?.maxBypasses ?? 0} |
+| Bypass baseline | ${bypassGateOk ? 'PASS' : 'FAIL'} |
 | Scout audit | ${scout?.audit?.ok !== false ? 'PASS' : 'FAIL'} |
 
 ## Recommended runtime profile
@@ -134,7 +343,7 @@ ${steps.map((s) => `- **${s.label}**: ${s.ok ? 'OK' : 'FAIL'} (exit ${s.status ?
 
 ## Bypasses
 
-${bypasses.length === 0 ? '_None detected._' : bypasses.map((b) => `- ${b.id || b.fixtureId || JSON.stringify(b).slice(0, 80)}`).join('\n')}
+${bypasses.length === 0 ? '_None detected._' : bypassesTagged.map((b) => `- ${b._netNew ? '**[NEW]** ' : ''}${b.id || b.fixtureId || b.fingerprint || JSON.stringify(b).slice(0, 80)}`).join('\n')}
 
 ## Evidence links
 
@@ -143,6 +352,7 @@ ${bypasses.length === 0 ? '_None detected._' : bypasses.map((b) => `- ${b.id || 
 `;
 
   writeFileSync(join(OUT_DIR, 'summary.md'), md);
+  writeTextReport(latest, gates, bypassesTagged, live);
   return latest;
 }
 
@@ -151,8 +361,11 @@ const isMain = process.argv[1]?.endsWith('report-synthesize.mjs');
 if (isMain) {
   const stepsData = load(join(OUT_DIR, 'steps.json'));
   const steps = stepsData?.steps || [];
+  const mode = stepsData?.mode || process.env.SWARM_MODE || 'full';
+  const live = stepsData?.live ?? false;
   const gates = JSON.parse(readFileSync(join(__dir, '..', 'config', 'gates.json'), 'utf-8'));
-  const latest = synthesizeReport({ steps, mode: process.env.SWARM_MODE || 'full', gates });
+  const latest = synthesizeReport({ steps, mode, gates, live });
   console.log(`[report] overall=${latest.overall} → reports/security-swarm/latest.json`);
+  console.log(`[report] text → reports/security-swarm/swarm-report.txt`);
   process.exit(latest.overall ? 0 : 1);
 }

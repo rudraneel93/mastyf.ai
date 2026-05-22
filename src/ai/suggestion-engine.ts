@@ -308,6 +308,9 @@ export class SuggestionEngine {
           estimatedSavings: s.estimatedSavings,
         })),
       }, null, 2));
+      void import('../utils/metrics.js').then(({ setSuggestionQueueDepth }) => {
+        setSuggestionQueueDepth(suggestions.length);
+      });
     } catch (err: unknown) {
       Logger.debug(`[SuggestionEngine] Failed to save pending suggestions: ${err instanceof Error ? err.message : String(err)}`);
     }

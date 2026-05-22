@@ -25,7 +25,7 @@ Evidence is split into four layers — use the right source when quoting numbers
 
 **M-2 prompt injection** — sync regex path is the default; enable **`GUARDIAN_SEMANTIC_ASYNC`** for tier-2 LLM semantic audit on high-risk deployments ([`docs/AI_LEARNING.md`](docs/AI_LEARNING.md)).
 
-**v2.9.2** leads with **CI-gated adversarial harness** evidence (**154/154** corpus, **84/85** evasion, **adv-066** tracked), **four-layer README evidence** (repo eval vs harness vs enterprise sim vs SCA), and **[enterprise attack-sim](reports/enterprise-attack-sim/)** reports; continues per-block instant attack learning, dashboard RBAC, streaming response inspection, and bounded audit queue. See [CHANGELOG.md](CHANGELOG.md).
+**v2.9.2** leads with **CI-gated adversarial harness** evidence (**154/154** corpus, **84/85** evasion, **adv-066** tracked), **four-layer README evidence** (repo eval vs harness vs enterprise sim vs SCA), and **[enterprise attack-sim](reports/enterprise-attack-sim/)** reports; adds the **seamless analysis platform** (solo `pnpm onboard`, dashboard Setup/Agent flow/Analysis tabs, plain-English `report.json`, live infrastructure visuals from `history.db`, personalized traffic summary). Continues per-block instant attack learning, dashboard RBAC, streaming response inspection, and bounded audit queue. See [CHANGELOG.md](CHANGELOG.md).
 
 ### Instant vs batch (long-run, repo eval — verified)
 
@@ -149,6 +149,8 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
   - [Adversarial test harness](#adversarial-test-harness-live-proxy--policy-parity--may-2026)
 - [Production blockers (v2.8.0)](#production-blockers-v280--all-resolved)
 - [Quick Start](#quick-start)
+- [Start here (solo developer)](#start-here-solo-developer)
+- [Dashboard & seamless analysis](#dashboard--seamless-analysis)
 - [Real-World Integration (Cline, Cursor, Claude Code)](#real-world-integration-cline-cursor-claude-code)
   - [Windows (native PowerShell)](#windows-native-powershell)
 - [Two Operating Modes](#two-operating-modes)
@@ -184,18 +186,21 @@ npm install -g @mcp-guardian/server
 # Scan all discoverable MCP configs (Cline, Cursor, Claude Desktop, Windsurf)
 mcp-guardian scan --all
 
-# Wrap IDE MCP servers for live proxy (audit mode first — safe rollout)
-cd /path/to/mcp-guardian && npm run build
-mcp-guardian wrap --client cline --policy policy-audit.yaml --apply
+# From source (recommended for latest dashboard + onboard)
+git clone https://github.com/rudraneel93/mcp-guardian.git && cd mcp-guardian
+pnpm install && pnpm build
+pnpm onboard -- --client cursor --apply    # or: mcp-guardian wrap --client cline --policy policy-audit.yaml --apply
+# Reload IDE, use MCP tools — traffic flows through Guardian → history.db
+pnpm dashboard:build && pnpm dashboard:proxy   # http://localhost:4000
 
-# Restart VS Code / reload MCP, then use Cline normally — traffic is proxied
-
-# Interactive terminal dashboard
+# Interactive terminal dashboard (same DB)
 mcp-guardian tui
 
-# Full report
+# Full CLI report
 mcp-guardian report --all --format markdown --output guardian-report.md
 ```
+
+Solo-developer walkthrough: [Start here (solo developer)](#start-here-solo-developer) · Dashboard: [Dashboard & seamless analysis](#dashboard--seamless-analysis).
 
 **Docker reference stack** (dashboard + Redis + proxy):
 
@@ -364,7 +369,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Live JSON-RPC probes** — Latency, success rate, tool count
 - **Circuit breaker** — CLOSED / OPEN / HALF_OPEN
 - **Prometheus** — `/metrics`, `/healthz`, `/readyz` on port 9090
-- **Web dashboard** — Browser SPA at `http://localhost:4000/` when proxy runs (`deploy/dashboard-spa/`; REST + WebSocket; `GUARDIAN_DASHBOARD_SPA=false` for legacy HTML)
+- **Web dashboard** — Browser SPA at `http://localhost:4000/` when proxy runs (`deploy/dashboard-spa/`; REST + WebSocket; Setup/Agent flow/Analysis; plain-English report + live infrastructure visuals; `GUARDIAN_DASHBOARD_SPA=false` for legacy HTML)
 - **Interactive TUI** — Terminal dashboard (Overview–Fleet, nine tabs); complements the SPA for SSH-only or headless hosts
 - **OpenTelemetry** — OTLP tracing
 - **SIEM hooks** — Structured JSON (`policy_decision`, `tool_blocked`) via `MCP_GUARDIAN_SIEM_*`
@@ -417,6 +422,50 @@ See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an hone
 
 ---
 
+## Start here (solo developer)
+
+One path from zero to a **personalized** plain-English security report on **your** proxied MCP traffic (not synthetic bench data):
+
+```bash
+pnpm install && pnpm build          # root tsc → dist/ (required for dashboard APIs)
+pnpm onboard -- --client cursor --apply
+# Reload Cursor — MCP entries now launch guardian-proxy.sh per server
+# Use MCP tools in the IDE for a few minutes (filesystem, github, etc.)
+pnpm dashboard:build && pnpm dashboard:proxy
+# Browser: http://localhost:4000
+```
+
+| Dashboard tab | What you get |
+|---------------|----------------|
+| **Setup** | Onboarding status, wrapped server registry, quick links to `pnpm onboard` |
+| **Agent flow** | Live WebSocket timeline, analysis pipeline strip, **plain-English report**, **infrastructure visuals** (Recharts), regression details |
+| **Analysis** | Same artifacts as Agent flow — verdict banner, traffic tables, PNG gallery |
+
+**Generate / refresh reports:**
+
+```bash
+pnpm security-swarm:analyze              # full pipeline (~2–15 min): traffic + gates + visuals + report.json
+pnpm agent:proxy-traffic                 # quick: 4 benign filesystem calls via Guardian → history.db
+MCP_GUARDIAN_DB_PATH=~/.mcp-guardian/history.db node security-swarm/agents/traffic-summary.mjs
+MCP_GUARDIAN_DB_PATH=~/.mcp-guardian/history.db node security-swarm/agents/plain-english-report.mjs
+```
+
+**Artifacts (dashboard reads these):**
+
+| File | Purpose |
+|------|---------|
+| `~/.mcp-guardian/onboard.json` | Last onboard run (client, wrapped servers) |
+| `~/.mcp-guardian/history.db` | All proxied `tools/call` records (source of truth for traffic) |
+| `reports/security-swarm/report.json` | Plain-English headline + sections (dashboard primary) |
+| `reports/security-swarm/traffic-summary.json` | Per-server calls/blocks/top tools (last 7 days) |
+| `reports/security-swarm/visuals-data.json` | Live chart bundle (`history.db` + instant learning) |
+| `reports/security-swarm/figures/manifest.json` | Static PNG gallery metadata |
+| `reports/security-swarm/analysis.txt` | Technical appendix |
+
+**Optional:** weekly analysis — `node scripts/security-swarm/schedule-analysis.mjs`
+
+> **Global npm CLI older than repo?** Run onboard from the repo: `pnpm onboard -- --client cursor --apply` (not bare `mcp-guardian onboard` until you publish/install the matching version).
+
 ## Installation
 
 ```bash
@@ -437,6 +486,27 @@ pnpm install && pnpm build
 ---
 
 ## CLI Reference
+
+### `pnpm onboard` (solo developer, repo root)
+
+Requires `pnpm build` first. See [Dashboard & seamless analysis](#dashboard--seamless-analysis).
+
+```bash
+pnpm onboard -- --client cursor --apply   # wrap + patch IDE config + save ~/.mcp-guardian/onboard.json
+pnpm onboard -- --client auto             # detect IDE, dry-run wrap
+pnpm onboard -- --start-proxy             # print guardian-proxy.sh for first server
+```
+
+### `pnpm agent:proxy-traffic`
+
+Runs benign MCP `tools/call` through a **short-lived Guardian proxy** (official `@modelcontextprotocol/server-filesystem`) so `history.db` gains real proxied rows without reloading the IDE. Client id: `cursor-composer-agent`. Uses `METRICS_ENABLED=false` by default to avoid clashing with `dashboard:proxy` on port 9090.
+
+```bash
+pnpm agent:proxy-traffic
+# then refresh traffic + report:
+node security-swarm/agents/traffic-summary.mjs
+node security-swarm/agents/plain-english-report.mjs
+```
 
 ### `mcp-guardian wrap` (new in v2.5)
 
@@ -562,9 +632,103 @@ For a safe first run: `mcp-guardian proxy --policy policy-demo.yaml` (or `policy
 
 ---
 
+## Dashboard & seamless analysis
+
+The browser SPA (`deploy/dashboard-spa/`) is the default UI at `http://localhost:4000/` when the proxy runs with `DASHBOARD_ENABLED=true`. It is the **solo-developer analysis surface**: onboarding status, live agent timeline, plain-English verdict, personalized traffic, and infrastructure charts fed from **`MCP_GUARDIAN_DB_PATH`** (default `~/.mcp-guardian/history.db`).
+
+### Run locally
+
+```bash
+pnpm build                    # compile dist/ — required after git pull (dashboard APIs live in dist/utils/)
+pnpm dashboard:build          # export Next.js SPA → deploy/dashboard-spa/out/
+pnpm dashboard:proxy          # free :4000, rebuild stale dist if dashboard-server.ts changed, start proxy + SPA
+```
+
+`scripts/start-dashboard-proxy.sh` sets `MCP_GUARDIAN_DB_PATH`, `DASHBOARD_AUTH_DISABLED=true` (local only), `GUARDIAN_WS_ENABLED=true`, and uses `deploy/dashboard-proxy-mcp.json` + `policy-demo.yaml` by default. Override config/policy as trailing args.
+
+`dashboard:serve` is **SPA-only** (no `call_records`, no `/api/visuals/live`). For real Overview/Audit/Cost/Agent data, always use **`dashboard:proxy`** or `scripts/guardian-proxy.sh` with `DASHBOARD_ENABLED=true`.
+
+### Personalized traffic report
+
+The plain-English headline in `report.json` is driven by **`traffic-summary.json`**, which aggregates **`call_records`** from `history.db` for the last **7 days**:
+
+- **With traffic:** e.g. *"Your MCP setup saw 2813 proxied calls (236 blocked). Industry regression gates passed."*
+- **Without traffic:** regression gates may still pass, but the headline prompts you to *"Use your IDE MCP tools through Guardian to build a personalized traffic report."*
+
+Traffic only exists when MCP clients call **`tools/call` through a Guardian proxy** (`wrap` / `onboard` / `guardian-proxy.sh`). Cursor **built-in agent tools** (Read, Grep, Shell in chat) are **not** MCP — they do not appear in `history.db`.
+
+**Record traffic quickly (no IDE reload):**
+
+```bash
+pnpm agent:proxy-traffic    # spawns proxy + official filesystem MCP; client id cursor-composer-agent
+```
+
+**Refresh report artifacts:**
+
+```bash
+pnpm security-swarm:analyze   # recommended: traffic + user-server probes + swarm gates + visuals + report.json
+# or manual:
+node security-swarm/agents/traffic-summary.mjs
+node security-swarm/agents/plain-english-report.mjs
+```
+
+On the dashboard, click **Refresh report** on Agent flow / Analysis after new traffic.
+
+### Infrastructure visuals (live vs eval)
+
+| Layer | Source | Where |
+|-------|--------|--------|
+| **Interactive charts** | `GET /api/visuals/live` → `visuals-data.json` or on-the-fly export from `history.db` | Agent flow / Analysis → Infrastructure visuals panel (Recharts) |
+| **Static PNGs** | `reports/security-swarm/scripts/generate-swarm-visuals.py` (~19 figures) | `figures/*.png` + `figures/manifest.json` |
+| **Eval fallback** | `reports/attack-learning-eval/metrics.json` | Chart subtitles when no live blocks in proxy state |
+
+```bash
+pnpm security-swarm:visuals-data   # export visuals-data.json only (no full analyze)
+# Python figures (optional .venv-charts):
+.venv-charts/bin/python reports/security-swarm/scripts/generate-swarm-visuals.py
+```
+
+WebSocket `analysis:artifact` events refresh the dashboard when `traffic-summary.json`, `visuals-data.json`, or `report.json` change during `pnpm security-swarm:analyze`. Swarm architecture: [docs/assets/security-swarm-architecture.png](docs/assets/security-swarm-architecture.png) (also in [Security Swarm](#security-swarm-ci--runtime-learning-loop) below).
+
+### Dashboard HTTP APIs (local dev)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/onboarding/status` | Last onboard metadata |
+| `GET /api/servers/registry` | Wrapped / probed servers |
+| `GET /api/security-swarm/traffic-summary` | Personalized traffic JSON |
+| `GET /api/security-swarm/report-json` | Plain-English `report.json` (generates if missing) |
+| `GET /api/visuals/live` | Live `visuals-data` bundle |
+| `GET /api/security-swarm/figures` | PNG manifest + categories |
+| `GET /api/security-swarm/status` | Analysis job state |
+| `WS /ws` | Live timeline, pipeline, artifact notifications |
+
+### `pnpm onboard` vs global CLI
+
+From **repo root** after `pnpm build`:
+
+```bash
+pnpm onboard -- --client cursor --apply   # wrap servers + patch ~/.cursor/mcp.json + save onboard.json
+pnpm onboard -- --client auto            # detect IDE, dry-run
+pnpm onboard -- --start-proxy             # print guardian-proxy.sh hint for first server
+```
+
+Equivalent: `mcp-guardian wrap --client cursor --apply` when the installed npm package matches the repo version.
+
+---
+
 ## Interactive TUI
 
-The **browser SPA** (`deploy/dashboard-spa/`) is the default UI at `http://localhost:4000/` when the proxy runs with `DASHBOARD_ENABLED=true`. Use the **TUI** for SSH-only hosts, quick terminal checks, or when port 4000 is not exposed — both read the same `MCP_GUARDIAN_DB_PATH` and share the Fleet tab / `mcp-guardian fleet status` data.
+The **browser SPA** is preferred for analysis and visuals; use the **TUI** for SSH-only hosts, quick terminal checks, or when port 4000 is not exposed — both read the same `MCP_GUARDIAN_DB_PATH` and share the Fleet tab / `mcp-guardian fleet status` data.
+
+**One command (local dev):** proxy + dashboard + live metrics from `~/.mcp-guardian/history.db`:
+
+```bash
+pnpm dashboard:build   # first time
+pnpm dashboard:proxy   # stops processes on :4000, starts proxy + SPA
+```
+
+**Agent flow tab (SPA):** Live WebSocket timeline (MCP allow/block, semantic audit, AI suggestions), horizontal **analysis pipeline** when you run security analysis, plain-English report, and infrastructure charts. Each proxied `tools/call` should appear within ~1s. REST polling for other tabs falls back every 30s if WS is disconnected. Uncheck **Auto-scroll** on the timeline if you prefer a fixed scroll position.
 
 ```bash
 pnpm run build
@@ -902,12 +1066,36 @@ pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
 
 ### Security Swarm (CI + runtime learning loop)
 
-Closed-loop agentic workflow: **Scout → Corpus → Evasion → Parity → Proxy → Report** (CI) plus in-process **BlockGuard / InstantLearner / SemanticAuditor / Calibrator** (production). Architecture: [docs/assets/security-swarm-architecture.png](docs/assets/security-swarm-architecture.png). Gates: **228/228** corpus, **0** bypasses, **100%** corpus parity.
+Closed-loop **agentic** workflow for MCP Guardian: CI agents discover and gate policy quality; the production proxy runs the same learning loop on every real `tools/call`.
+
+![Security Swarm — agentic architecture (CI agents + runtime learning loop)](docs/assets/security-swarm-architecture.png)
+
+*Diagram: **CI track** (Scout → Corpus → Evasion → Parity → Proxy → Report) feeds `latest.json` and harness evidence; **runtime track** (BlockGuard → InstantLearner → SemanticAuditor → PatternSynthesizer → Calibrator) runs in-process on the proxy. **Solo analyze** (`pnpm security-swarm:analyze`) adds live filesystem MCP, personalized traffic from `history.db`, visuals, and plain-English `report.json` for the dashboard.*
+
+| Track | Components | Output |
+|-------|------------|--------|
+| **CI agents** | Scout · Corpus · Evasion · Parity · Proxy · Report | `reports/security-swarm/latest.json`, adversarial harness, corpus eval |
+| **Runtime (proxy)** | BlockGuard · InstantLearner · SemanticAuditor · PatternSynthesizer · Calibrator | `history.db`, attack-learning state, policy suggestions |
+| **Solo analyze** | `run-analysis.mjs` orchestrator | `report.json`, `traffic-summary.json`, `visuals-data.json`, `analysis.txt` |
+
+Gates: **228/228** corpus, **0** bypasses, **100%** corpus parity. Full agent table: [security-swarm/README.md](security-swarm/README.md).
 
 ```bash
+pnpm security-swarm:analyze  # one-click: live MCP + gates → analysis.txt (~2–15 min)
 pnpm security-swarm          # full (nightly)
 pnpm security-swarm:fast     # PR path (~5–15 min)
 pnpm security-swarm:calibrate # LLM threshold recommendations from labeled audits
+```
+
+Primary report after analyze: [`reports/security-swarm/report.json`](reports/security-swarm/report.json) (plain English) and [`analysis.txt`](reports/security-swarm/analysis.txt) (technical appendix). Dashboard **Agent flow** / **Analysis** tabs show the report inline, **personalized traffic** tables (`traffic-summary.json`), **live interactive charts** (`GET /api/visuals/live` from `history.db` + instant learning), and a categorized PNG gallery (`figures/manifest.json`).
+
+**Pipeline phases** (`run-analysis.mjs`): user-server probes → **traffic summary** → calibrate → swarm gates → **visuals-data** + matplotlib figures → plain-English **report.json** → `analysis.txt`.
+
+**Learning charts:** When the proxy has recorded blocks, figures use live `~/.mcp-guardian/.attack-learning-state.json`. Otherwise they fall back to simulated [`reports/attack-learning-eval/metrics.json`](reports/attack-learning-eval/metrics.json) (labeled in chart subtitles).
+
+```bash
+pnpm security-swarm:visuals-data   # export visuals-data.json only
+pnpm agent:proxy-traffic           # seed history.db via Guardian (IDE alternative)
 ```
 
 Reports: [`reports/security-swarm/`](reports/security-swarm/) · [`security-swarm/README.md`](security-swarm/README.md) · deployment profiles in [`docs/AI_LEARNING.md`](docs/AI_LEARNING.md#deployment-profiles-security-swarm).
@@ -1052,9 +1240,36 @@ Monorepo layout: [packages/PACKAGING.md](packages/PACKAGING.md)
 
 ## FAQ
 
+### Why does the report say “Use your IDE MCP tools through Guardian”?
+
+Regression **gates** passed, but **`traffic-summary.json` had zero `call_records`** in the window (or the traffic step failed to read `history.db`). Fix: (1) `pnpm onboard -- --client cursor --apply` and use **wrapped MCP servers** in the IDE, or (2) `pnpm agent:proxy-traffic`, then regenerate traffic + report (commands in [Start here](#start-here-solo-developer)).
+
+### Do Cursor chat tools (Read, Grep, Shell) count as MCP traffic?
+
+**No.** Only MCP **`tools/call`** through a Guardian **proxy** process are stored in `history.db`. Built-in Cursor agent tools use a separate path. To personalize reports from chat-driven workflows, route MCP servers through Guardian (`onboard` / `wrap`) or run `pnpm agent:proxy-traffic`.
+
+### “Visuals data unavailable” on the dashboard?
+
+Usually **`/api/visuals/live` returned 404** because `dist/` was stale (dashboard API added in source but not compiled). Run `pnpm build` (or `pnpm exec tsc --project tsconfig.json`), restart `pnpm dashboard:proxy`, hard-refresh the browser. If `visuals-data.json` is missing, the API generates it on first request when `history.db` is readable.
+
+### Dashboard page keeps scrolling/jumping?
+
+Fixed in SPA: report section no longer calls `scrollIntoView` on every artifact WebSocket tick; the activity timeline auto-scrolls **inside its panel** only (`scrollTop`, not the whole page). Rebuild with `pnpm dashboard:build` and refresh. Disable **Auto-scroll** under Activity timeline if needed.
+
 ### How do I connect Cline in real time?
 
 Run `mcp-guardian wrap --client cline --policy policy-audit.yaml --apply`, restart VS Code, use Cline normally. See [docs/REAL_WORLD_INTEGRATION.md](docs/REAL_WORLD_INTEGRATION.md).
+
+### How do I connect Cursor?
+
+```bash
+pnpm build
+pnpm onboard -- --client cursor --apply
+# Reload Cursor — verify Setup tab in dashboard
+pnpm dashboard:proxy
+```
+
+See [Real-World Integration](#real-world-integration-cline-cursor-claude-code) and [Dashboard & seamless analysis](#dashboard--seamless-analysis).
 
 ### How is this different from a WAF?
 
@@ -1118,6 +1333,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ## Roadmap
 
 ### Shipped in v2.9.2
+- **Seamless analysis platform** — `pnpm onboard`, dashboard **Setup** / **Agent flow** / **Analysis** tabs, inline plain-English `report.json`, personalized `traffic-summary.json`, live **infrastructure visuals** (`/api/visuals/live`, `visuals-data.json`, Recharts + matplotlib gallery), `pnpm agent:proxy-traffic`, `scripts/start-dashboard-proxy.sh` stale-dist rebuild
 - **Enterprise test package** — five-scenario attack sim + security assessment under [reports/enterprise-attack-sim/](reports/enterprise-attack-sim/)
 - **Comprehensive adversarial harness** — [`adversarial-harness/`](adversarial-harness/) + [`reports/adversarial-harness/`](reports/adversarial-harness/): **154/154** corpus attacks, **84/85** evasion (adv-066 bypass tracked), **26/26** live Node proxy tests, **400/402** Python/TS parity, streaming **3/3**, secret scanner **14/14**
 - **Dashboard RBAC** — `viewer` / `analyst` / `operator` / `admin` / `tenant-admin`; `GUARDIAN_DASHBOARD_ROLES`
@@ -1202,6 +1418,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.

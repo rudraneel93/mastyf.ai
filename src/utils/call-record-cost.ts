@@ -19,7 +19,7 @@ export function compactCallRecordForPersistence(record: ProxyCallRecord): ProxyC
 import { getRuntimeModelPricing } from '../services/runtime-model-pricing.js';
 import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from './metrics.js';
-import { broadcastDashboardEvent } from './dashboard-events.js';
+import { broadcastDashboardEvent, emitFlowStep } from './dashboard-events.js';
 import { enqueueAuditWrite, initAuditWriteQueue } from '../database/audit-write-queue.js';
 
 export async function enrichCallRecord(
@@ -90,6 +90,24 @@ export async function persistCallRecord(
       costUsd: enriched.costUsd,
     },
     timestamp: Date.now(),
+  });
+
+  const rule = enriched.blockRule || '—';
+  const reasonShort = (enriched.blockReason || '').slice(0, 120);
+  emitFlowStep({
+    kind: enriched.blocked ? 'policy_block' : 'policy_pass',
+    title: enriched.blocked ? `Blocked ${enriched.toolName}` : `Allowed ${enriched.toolName}`,
+    summary: enriched.blocked
+      ? `${rule}${reasonShort ? `: ${reasonShort}` : ''}`
+      : `${enriched.totalTokens} tokens`,
+    severity: enriched.blocked ? 'warn' : 'success',
+    serverName: enriched.serverName,
+    toolName: enriched.toolName,
+    metadata: {
+      blockRule: enriched.blockRule,
+      costUsd: enriched.costUsd,
+      totalTokens: enriched.totalTokens,
+    },
   });
 
   if (enriched.costUsd && enriched.costUsd > 0) {

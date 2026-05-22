@@ -49,7 +49,7 @@ describe('semantic-audit-store', () => {
     const path = join(tempHome, '.mcp-guardian', 'semantic-audit-outcomes.jsonl');
     expect(existsSync(path)).toBe(true);
 
-    const ok = labelSemanticAuditRecord(records[0].id, 'false_positive', 'tester');
+    const ok = await labelSemanticAuditRecord(records[0].id, 'false_positive', 'tester');
     expect(ok).toBe(true);
 
     const relabeled = loadSemanticAuditRecords({ limit: 10 });

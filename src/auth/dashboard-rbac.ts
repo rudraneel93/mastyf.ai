@@ -109,6 +109,12 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
     return m === 'POST' ? 'policy_mutate' : m === 'GET' ? 'read' : null;
   }
   if (path === '/api/policy' && m === 'GET') return 'read';
+  if (path === '/api/policy/fp/reject' && m === 'POST') return 'policy_mutate';
+  if (path.startsWith('/api/learning/')) return m === 'GET' ? 'ai' : 'ai';
+  if (path.startsWith('/api/security-swarm/')) {
+    if (path === '/api/security-swarm/run' && m === 'POST') return 'policy_test';
+    return m === 'GET' ? 'read' : null;
+  }
   if (path.startsWith('/api/admin/')) return m === 'GET' ? 'admin' : 'admin';
   if (path.startsWith('/api/ai/')) return m === 'GET' ? 'ai' : 'ai';
   if (path === '/api/logout') return 'read';

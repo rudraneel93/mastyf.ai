@@ -120,6 +120,8 @@ export function getExporterManager(): ExporterManager | null {
 }
 
 export async function shutdownEnterprise(): Promise<void> {
+  const { stopDashboardTelemetry } = await import('./dashboard-telemetry.js');
+  await stopDashboardTelemetry();
   if (auditTrailSync) {
     auditTrailSync.stop();
     auditTrailSync = null;

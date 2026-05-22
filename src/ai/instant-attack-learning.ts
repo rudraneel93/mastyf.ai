@@ -17,7 +17,7 @@ import { isAiAutoApplyEnabled, isAiLearningEnabled } from '../utils/ai-enabled.j
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
-import { broadcastDashboardEvent } from '../utils/dashboard-events.js';
+import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import { resolveTenantId, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { getInstantLlmTimeoutMs, withSemanticTimeout } from '../utils/semantic-timeout.js';
 
@@ -304,6 +304,13 @@ function mergePendingSuggestion(
     type: 'ai:suggestions',
     payload: { suggestions: pending.suggestions, instant: true },
     timestamp: Date.now(),
+  });
+  emitFlowStep({
+    kind: 'ai_suggestion',
+    title: `AI suggestion: ${ruleName}`,
+    summary: suggestion.reason || 'Instant attack pattern queued',
+    severity: 'info',
+    metadata: { ruleName, confidence, source: 'attack' },
   });
   return true;
 }

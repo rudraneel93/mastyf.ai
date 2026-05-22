@@ -112,6 +112,18 @@ export const instantLearningEventsTotal = new Counter({
   registers: [registry],
 });
 
+export const suggestionQueueDepth = new Gauge({
+  name: 'mcp_guardian_suggestion_queue_depth',
+  help: 'Pending AI policy suggestions awaiting operator review',
+  labelNames: ['tenant_id'],
+  registers: [registry],
+});
+
+/** Update suggestion queue depth from pending suggestions file or engine state. */
+export function setSuggestionQueueDepth(count: number, tenantId?: string): void {
+  suggestionQueueDepth.set(withTenantMetricLabels({}, tenantId), Math.max(0, count));
+}
+
 function ensureDefaultMetrics(): void {
   if (defaultMetricsRegistered) return;
   collectDefaultMetrics({ register: registry, prefix: 'mcp_guardian_' });

@@ -8,10 +8,16 @@ describe('dashboard-spa', () => {
   it('includes Next.js app source with client-only dashboard', () => {
     const client = join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx');
     const boundary = join(SPA_ROOT, 'app', 'components', 'DashboardErrorBoundary.tsx');
+    const loginGate = join(SPA_ROOT, 'app', 'components', 'LoginGate.tsx');
+    const swarmPanel = join(SPA_ROOT, 'app', 'components', 'SwarmPanel.tsx');
     expect(existsSync(client)).toBe(true);
     expect(existsSync(boundary)).toBe(true);
+    expect(existsSync(loginGate)).toBe(true);
+    expect(existsSync(swarmPanel)).toBe(true);
     const src = readFileSync(client, 'utf-8');
     expect(src).toContain("'use client'");
+    expect(src).toContain("'swarm'");
+    expect(src).toContain('SwarmPanel');
     expect(src).toContain('setReady(true)');
     expect(src).not.toMatch(/Date\.now\(\)/);
     expect(src).not.toMatch(/Math\.random\(\)/);

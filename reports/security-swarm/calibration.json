@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-05-22T12:53:59.125Z",
+  "windowDays": 7,
+  "storage": "jsonl",
+  "llmConfigured": true,
+  "totals": {
+    "records": 13,
+    "flagged": 11,
+    "labeled": 11,
+    "truePositive": 10,
+    "falsePositive": 0
+  },
+  "metrics": {
+    "avgFlagConfidence": 0.88,
+    "labeledFpRate": 0
+  },
+  "thresholds": {
+    "current": {
+      "GUARDIAN_SEMANTIC_MIN_CONFIDENCE": 0.6,
+      "GUARDIAN_LOCAL_SEMANTIC_THRESHOLD": 0.55
+    },
+    "recommended": {
+      "GUARDIAN_SEMANTIC_MIN_CONFIDENCE": 0.57,
+      "GUARDIAN_LOCAL_SEMANTIC_THRESHOLD": 0.53
+    },
+    "note": "Apply manually or via tenant config; auto-apply requires quorum (GUARDIAN_AI_AUTO_APPLY stays false in prod)."
+  },
+  "profile": "hybrid",
+  "sampleFlagged": [
+    {
+      "id": "1779451234100-co80wqq",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-llmvj3v",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-jwnblso",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-eviooji",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-lkhvxb5",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    }
+  ],
+  "sampleLabeled": [
+    {
+      "id": "1779451234100-co80wqq",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-llmvj3v",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-jwnblso",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-eviooji",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779451234100-lkhvxb5",
+      "toolName": "read_text_file",
+      "confidence": 0.88,
+      "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    }
+  ]
+}

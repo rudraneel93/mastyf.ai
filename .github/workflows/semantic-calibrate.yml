@@ -1,0 +1,37 @@
+name: Semantic Calibrate
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+jobs:
+  calibrate:
+    name: Weekly semantic threshold calibration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Run semantic calibrator
+        run: pnpm security-swarm:calibrate
+        env:
+          SWARM_CALIBRATE_DAYS: '7'
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semantic-calibration-report
+          path: reports/security-swarm/calibration.json
+          retention-days: 90

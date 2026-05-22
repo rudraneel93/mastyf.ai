@@ -1,0 +1,55 @@
+# Optional: create review branches when swarm finds net-new bypasses.
+# Does NOT auto-merge. Prefer local: node security-swarm/scripts/open-corpus-pr.mjs
+name: Security Swarm Corpus PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List branches only (no git writes)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  corpus-branches:
+    name: Create corpus review branches
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check evasion manifest
+        id: manifest
+        run: |
+          if [ ! -f reports/security-swarm/evasion-promotions.json ]; then
+            echo "has_promotions=false" >> "$GITHUB_OUTPUT"
+            echo "No evasion-promotions.json — upload artifact from failed swarm or run evasion-generate locally."
+            exit 0
+          fi
+          COUNT=$(node -e "const m=require('./reports/security-swarm/evasion-promotions.json'); console.log(m.count||0)")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "has_promotions=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create review branches (manual token — no auto-merge)
+        if: steps.manifest.outputs.has_promotions == 'true' && steps.manifest.outputs.count != '0' && github.event.inputs.dry_run == 'false'
+        run: node security-swarm/scripts/open-corpus-pr.mjs
+
+      - name: Dry-run branch plan
+        if: steps.manifest.outputs.has_promotions == 'true' && github.event.inputs.dry_run != 'false'
+        run: node security-swarm/scripts/open-corpus-pr.mjs --dry-run

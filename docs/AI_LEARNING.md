@@ -181,7 +181,12 @@ pnpm security-swarm:calibrate
 - `GET /api/learning/semantic/outcomes`
 - `POST /api/learning/label` with `{ semanticAuditId, label: "true_positive"|"false_positive"|"ignored" }`
 
-**Semantic result cache:** repeat tool-call fingerprints use in-process LRU in `local-semantic-classifier.ts` (`GUARDIAN_LOCAL_SEMANTIC_CACHE_MAX`, default 2048). For multi-replica LLM dedup use `GUARDIAN_LLM_CACHE` + `REDIS_URL` (see LLM response cache below).
+**Semantic result cache:**
+
+- **Local (no LLM):** in-process LRU in `local-semantic-classifier.ts` keyed by normalized arg hash (`GUARDIAN_LOCAL_SEMANTIC_CACHE_MAX`, default 2048).
+- **Async LLM:** `llm-cache.ts` `hashSemanticAuditKey()` — SHA-256 of `model`, `serverName`, `toolName`, normalized argument leaves, and `temperature` (not the full prompt text). Shared via Redis when `REDIS_URL` is set.
+
+**Persistence:** labeled outcomes in PostgreSQL (`semantic_audit_outcomes` table) when `DB_TYPE=postgres` + `DATABASE_URL`; JSONL under `~/.mcp-guardian/` for local dev. Dashboard: `GET /api/learning/semantic/outcomes`, `POST /api/learning/label` → `SelfImprovement.recordOutcome`.
 
 ---
 
@@ -196,7 +201,18 @@ Non-blocking queue after sync policy passes:
 | `GUARDIAN_SEMANTIC_ASYNC_MAX_QUEUE` | `200` |
 | `GUARDIAN_SEMANTIC_MIN_CONFIDENCE` | `0.6` |
 
-Observability: Prometheus `mcp_guardian_semantic_audit_*` metrics; structured log event `async_semantic_flag`.
+Observability:
+
+| Metric | Purpose |
+|--------|---------|
+| `mcp_guardian_semantic_audit_queued_total` | Jobs enqueued |
+| `mcp_guardian_semantic_audit_processed_total` | Jobs completed (`outcome` label) |
+| `mcp_guardian_semantic_audit_queue_depth` | Current queue depth |
+| `mcp_guardian_instant_learning_events_total` | Per-block instant learning (`block_rule`, `outcome`) |
+| `mcp_guardian_suggestion_queue_depth` | Pending operator suggestions |
+| `mcp_guardian_llm_cache_hits_total` / `_misses_total` | LLM dedup (`backend`: redis \| lru) |
+
+Structured log event: `async_semantic_flag`.
 
 ---
 
@@ -210,7 +226,12 @@ Deduplicates identical LLM prompts across replicas (semantic scan + Ollama assis
 | `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | Redis + LRU entry TTL (seconds) |
 | `REDIS_URL` | — | Shared cache backend for multi-replica HA |
 
-Cache key: SHA-256 of `model`, `system`, `prompt`, and `temperature`. Metrics: `mcp_guardian_llm_cache_hits_total`, `mcp_guardian_llm_cache_misses_total` (label `backend`: `redis` | `lru`).
+Cache keys:
+
+- **General LLM** (`LlmAssistant.generate`): SHA-256 of `model`, `system`, `prompt`, `temperature`.
+- **Async semantic audit**: `semanticToLlmCacheKey()` — fingerprint from normalized tool arguments (see Deployment profiles section).
+
+Metrics: `mcp_guardian_llm_cache_hits_total`, `mcp_guardian_llm_cache_misses_total` (label `backend`: `redis` | `lru`).
 
 Without Redis, cache runs in-process LRU only (single replica).
 

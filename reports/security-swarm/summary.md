@@ -1,7 +1,25 @@
+# Security Swarm — Analysis
+
+
+## Track B — Live official filesystem MCP
+
+**Upstream:** `@modelcontextprotocol/server-filesystem`  
+**Sandbox:** `/var/folders/8k/zjxbk9cj4q369h37ybgy6r7c0000gn/T/mcp-guardian-real-life-1i05ag`  
+**Profile:** hybrid  
+**Generated:** 2026-05-22T12:03:26.344Z
+
+| Scenarios passed | 6/6 |
+
+See **analysis.txt** for full per-scenario breakdown.
+
+---
+
+## Track A — Security swarm gates
+
 # Security Swarm Report
 
-Generated: 2026-05-22T09:48:20.690Z  
-Commit: `0be5230dc40d50213e6051e9bcb9a71696bd74f8`  
+Generated: 2026-05-22T12:05:21.167Z  
+Commit: `1c9a55bb4f26a29ea772bd459180110c03f76c60`  
 Mode: **fast**  
 Overall: **PASS**
 
@@ -12,7 +30,8 @@ Overall: **PASS**
 | Corpus (228 entries) | PASS |
 | Parity (corpus 100%) | PASS |
 | Steps | PASS |
-| Bypasses (max 0) | 0 |
+| Bypasses (detected / net-new / max) | 0 / 0 / 0 |
+| Bypass baseline | PASS |
 | Scout audit | PASS |
 
 ## Recommended runtime profile
