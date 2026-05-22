@@ -14,7 +14,7 @@ importers:
   .:
     dependencies:
       '@mcp-guardian/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^3.0.0
         version: link:packages/plugin-sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.2
@@ -143,7 +143,7 @@ importers:
         version: link:../core
       '@mcp-guardian/server':
         specifier: workspace:*
-        version: link:../..
+        version: link:../server
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

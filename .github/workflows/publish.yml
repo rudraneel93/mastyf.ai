@@ -31,6 +31,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Publish @mcp-guardian/plugin-sdk
+        working-directory: packages/plugin-sdk
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Run full test suite
         run: pnpm -r test
         env:
@@ -40,9 +49,6 @@ jobs:
         run: pnpm tsx corpus/run-eval.ts
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-      - name: Build all packages
-        run: pnpm -r build
 
       - name: Publish @mcp-guardian/core
         working-directory: packages/core

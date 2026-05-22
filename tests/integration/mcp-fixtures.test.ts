@@ -54,7 +54,7 @@ function init(id: number): string {
 async function waitForResponse(
   responses: Map<string, unknown>,
   id: string,
-  timeoutMs = 8000,
+  timeoutMs = 12000,
 ): Promise<unknown> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {

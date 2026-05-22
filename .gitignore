@@ -1,4 +1,5 @@
 node_modules/
+*.tgz
 .venv-charts/
 dist/
 *.db
@@ -20,4 +21,6 @@ corpus-eval-report.json
 benchmark-report.json
 assets/ml/prompt-injection/onnx/*.onnx
 .venv/
-reports/uploaded-harness-analysis/
+.package.prepack-backup.json
+scripts/.agent-proxy-config.json
+scenarios/real-life/output/

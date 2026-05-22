@@ -4,6 +4,18 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.5] - 2026-05-22
+
+### Fixed
+- **npm tarball smoke** — `prepack`/`postpack` rewrite `workspace:^3.0.0` plugin-sdk dep to `^3.0.0`; smoke installs plugin-sdk tarball first.
+- **Publish workflow** — build + publish `@mcp-guardian/plugin-sdk` before corpus eval and server publish.
+- **Coverage CI** — align thresholds and excludes with enterprise module footprint (~58% gate).
+
+### Added
+- **Staging pilot tooling** — `deploy/docker-compose.staging.yml`, `scripts/staging-apply-migrations.sh`, `scripts/issue-pilot-jwt.mjs`, `reports/pilot-signoff.md`.
+- **Beta tenant policy** — `policy-templates/tenants/beta/policy.yaml` and `acme/` pilot template.
+- **Smoke CI** — Redis + Postgres services + enterprise preflight step.
+
 ## [2.9.4] - 2026-05-22
 
 Enterprise multi-tenant hardening release on npm — CI stability fixes and compliance evidence pack.

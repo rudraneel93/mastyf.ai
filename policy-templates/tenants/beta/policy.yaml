@@ -1,0 +1,10 @@
+version: "1.0"
+policy:
+  mode: block
+  rules:
+    - name: beta-tenant-scope
+      description: Beta tenant RBAC scope
+      action: block
+      rbac:
+        tenants:
+          - beta
