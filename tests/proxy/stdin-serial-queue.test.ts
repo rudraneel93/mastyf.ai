@@ -1,14 +1,24 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { McpProxyServer } from '../../src/proxy/proxy-server.js';
 import { HistoryDatabase } from '../../src/database/history-db.js';
 
 describe('McpProxyServer stdin RequestIdLock', () => {
+  let proxy: McpProxyServer | null = null;
+  let db: HistoryDatabase | null = null;
+
+  afterEach(() => {
+    proxy?.kill();
+    proxy = null;
+    db?.close();
+    db = null;
+    vi.restoreAllMocks();
+  });
   // McpProxyServer uses RequestIdLock (not global AsyncSerialQueue): same MCP id
   // serializes; distinct ids may overlap by design — see adversarial-harness analysis.
 
   it('serializes same request id so currentRequestId is not raced', async () => {
-    const db = new HistoryDatabase(':memory:');
-    const proxy = new McpProxyServer(
+    db = new HistoryDatabase(':memory:');
+    proxy = new McpProxyServer(
       'node',
       ['-e', 'process.stdin.resume()'],
       { PATH: process.env.PATH || '' },
@@ -47,14 +57,11 @@ describe('McpProxyServer stdin RequestIdLock', () => {
       'start', sameId, 'end', sameId,
       'start', sameId, 'end', sameId,
     ]);
-
-    proxy.kill();
-    vi.restoreAllMocks();
   });
 
   it('allows concurrent handleClientInput for distinct request ids', async () => {
-    const db = new HistoryDatabase(':memory:');
-    const proxy = new McpProxyServer(
+    db = new HistoryDatabase(':memory:');
+    proxy = new McpProxyServer(
       'node',
       ['-e', 'process.stdin.resume()'],
       { PATH: process.env.PATH || '' },
@@ -90,8 +97,5 @@ describe('McpProxyServer stdin RequestIdLock', () => {
     expect(order.filter((x) => x.startsWith('end:'))).toHaveLength(3);
     // Overlap: distinct ids run in parallel (all starts before any end).
     expect(order.indexOf('end:a')).toBeGreaterThan(order.indexOf('start:b'));
-
-    proxy.kill();
-    vi.restoreAllMocks();
   });
 });

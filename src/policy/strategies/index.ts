@@ -1,3 +1,4 @@
+export { toolDenyStrategy } from './tool-deny-strategy.js';
 export { encodingGuardStrategy } from './encoding-guard-strategy.js';
 export { languageGadgetStrategy } from './language-gadget-strategy.js';
 export { requestPromptInjectionStrategy } from './request-prompt-injection-strategy.js';
@@ -14,6 +15,7 @@ export { runShadowPolicy } from './shadow-policy-strategy.js';
 export { opaStrategy } from './opa-strategy.js';
 export type { PolicyEngineDeps, PolicyStrategy, SyncEvaluateContext } from './types.js';
 
+import { toolDenyStrategy } from './tool-deny-strategy.js';
 import { encodingGuardStrategy } from './encoding-guard-strategy.js';
 import { languageGadgetStrategy } from './language-gadget-strategy.js';
 import { requestPromptInjectionStrategy } from './request-prompt-injection-strategy.js';
@@ -35,6 +37,7 @@ export const SYNC_POLICY_STRATEGIES: PolicyStrategy[] = [
   secretsInArgsStrategy,
   languageGadgetStrategy,
   timingGuardStrategy,
+  toolDenyStrategy,
   semanticGuardsStrategy,
   sessionFlowStrategy,
   yamlRulesStrategy,

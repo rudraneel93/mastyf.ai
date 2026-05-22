@@ -28,6 +28,13 @@ export function getTenantDailyBudgetMap(): Map<string, number> {
   return map;
 }
 
+/** Parse call_record timestamps (ISO or SQLite UTC `YYYY-MM-DD HH:MM:SS`). */
+function parseCallRecordTimestamp(timestamp: string): number {
+  if (!timestamp) return NaN;
+  if (/[TZ]/.test(timestamp)) return Date.parse(timestamp);
+  return Date.parse(timestamp.replace(' ', 'T') + 'Z');
+}
+
 /** Daily spend cap from GUARDIAN_DAILY_BUDGET_USD (preferred) or MCP_GUARDIAN_COST_BUDGET. */
 export function getDailyBudgetCapUsd(tenantId?: string): number {
   if (tenantId) {
@@ -64,7 +71,7 @@ export class CostAuditor {
       for (const name of names) {
         const records = await this.db.getCallRecordsForServer(name, 5000, tid);
         for (const r of records) {
-          const ts = Date.parse(r.timestamp);
+          const ts = parseCallRecordTimestamp(r.timestamp);
           if (!Number.isNaN(ts) && ts >= cutoff) {
             total += r.costUsd ?? 0;
           }

@@ -4,26 +4,23 @@ import type { PolicyStrategy } from './types.js';
 /** Block HIGH-severity secrets in tool arguments (parity with proxy DLP path). */
 export const secretsInArgsStrategy: PolicyStrategy = {
   name: 'secrets-in-args',
-  evaluate({ normalized, argsStr }, deps) {
-    const blob = argsStr.length > 0 ? argsStr : JSON.stringify(normalized.arguments ?? {});
-    if (!blob || blob.length < 8) return null;
+  evaluate({ raw, normalized, argsStr }, deps) {
+    const scanContext = `policy:${normalized.serverName}:${normalized.toolName}`;
+    const blobs = [
+      JSON.stringify(raw.arguments ?? {}),
+      argsStr.length > 0 ? argsStr : JSON.stringify(normalized.arguments ?? {}),
+    ].filter((b) => b.length >= 8);
 
-    const findings = scanForSecrets(
-      blob,
-      `policy:${normalized.serverName}:${normalized.toolName}`,
-    );
+    const findings = blobs.flatMap((blob) => scanForSecrets(blob, scanContext));
     const blocking = findings.filter((f) => f.severity === 'HIGH');
     if (blocking.length === 0) return null;
 
-    const summary = blocking
-      .slice(0, 5)
-      .map((f) => f.type)
-      .join(', ');
+    const uniqueTypes = [...new Set(blocking.map((f) => f.type))];
 
     return {
       action: deps.resolveAction('block'),
       rule: 'secret-scan',
-      reason: `${blocking.length} secret(s) in tool arguments: ${summary}`,
+      reason: `${uniqueTypes.length} secret(s) in tool arguments: ${uniqueTypes.slice(0, 5).join(', ')}`,
     };
   },
 };

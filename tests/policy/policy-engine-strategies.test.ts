@@ -47,6 +47,7 @@ describe('policy-engine strategies', () => {
       'secrets-in-args',
       'language-gadget',
       'timing-guard',
+      'tool-deny',
       'semantic-guards',
       'session-flow',
       'yaml-rules',

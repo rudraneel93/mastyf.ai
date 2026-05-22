@@ -187,16 +187,19 @@ class PolicyEngine:
 
     def _effective_request_tokens(self, ctx: CallContext) -> int:
         inflated = 0
+        leaf_chars = 0
         if ctx.arguments:
             from .arg_walker import walk_string_leaves
 
             for leaf in walk_string_leaves(ctx.arguments):
+                leaf_chars += len(leaf.value)
                 inflated += len(leaf.value.encode("utf-8"))
                 for ch in leaf.value:
                     if ord(ch) > 0x7F:
                         inflated += 2
         byte_estimate = (inflated + 3) // 4
-        return max(ctx.request_tokens, byte_estimate)
+        char_estimate = (leaf_chars + 1) // 2
+        return max(ctx.request_tokens, byte_estimate, char_estimate)
 
     def _evaluate_rule(
         self,
@@ -204,6 +207,7 @@ class PolicyEngine:
         ctx: CallContext,
         args_str: str,
         skip_rate: bool = False,
+        raw_ctx: CallContext | None = None,
     ) -> Optional[PolicyDecision]:
         name = rule.get("name", "")
         action = self._resolve_action(rule.get("action", "block"))
@@ -274,7 +278,8 @@ class PolicyEngine:
 
         max_tokens = rule.get("maxTokens")
         if max_tokens:
-            effective = self._effective_request_tokens(ctx)
+            token_ctx = raw_ctx or ctx
+            effective = self._effective_request_tokens(token_ctx)
             if effective > max_tokens:
                 return PolicyDecision(
                     action,
@@ -412,6 +417,7 @@ class PolicyEngine:
             agent_identity=ctx.agent_identity,
         )
         args_str = json.dumps(norm_args, ensure_ascii=False)
+        raw_args_str = json.dumps(ctx.arguments or {}, ensure_ascii=False)
 
         if sync_mode == "full":
             res = evaluate_resource_guard(norm_ctx, args_str)
@@ -447,13 +453,27 @@ class PolicyEngine:
                             f"Malicious tool definition: {top.pattern_id} ({top.severity})",
                         )
 
-            secret_hits = scan_secrets_in_blob(args_str)
+            secret_hits = list(
+                dict.fromkeys(
+                    scan_secrets_in_blob(raw_args_str)
+                    + scan_secrets_in_blob(args_str)
+                )
+            )
             if secret_hits:
                 return PolicyDecision(
                     self._resolve_action("block"),
                     "secret-scan",
                     f"Secrets in tool arguments: {', '.join(secret_hits[:5])}",
                 )
+
+            for rule in self.rules:
+                deny = (rule.get("tools") or {}).get("deny") or []
+                if norm_ctx.tool_name in deny:
+                    return PolicyDecision(
+                        self._resolve_action(rule.get("action", "block")),
+                        rule.get("name", "tool-deny"),
+                        f"Tool '{norm_ctx.tool_name}' is explicitly denied",
+                    )
 
             lang = evaluate_language_gadget_guard(norm_ctx)
             if lang:
@@ -488,7 +508,7 @@ class PolicyEngine:
         for rule in self.rules:
             if (rule.get("tools") or {}).get("allow") and norm_ctx.tool_name in rule["tools"]["allow"]:
                 permitted = True
-            dec = self._evaluate_rule(rule, norm_ctx, args_str, skip_local_rate_limit)
+            dec = self._evaluate_rule(rule, norm_ctx, args_str, skip_local_rate_limit, raw_ctx=ctx)
             if dec:
                 return dec
 

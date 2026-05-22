@@ -200,6 +200,6 @@ describe('E2E: Proxy with default-policy.yaml', () => {
     expect(resp).toBeDefined();
     expect(resp!.error).toBeDefined();
     expect(resp!.error!.code).toBe(-32001);
-    expect(resp!.error!.message).toMatch(/\.\.|traversal|pattern/i);
+    expect(resp!.error!.message).toMatch(/\.\.|traversal|pattern|Sensitive path|passwd/i);
   });
 });

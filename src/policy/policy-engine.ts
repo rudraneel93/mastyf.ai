@@ -112,8 +112,10 @@ export class PolicyEngine {
    */
   private effectiveRequestTokens(ctx: CallContext): number {
     let inflated = 0;
+    let leafChars = 0;
     if (ctx.arguments) {
       for (const { value } of walkStringLeaves(ctx.arguments)) {
+        leafChars += value.length;
         inflated += Buffer.byteLength(value, 'utf8');
         for (const ch of value) {
           const cp = ch.codePointAt(0)!;
@@ -122,7 +124,8 @@ export class PolicyEngine {
       }
     }
     const byteEstimate = Math.ceil(inflated / 4);
-    return Math.max(ctx.requestTokens, byteEstimate);
+    const charEstimate = Math.ceil(leafChars / 2);
+    return Math.max(ctx.requestTokens, byteEstimate, charEstimate);
   }
 
   private policyEvalLockKey(ctx: CallContext): string {
@@ -256,7 +259,7 @@ export class PolicyEngine {
   private evaluateRule(
     rule: PolicyConfig['policy']['rules'][number],
     ctx: CallContext,
-    analysis: { argsStr: string },
+    analysis: { argsStr: string; raw?: CallContext },
     skipLocalRateLimit = false,
   ): PolicyDecision | null {
     if (rule.tools) {
@@ -346,7 +349,8 @@ export class PolicyEngine {
     }
 
     if (rule.maxTokens) {
-      const effectiveTokens = this.effectiveRequestTokens(ctx);
+      const tokenCtx = analysis.raw ?? ctx;
+      const effectiveTokens = this.effectiveRequestTokens(tokenCtx);
       if (effectiveTokens > rule.maxTokens) {
         return {
           action: this.resolveAction(rule.action),

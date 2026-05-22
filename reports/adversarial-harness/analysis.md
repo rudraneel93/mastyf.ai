@@ -4,7 +4,7 @@
 
 - **Fixtures on disk:** 151 attacks + 55 benign (+ edge-cases in full corpus dir → 228 entries evaluated)
 - **Recall:** 100.0% attack block rate
-- **False positive rate:** 3 on benign fixtures
+- **False positive rate:** 0 on benign fixtures
 
 ## Evasion suite (120 probes)
 
@@ -12,7 +12,7 @@ Crafted to stress encoding, unicode, zero-width, SSRF variants, shell obfuscatio
 
 ## Python vs TypeScript parity
 
-Agreement 435/437 (99.5%). Corpus mismatches: 1. Delta: 2 fixtures.
+Agreement 436/437 (99.8%). Corpus mismatches: 0. Delta: 1 fixtures.
 
 ### Intentional Python port gaps (documented)
 
@@ -39,5 +39,5 @@ Chunk-boundary injection, concurrent chunk writers, and full-response jailbreak 
 
 ## Blockers / partial completion
 
-- None — full harness green
+- **python-comprehensive-harness** failed (exit 1)
 

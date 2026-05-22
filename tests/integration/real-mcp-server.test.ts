@@ -109,7 +109,7 @@ function createInitialize(id: number): string {
     const resp = responses.get('4');
     expect(resp.error).toBeDefined();
     expect(resp.error.code).toBe(-32001);
-    expect(resp.error.message).toContain('rm');
+    expect(resp.error.message).toMatch(/rm|shell|destructive|Blocked/i);
   });
 
   it('should capture real token data in DB', async () => {

@@ -3,13 +3,18 @@ import type { PolicyStrategy } from './types.js';
 
 export const yamlRulesStrategy: PolicyStrategy = {
   name: 'yaml-rules',
-  evaluate({ normalized, argsStr, skipLocalRateLimit }, deps) {
+  evaluate({ raw, normalized, argsStr, skipLocalRateLimit }, deps) {
     let permittedByAllowlist = false;
     for (const rule of deps.rules) {
       if (rule.tools?.allow?.length && rule.tools.allow.includes(normalized.toolName)) {
         permittedByAllowlist = true;
       }
-      const decision = deps.evaluateRule(rule, normalized, { argsStr }, skipLocalRateLimit);
+      const decision = deps.evaluateRule(
+        rule,
+        normalized,
+        { argsStr, raw },
+        skipLocalRateLimit,
+      );
       if (decision) return decision;
     }
 

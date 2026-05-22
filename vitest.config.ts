@@ -11,6 +11,7 @@ export default defineConfig({
     setupFiles: ['./tests/setup-env.ts'],
     maxConcurrency: 1,
     testTimeout: 30000,
+    // Piping vitest stdout (e.g. `| tail -6`) is fully buffered until the process exits — no dots until done.
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'json', 'html'],

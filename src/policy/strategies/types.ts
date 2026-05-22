@@ -16,7 +16,7 @@ export interface PolicyEngineDeps {
   evaluateRule: (
     rule: PolicyConfig['policy']['rules'][number],
     ctx: CallContext,
-    analysis: { argsStr: string },
+    analysis: { argsStr: string; raw?: CallContext },
     skipLocalRateLimit?: boolean,
   ) => PolicyDecision | null;
 }
