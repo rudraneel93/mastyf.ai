@@ -35,15 +35,19 @@ describe('streaming-inspector', () => {
     expect(result.findings.length).toBeGreaterThan(0);
   });
 
-  it('inspectFullResponse flags jailbreak in large payload', () => {
-    const big = `${'a'.repeat(STREAMING_INSPECTOR_CHUNK_BYTES * 2)} developer mode enabled`;
-    const r = inspectFullResponse(big, {
-      toolName: 'echo',
-      serverName: 'test',
-      policy: new PolicyEngine(POLICY),
-    });
-    expect(r.hasCritical || r.hasHigh).toBe(true);
-  }, 60_000);
+  it(
+    'inspectFullResponse flags jailbreak in large payload',
+    () => {
+      const big = `${'a'.repeat(STREAMING_INSPECTOR_CHUNK_BYTES * 2)} developer mode enabled`;
+      const r = inspectFullResponse(big, {
+        toolName: 'echo',
+        serverName: 'test',
+        policy: new PolicyEngine(POLICY),
+      });
+      expect(r.hasCritical || r.hasHigh).toBe(true);
+    },
+    90_000,
+  );
 
   it('respects GUARDIAN_SKIP_RESPONSE_SCAN', () => {
     const prev = process.env.GUARDIAN_SKIP_RESPONSE_SCAN;

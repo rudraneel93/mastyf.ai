@@ -33,8 +33,8 @@ describe('sanitizeConfigPath', () => {
     const outside = path.join(tmpDir, 'outside');
     fs.mkdirSync(outside);
     const evil = path.join(outside, 'evil.json');
-    // /sbin is not in unixAllowedPrefixes — /etc/ is intentionally allowed for system MCP configs
-    const target = process.platform === 'darwin' ? '/sbin/mount' : '/sbin/init';
+    // /usr is not in unixAllowedPrefixes (/etc is allowed for system MCP configs)
+    const target = '/usr/bin/true';
     if (!fs.existsSync(target)) return;
     fs.symlinkSync(target, evil);
     expect(sanitizeConfigPath(evil)).toBeNull();
