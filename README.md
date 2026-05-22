@@ -858,6 +858,9 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_SEMANTIC_DEBOUNCE_MS` | `500` | Async semantic queue debounce |
 | `GUARDIAN_SEMANTIC_ASYNC_MAX_QUEUE` | `200` | Max queued async audits |
 | `GUARDIAN_SEMANTIC_MIN_CONFIDENCE` | `0.6` | Flag threshold for async semantic |
+| `GUARDIAN_SEMANTIC_SYNC_RESPONSE` | `false` | Sync semantic gate on tool **responses** (stdio/SSE/WS) |
+| `GUARDIAN_SEMANTIC_SYNC_RESPONSE_LLM` | `false` | LLM tier for sync response gate (adds latency) |
+| `GUARDIAN_SEMANTIC_SYNC_TIMEOUT_MS` | `3000` | Sync response LLM timeout (ms) |
 | `GUARDIAN_REGION` | `default` | Region label for metrics/Redis keys |
 | `GUARDIAN_RATE_LIMIT_DISTRIBUTED_LOCK` | `false` | Redis NX window lock (active-passive) |
 | `GUARDIAN_FLEET_DB_PATHS` | — | Comma-separated SQLite paths for fleet CLI/TUI |
@@ -882,7 +885,14 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_TENANT_ID` | `default` | Default tenant when no `X-Guardian-Tenant` / `X-Tenant-Id` header |
 | `GUARDIAN_MULTI_TENANT_ENABLED` | `false` | Shared gateway mode — clients send tenant headers |
 | `GUARDIAN_REQUIRE_DPOP` | `false` | Reject requests without valid DPoP proof (RFC 9449) |
+| `GUARDIAN_OIDC_INTROSPECTION` | `false` | RFC 7662 token introspection after JWT validation |
+| `GUARDIAN_OIDC_INTROSPECTION_FAIL_OPEN` | `false` | `true` = skip deny when introspection errors |
+| `GUARDIAN_OIDC_CLIENT_ID` | — | OAuth client id for introspection |
+| `GUARDIAN_OIDC_CLIENT_SECRET` | — | OAuth client secret for introspection |
+| `GUARDIAN_TOKEN_REVOCATION_REDIS` | on w/ Redis | Cluster-wide revoked-token denylist |
+| `GUARDIAN_TOKEN_REVOCATION_TTL_MS` | `86400000` | Revoked token entry TTL (ms) |
 | `MCP_TLS_ENABLED` | `false` | Enable client cert to upstream MCP |
+| `GUARDIAN_MTLS_HOT_RELOAD` | on w/ mTLS | `false` = disable cert filesystem watcher |
 | `MCP_TLS_CA` | — | CA bundle to verify upstream |
 | `MCP_TLS_CERT` | — | Proxy client certificate |
 | `MCP_TLS_KEY` | — | Proxy client private key |
@@ -1418,6 +1428,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Enterprise deploy](docs/ENTERPRISE_DEPLOY.md) · [Enterprise evidence pack](docs/ENTERPRISE_EVIDENCE_PACK.md) · [Enterprise roadmap](docs/ENTERPRISE_ROADMAP.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.

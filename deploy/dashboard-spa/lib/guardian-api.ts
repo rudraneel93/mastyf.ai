@@ -236,6 +236,9 @@ export type AuthStatus = {
   authConfigured: boolean;
   identity?: string;
   roles?: string[];
+  sessionTenantId?: string;
+  multiTenantMode?: boolean;
+  tenantLocked?: boolean;
 };
 
 export type WsDashboardMessage = {
@@ -275,10 +278,8 @@ export function buildAuthHeaders(): GuardianHeaders {
   const apiKey = params.get('apiKey');
   if (apiKey) headers['X-API-Key'] = apiKey;
   const tenant = getTenantId();
-  if (tenant && tenant !== 'default') {
-    headers['X-Guardian-Tenant'] = tenant;
-    headers['X-Tenant-Id'] = tenant;
-  }
+  headers['X-Guardian-Tenant'] = tenant;
+  headers['X-Tenant-Id'] = tenant;
   return headers;
 }
 
@@ -743,6 +744,8 @@ export function resolveWsUrl(): string {
     const origin = base || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4000');
     const u = new URL('/ws', origin);
     u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    const tenant = getTenantId();
+    if (tenant) u.searchParams.set('tenant', tenant);
     return u.toString();
   } catch {
     return 'ws://localhost:4000/ws';

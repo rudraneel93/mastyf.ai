@@ -17,6 +17,17 @@ Honest assessment of MCP Guardian for production vs pilot deployments (2026-05-1
 | Integration fixture matrix | Ready | `pnpm test:integration` — echo + filesystem stdio fixtures |
 | Per-tenant Prometheus labels | Ready | `tenant_id` on request/block/latency metrics |
 | Per-tenant daily budget | Ready | `GUARDIAN_TENANT_DAILY_BUDGET_JSON` |
+| Response DLP redact mode | Ready | `GUARDIAN_RESPONSE_DLP_MODE=redact` (scrub-and-pass) |
+| SIEM exporter DLQ + retry | Ready | `~/.mcp-guardian/exporter-dlq/`; `GUARDIAN_EXPORTER_MAX_RETRIES` |
+| Field encryption per-deployment salt | Ready | `genc2:` format; `GUARDIAN_DB_ENCRYPTION_SALT` optional |
+| JWT max lifetime + revocation denylist | Ready | Memory + Redis (`GUARDIAN_TOKEN_REVOCATION_REDIS`); OIDC introspection optional |
+| Sync semantic response gate | Ready | stdio / SSE / WebSocket / HTTP (`gateToolResponseText`) |
+| DPoP URI normalization | Ready | `normalizeDpopUri()` in `src/auth/dpop.ts` |
+| mTLS cert hot-reload | Ready | `MtlsCertWatcher` + `getMtlsAgent()` wired in HTTP/SSE proxies |
+| OPA result schema validation | Ready | `parseOpaResult()` — `{ allow: boolean, reason?: string }` |
+| Cluster rug-pull alerts | Ready | `REDIS_URL` + `rug-pull-cluster.ts` |
+| Per-tool timeouts | Ready | `GUARDIAN_TOOL_TIMEOUT_JSON` |
+| Compliance report generator | Ready | `pnpm enterprise:compliance-report` |
 
 ## Pilot / requires configuration
 
@@ -29,11 +40,21 @@ Honest assessment of MCP Guardian for production vs pilot deployments (2026-05-1
 | SSE/WebSocket proxies | Pilot | MVP parity; validate in your transport mix |
 | SPIFFE/mTLS | Pilot | See [SPIFFE.md](./SPIFFE.md) |
 
+## Enterprise deploy artifacts (v2.9.3+)
+
+| Artifact | Purpose |
+|----------|---------|
+| [ENTERPRISE_DEPLOY.md](./ENTERPRISE_DEPLOY.md) | P0/P1/P2 deployment checklist |
+| [deploy/helm/mcp-guardian/values-enterprise.yaml](../deploy/helm/mcp-guardian/values-enterprise.yaml) | HA Helm overlay |
+| [scripts/verify-enterprise-preflight.sh](../scripts/verify-enterprise-preflight.sh) | `pnpm enterprise:preflight` |
+| [ENTERPRISE_EVIDENCE_PACK.md](./ENTERPRISE_EVIDENCE_PACK.md) | `pnpm enterprise:evidence-pack` |
+| [ENTERPRISE_ROADMAP.md](./ENTERPRISE_ROADMAP.md) | v3 / platform priorities |
+
 ## Not yet / gaps
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Hosted SaaS control plane | Not included | Self-hosted binary/Helm only |
+| Hosted SaaS control plane | Not included | Self-hosted binary/Helm only — see [ENTERPRISE_ROADMAP.md](./ENTERPRISE_ROADMAP.md) |
 | Formal SOC2 / FedRAMP artifacts | Not included | Use your compliance program |
 | Guaranteed &lt;50ms p95 at all concurrencies | Aspirational | c=1 target &lt;150ms validated; tune env + hardware |
 | Full dashboard policy editor | Partial | Policy test API; YAML still source of truth |
@@ -58,3 +79,7 @@ Honest assessment of MCP Guardian for production vs pilot deployments (2026-05-1
 | `GUARDIAN_POLICY_EVAL_CACHE` | Redis/LRU policy decision cache |
 | `GUARDIAN_TENANT_DAILY_BUDGET_JSON` | Per-tenant USD caps |
 | `GUARDIAN_OPA_ENABLED` | Enable OPA when `opa: true` in YAML |
+| `GUARDIAN_SEMANTIC_SYNC_RESPONSE` | Sync heuristic/LLM gate on tool responses |
+| `GUARDIAN_OIDC_INTROSPECTION` | RFC 7662 active check after JWT verify |
+| `GUARDIAN_TOKEN_REVOCATION_REDIS` | Persist revocation denylist in Redis (default on when `REDIS_URL` set) |
+| `GUARDIAN_AUDIT_HASH_CHAIN` | SHA-256 chained policy audit JSONL |

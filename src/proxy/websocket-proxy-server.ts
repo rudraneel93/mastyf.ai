@@ -17,14 +17,18 @@ import {
 import type { CallContext } from '../policy/policy-types.js';
 import type { IDatabase } from '../database/database-interface.js';
 import { OAuthValidator } from '../auth/oauth.js';
+import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
-import { inspectFullResponse, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
+import * as Metrics from '../utils/metrics.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
 import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tls-config.js';
+import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 
 export interface WebSocketProxyOptions {
   listenPort: number;
@@ -41,9 +45,20 @@ export class WebSocketProxyServer {
   private wss: WebSocketServer | null = null;
   private toolFingerprint: string | null = null;
   private rugPullBlocked = false;
+  private pendingToolCalls = new Map<string | number, string>();
+  private pendingToolTenants = new Map<string | number, string>();
+  private pendingSessionTokens = new Map<string | number, string>();
+  private sessionCache: GuardianSessionCache | null;
 
   constructor(opts: WebSocketProxyOptions) {
     this.opts = opts;
+    this.sessionCache = opts.authValidator ? createSessionCache() : null;
+  }
+
+  private applyRotatedSessionToMessage(msg: Record<string, unknown>, requestId: string | number): void {
+    const rotated = this.pendingSessionTokens.get(requestId);
+    this.pendingSessionTokens.delete(requestId);
+    injectRotatedSessionIntoResult(msg, rotated);
   }
 
   async start(): Promise<void> {
@@ -64,6 +79,12 @@ export class WebSocketProxyServer {
         resolve();
       });
     });
+  }
+
+  getListenPort(): number {
+    const addr = this.httpServer?.address();
+    if (addr && typeof addr === 'object') return addr.port;
+    return this.opts.listenPort;
   }
 
   async stop(): Promise<void> {
@@ -130,35 +151,94 @@ export class WebSocketProxyServer {
     }
 
     if (msg.result && typeof msg.id !== 'undefined') {
-      const blocked = this.inspectToolResult(msg);
+      const requestId = msg.id as string | number;
+      const toolName = this.pendingToolCalls.get(requestId) ?? 'unknown';
+      const tenantId = this.pendingToolTenants.get(requestId);
+      this.pendingToolCalls.delete(requestId);
+      this.pendingToolTenants.delete(requestId);
+      const blocked = await this.inspectToolResponse(toolName, msg, requestId, tenantId);
       if (blocked) {
-        clientWs.send(JSON.stringify(blocked));
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(blocked));
         return;
       }
+      this.applyRotatedSessionToMessage(msg, requestId);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify(msg));
+      }
+      return;
     }
 
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(raw);
   }
 
-  private inspectToolResult(msg: Record<string, unknown>): Record<string, unknown> | null {
-    if (!this.opts.policy || this.opts.policy.getMode() !== 'block' || isResponseScanSkipped()) {
-      return null;
-    }
-    const resultText = JSON.stringify((msg as { result?: unknown }).result ?? '');
-    const inspect = inspectFullResponse(resultText, {
-      toolName: 'response',
+  private async inspectToolResponse(
+    toolName: string,
+    response: Record<string, unknown>,
+    requestId: string | number,
+    tenantId?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const result = (response as { result?: unknown }).result;
+    if (result == null || isResponseScanSkipped()) return null;
+
+    const responseText = JSON.stringify(result);
+    const gate = await gateToolResponseText({
+      responseText,
+      toolName,
       serverName: this.opts.serverName,
       policy: this.opts.policy,
+      requestId,
+      tenantId,
     });
-    if (!inspect.hasCritical && !inspect.hasHigh) return null;
-    return {
-      jsonrpc: '2.0',
-      id: msg.id,
-      error: {
-        code: -32001,
-        message: 'Blocked: prompt injection detected in tool response',
-      },
-    };
+    const inspect = gate.inspect;
+    if (!inspect || inspect.clean) {
+      if (gate.outcome.action === 'redact' && gate.outcome.body) {
+        try {
+          (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+        } catch {
+          /* keep upstream */
+        }
+      }
+      return null;
+    }
+
+    const hasCritical = inspect.hasCritical;
+    const hasHigh = inspect.hasHigh;
+    const allMessages = findingsToMessages(inspect.findings);
+    Logger.warn(
+      `[ws-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
+    );
+    StructuredLogger.info({
+      event: 'response_flagged',
+      serverName: this.opts.serverName,
+      toolName,
+      detections: allMessages,
+      blocked: gate.outcome.action === 'block',
+    });
+    Metrics.injectionDetectedTotal?.inc({
+      server_name: this.opts.serverName,
+      severity: hasCritical ? 'critical' : 'high',
+    });
+
+    if (gate.outcome.action === 'redact') {
+      try {
+        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+      } catch {
+        /* keep upstream */
+      }
+      return null;
+    }
+
+    if (gate.outcome.action === 'block') {
+      return {
+        jsonrpc: '2.0',
+        id: requestId,
+        error: {
+          code: -32002,
+          message: gate.outcome.message,
+        },
+      };
+    }
+    return null;
   }
 
   private async interceptMessage(
@@ -177,6 +257,10 @@ export class WebSocketProxyServer {
     }
 
     if (msg.method === 'tools/call') {
+      const params = msg.params as { name?: string } | undefined;
+      if (msg.id != null && params?.name) {
+        this.pendingToolCalls.set(msg.id as string | number, params.name);
+      }
       if (this.rugPullBlocked) {
         clientWs.send(JSON.stringify({
           jsonrpc: '2.0',
@@ -236,6 +320,23 @@ export class WebSocketProxyServer {
         return { jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: err.message } };
       }
       throw err;
+    }
+
+    if (token && this.sessionCache && !authenticated) {
+      const sessionResult = await validateSessionToken(this.sessionCache, token, tenantId);
+      if (sessionResult) {
+        authenticated = true;
+        agentIdentity = sessionResult.identity;
+        if (sessionResult.rotatedToken && msg.id != null) {
+          this.pendingSessionTokens.set(msg.id as string | number, sessionResult.rotatedToken);
+        }
+      } else if (this.opts.authValidator?.getConfig().required) {
+        return {
+          jsonrpc: '2.0',
+          id: msg.id,
+          error: { code: -32002, message: 'Authentication required' },
+        };
+      }
     }
 
     const breaker = this.breakerFor(tenantId);
@@ -331,6 +432,10 @@ export class WebSocketProxyServer {
         },
         msg,
       ).catch(() => undefined);
+    }
+
+    if (msg.id != null) {
+      this.pendingToolTenants.set(msg.id as string | number, tenantId);
     }
 
     return null;

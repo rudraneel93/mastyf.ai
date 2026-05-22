@@ -1,5 +1,24 @@
 import type { PolicyDecision } from '../policy-types.js';
+import { evaluateEncodingGuard } from '../encoding-guard.js';
+import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
 import type { PolicyStrategy } from './types.js';
+
+/** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
+function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').CallContext): PolicyDecision | null {
+  const encoding = evaluateEncodingGuard(ctx);
+  if (encoding) return encoding;
+
+  const findings = scanToolCallArguments(ctx.arguments ?? {});
+  if (findings.length > 0) {
+    const top = findings[0];
+    return {
+      action: 'block',
+      rule: top.patternId ?? 'request-prompt-injection',
+      reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
+    };
+  }
+  return null;
+}
 
 export const yamlRulesStrategy: PolicyStrategy = {
   name: 'yaml-rules',
@@ -19,6 +38,8 @@ export const yamlRulesStrategy: PolicyStrategy = {
     }
 
     if (permittedByAllowlist) {
+      const unsafe = blockAllowlistedToolIfArgsUnsafe(raw);
+      if (unsafe) return unsafe;
       return {
         action: 'pass',
         rule: 'allowlist',

@@ -1,7 +1,7 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.9.2",
-  "description": "Security, cost, and health governance proxy for MCP infrastructure \u2014 three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
+  "version": "2.9.3",
+  "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
     "dist",
@@ -59,7 +59,7 @@
     "build": "pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build",
     "test": "vitest run && turbo run test",
     "test:policy-proxy-utils": "vitest run tests/policy/ tests/proxy/ tests/utils/ --reporter=dot",
-    "test:integration": "vitest run tests/integration",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "turbo run typecheck",
     "dogfood": "node scripts/run-dogfood-scenario.cjs",
     "e2e:tui": "node scripts/run-e2e-tui.cjs",
@@ -91,6 +91,9 @@
     "security-swarm:analyze:full": "node security-swarm/run-analysis.mjs --full",
     "real-life:filesystem": "node scenarios/real-life/run-official-filesystem-scenario.mjs",
     "agent:proxy-traffic": "node scripts/agent-proxy-traffic.mjs",
+    "enterprise:evidence-pack": "node scripts/package-enterprise-evidence.mjs",
+    "enterprise:compliance-report": "node scripts/generate-compliance-report.mjs",
+    "enterprise:preflight": "sh scripts/verify-enterprise-preflight.sh",
     "real-life:swarm": "node security-swarm/run-analysis.mjs",
     "verify:corpus": "bash scripts/verify-corpus-parity.sh",
     "dashboard:build": "npm run build --prefix deploy/dashboard-spa",

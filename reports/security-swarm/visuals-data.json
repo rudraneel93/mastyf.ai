@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-22T12:41:53.508Z",
+  "generatedAt": "2026-05-22T12:59:52.348Z",
   "windowDays": 7,
   "meta": {
     "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
@@ -10,8 +10,8 @@
   },
   "traffic": {
     "hasData": true,
-    "totalCalls": 2809,
-    "totalBlocked": 236,
+    "totalCalls": 2825,
+    "totalBlocked": 246,
     "hourly": [
       {
         "hourStart": "2026-05-16T08:00:00.000Z",
@@ -82,6 +82,16 @@
         "costUsd": 0.003425,
         "latencyP50Ms": 35,
         "latencyP95Ms": 148
+      },
+      {
+        "hourStart": "2026-05-22T07:00:00.000Z",
+        "calls": 16,
+        "blocked": 10,
+        "passed": 6,
+        "passRatePct": 37.5,
+        "costUsd": 0.000765,
+        "latencyP50Ms": 39,
+        "latencyP95Ms": 142
       }
     ],
     "byServer": [
@@ -95,19 +105,19 @@
       },
       {
         "serverName": "official-filesystem",
-        "calls": 183,
-        "blocked": 155,
-        "costUsd": 0.005332,
+        "calls": 195,
+        "blocked": 165,
+        "costUsd": 0.005701,
         "latencyP50Ms": 35,
         "latencyP95Ms": 154
       },
       {
         "serverName": "filesystem",
-        "calls": 16,
+        "calls": 20,
         "blocked": 13,
-        "costUsd": 0.000393,
-        "latencyP50Ms": 1,
-        "latencyP95Ms": 69
+        "costUsd": 0.000789,
+        "latencyP50Ms": 2,
+        "latencyP95Ms": 142
       },
       {
         "serverName": "github",
@@ -141,15 +151,15 @@
       },
       {
         "tool": "read_text_file",
-        "count": 136
+        "count": 147
       },
       {
         "tool": "write_file",
-        "count": 30
+        "count": 32
       },
       {
         "tool": "list_directory",
-        "count": 16
+        "count": 19
       },
       {
         "tool": "read_file",
@@ -187,7 +197,7 @@
     "topBlockRules": [
       {
         "rule": "semantic-path-guard",
-        "count": 104,
+        "count": 111,
         "plainEnglish": "semantic-path-guard"
       },
       {
@@ -197,18 +207,18 @@
       },
       {
         "rule": "multimodal-injection",
-        "count": 30,
+        "count": 32,
         "plainEnglish": "multimodal-injection"
+      },
+      {
+        "rule": "request-prompt-injection",
+        "count": 21,
+        "plainEnglish": "Prompt injection in tool args"
       },
       {
         "rule": "cve-gate",
         "count": 20,
         "plainEnglish": "cve-gate"
-      },
-      {
-        "rule": "request-prompt-injection",
-        "count": 20,
-        "plainEnglish": "Prompt injection in tool args"
       },
       {
         "rule": "deny-dangerous-tools",
@@ -239,20 +249,20 @@
   },
   "instantLearning": {
     "source": "live",
-    "totalEvents": 301,
+    "totalEvents": 315,
     "queuedSuggestions": 11,
     "blocksPerMinute": [
       {
         "t": 0,
-        "value": 22
+        "value": 12
       },
       {
         "t": 120000,
-        "value": 10
+        "value": 1
       },
       {
         "t": 240000,
-        "value": 13
+        "value": 1
       }
     ],
     "ruleToolPairs": [
@@ -260,37 +270,37 @@
         "key": "semantic-path-guard:read_text_file",
         "rule": "semantic-path-guard",
         "tool": "read_text_file",
-        "count": 103
+        "count": 110
       },
       {
         "key": "multimodal-injection:write_file",
         "rule": "multimodal-injection",
         "tool": "write_file",
-        "count": 30
+        "count": 32
       },
       {
         "key": "request-prompt-injection:read_text_file",
         "rule": "request-prompt-injection",
         "tool": "read_text_file",
-        "count": 18
+        "count": 19
       },
       {
         "key": "request-timeout:hang",
         "rule": "request-timeout",
         "tool": "hang",
-        "count": 16
+        "count": 17
       },
       {
         "key": "tool-fingerprint-mismatch:search",
         "rule": "tool-fingerprint-mismatch",
         "tool": "search",
-        "count": 16
+        "count": 17
       },
       {
         "key": "request-prompt-injection:search",
         "rule": "request-prompt-injection",
         "tool": "search",
-        "count": 15
+        "count": 17
       },
       {
         "key": "request-prompt-injection:search_files",
@@ -319,7 +329,7 @@
       "records": 13,
       "flagged": 11,
       "labeled": 11,
-      "truePositive": 11,
+      "truePositive": 10,
       "falsePositive": 0
     },
     "confidenceBuckets": [
@@ -408,8 +418,8 @@
       },
       {
         "serverName": "puppeteer",
-        "status": "failed",
-        "toolCount": 0
+        "status": "ok",
+        "toolCount": 7
       }
     ]
   },
@@ -441,37 +451,33 @@
         "progressPct": 88
       }
     ],
-    "jobState": "done",
+    "jobState": "running",
     "stepTimings": [
       {
         "label": "scout-audit",
-        "elapsedSec": 1.7
+        "elapsedSec": 1
       },
       {
         "label": "pnpm-build",
-        "elapsedSec": 2.5
+        "elapsedSec": 3.2
       },
       {
         "label": "vitest-policy-proxy-utils",
-        "elapsedSec": 21.3
+        "elapsedSec": 23.7
       },
       {
         "label": "corpus-eval",
-        "elapsedSec": 1.3
+        "elapsedSec": 1.4
       },
       {
-        "label": "setup-python-venv",
+        "label": "adversarial-harness-full",
+        "elapsedSec": 323.3
+      },
+      {
+        "label": "attack-learning-sim",
         "elapsedSec": 0.4
-      },
-      {
-        "label": "harness-node-tests",
-        "elapsedSec": 25.8
-      },
-      {
-        "label": "harness-parity",
-        "elapsedSec": 61.4
       }
     ],
-    "totalSec": 114.4
+    "totalSec": 353
   }
 }

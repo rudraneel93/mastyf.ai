@@ -254,6 +254,28 @@ header h1 {
   color: var(--muted);
 }
 
+.tenant-context-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  font-size: 0.85rem;
+}
+
+.tenant-context-bar .tenant-label {
+  color: var(--muted, #94a3b8);
+}
+
+.tenant-context-bar .tenant-chip {
+  font-family: ui-monospace, monospace;
+  color: #7dd3fc;
+}
+
 .tenant-inline {
   display: inline-flex;
   gap: 0.35rem;

@@ -24,6 +24,20 @@ export interface DPoPProof {
   jti: string;
 }
 
+/** RFC 9449 URI comparison — strip fragment; normalize path (no trailing slash except root). */
+export function normalizeDpopUri(uri: string): string {
+  try {
+    const u = new URL(uri);
+    u.hash = '';
+    if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.slice(0, -1);
+    }
+    return u.toString();
+  } catch {
+    return uri.split('#')[0].replace(/\/$/, '') || uri;
+  }
+}
+
 export class DPoPValidator {
   private readonly nonceStore: DPoPNonceStore;
   private readonly nonceTtlMs: number;
@@ -74,9 +88,13 @@ export class DPoPValidator {
         return { valid: false, error: `DPoP: htm mismatch (expected ${httpMethod.toUpperCase()}, got ${proof.htm})` };
       }
 
-      // Validate htu (HTTP URI) — must match the request URI
-      if (proof.htu !== httpUri) {
-        return { valid: false, error: `DPoP: htu mismatch (expected ${httpUri}, got ${proof.htu})` };
+      const normalizedExpected = normalizeDpopUri(httpUri);
+      const normalizedProof = normalizeDpopUri(proof.htu);
+      if (normalizedProof !== normalizedExpected) {
+        return {
+          valid: false,
+          error: `DPoP: htu mismatch (expected ${normalizedExpected}, got ${normalizedProof})`,
+        };
       }
 
       // Validate iat freshness (must be within last 60 seconds)

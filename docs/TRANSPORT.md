@@ -26,19 +26,21 @@ mTLS and cert pinning: `MCP_TLS_*`, `GUARDIAN_UPSTREAM_CERT_PIN_SHA256`, optiona
 
 Transparent forward of method, headers, and body to upstream URL (GET/SSE-safe). Policy on `tools/call` POST bodies. DPoP enforced in block mode when authenticated.
 
+For `tools/call` JSON responses: `gateToolResponseText` (DLP / sync semantic / inspection), session rotation via `x-mcp-guardian-session-token` header and `result._meta.sessionToken`, mTLS via `getMtlsAgent()`.
+
 ## WebSocket (`WebSocketProxyServer`)
 
-Policy, OAuth/DPoP, circuit breaker, secret scan on args, rug-pull `tools/list` fingerprint, response PI inspection, `persistCallRecord`, structured logging. Instantiate explicitly (not started by default `ProxyManager`).
+Policy, OAuth/DPoP, circuit breaker, secret scan on args, rug-pull `tools/list` fingerprint, `gateToolResponseText` on tool results, session cache + rotation (`result._meta.sessionToken`), `persistCallRecord`, structured logging. Instantiate explicitly (not started by default `ProxyManager`).
 
 ## Streamable HTTP (`StreamableHttpProxyServer`)
 
-Minimal MCP streamable HTTP handler:
+MCP streamable HTTP handler:
 
 | Method | Path | Role |
 |--------|------|------|
 | `POST` | `/mcp` | JSON-RPC object or batch; policy on `tools/call` |
 
-Upstream relay is deployment-specific; the in-repo handler enforces Guardian policy and audit before forward.
+Set `GUARDIAN_STREAMABLE_HTTP_UPSTREAM_RELAY=true` to forward each message to `{upstreamBaseUrl}/mcp` with `gateToolResponseText` on tool results, session cache, and mTLS via `getMtlsAgent()`. Without relay, returns a stub `forwarded: true` payload for policy testing.
 
 ## Benchmarks
 

@@ -143,12 +143,20 @@ function tryServeDashboardSpa(
 }
 
 function tryServeSwarmArtifact(url: string, res: ServerResponse, method: string = 'GET'): boolean {
-  const prefix = '/reports/security-swarm/';
-  if (!url.startsWith(prefix)) return false;
-  const rel = url.slice(prefix.length);
-  if (!rel || rel.includes('..')) return false;
+  let root: string | null = null;
+  let rel: string | null = null;
 
-  const root = join(REPO_ROOT, 'reports', 'security-swarm');
+  const legacyPrefix = '/reports/security-swarm/';
+  const tenantPrefixMatch = url.match(/^\/reports\/tenants\/([a-zA-Z0-9][a-zA-Z0-9-]*)\/security-swarm\/(.+)$/);
+  if (tenantPrefixMatch) {
+    root = join(REPO_ROOT, 'reports', 'tenants', tenantPrefixMatch[1], 'security-swarm');
+    rel = tenantPrefixMatch[2];
+  } else if (url.startsWith(legacyPrefix)) {
+    root = join(REPO_ROOT, 'reports', 'security-swarm');
+    rel = url.slice(legacyPrefix.length);
+  }
+  if (!root || !rel || rel.includes('..')) return false;
+
   const filePath = join(root, rel);
   if (!existsSync(filePath)) return false;
 
@@ -615,9 +623,26 @@ export async function startDashboardServer(
 
       if (url === '/api/admin/audit-trail' && method === 'GET') {
         setCors();
-        const { getPolicyAuditor } = await import('./enterprise-bootstrap.js');
-        const auditor = getPolicyAuditor();
-        writeJson(res, 200, { entries: auditor?.readAuditTrail() || [] });
+        const { readFileSync: rfs, existsSync: ex } = await import('fs');
+        const { resolveTenantPolicyAuditPath } = await import('../tenant/swarm-tenant-paths.js');
+        const tenantAuditPath = resolveTenantPolicyAuditPath(requestTenantId);
+        let entries: unknown[] = [];
+        if (ex(tenantAuditPath)) {
+          try {
+            entries = rfs(tenantAuditPath, 'utf-8')
+              .trim()
+              .split('\n')
+              .filter(Boolean)
+              .map((l) => JSON.parse(l));
+          } catch {
+            entries = [];
+          }
+        } else {
+          const { getPolicyAuditor } = await import('./enterprise-bootstrap.js');
+          const auditor = getPolicyAuditor();
+          entries = auditor?.readAuditTrail() || [];
+        }
+        writeJson(res, 200, { entries, tenantId: requestTenantId });
         return;
       }
 
@@ -649,6 +674,9 @@ export async function startDashboardServer(
           roles,
           authRequired,
           authConfigured: auth.isConfigured(),
+          sessionTenantId: authResult.sessionTenantId ?? requestTenantId,
+          multiTenantMode: isMultiTenantModeEnabled(),
+          tenantLocked: isMultiTenantModeEnabled() && !!authResult.sessionTenantId,
         });
         return;
       }
@@ -811,7 +839,10 @@ export async function startDashboardServer(
           let semanticAudit = { queued: 0, processed: 0, flagged: 0, enabled: false };
           try {
             const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
-            const sem = await loadSemanticAuditRecordsAsync({ limit: 500 });
+            const sem = await loadSemanticAuditRecordsAsync({
+              limit: 500,
+              tenantId: requestTenantId,
+            });
             flagged = sem.filter(
               (r) => r.semanticAudit?.suspicious || r.label === 'true_positive',
             ).length;
@@ -963,7 +994,10 @@ export async function startDashboardServer(
       if (url === '/api/learning/semantic/outcomes' && method === 'GET') {
         setCors();
         const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
-        const records = await loadSemanticAuditRecordsAsync({ limit: 200 });
+        const records = await loadSemanticAuditRecordsAsync({
+          limit: 200,
+          tenantId: requestTenantId,
+        });
         writeJson(res, 200, { records, total: records.length });
         return;
       }
@@ -976,7 +1010,12 @@ export async function startDashboardServer(
 
         if (body.semanticAuditId) {
           const { labelSemanticAuditRecord } = await import('../ai/semantic-audit-store.js');
-          const ok = await labelSemanticAuditRecord(String(body.semanticAuditId), label, userId);
+          const ok = await labelSemanticAuditRecord(
+            String(body.semanticAuditId),
+            label,
+            userId,
+            requestTenantId,
+          );
           if (!ok) {
             writeJson(res, 404, { error: 'Semantic audit record not found' });
             return;
@@ -1079,7 +1118,8 @@ export async function startDashboardServer(
       if (url === '/api/logs' && method === 'GET') {
         setCors();
         const lines: string[] = [];
-        const jobLog = join(REPO_ROOT, 'reports', 'security-swarm', 'job.log');
+        const { getEffectiveSwarmDir } = await import('../tenant/swarm-tenant-paths.js');
+        const jobLog = join(getEffectiveSwarmDir(requestTenantId), 'job.log');
         if (existsSync(jobLog)) {
           const tail = readFileSync(jobLog, 'utf-8').split('\n').filter(Boolean).slice(-80);
           lines.push(...tail.map((l) => `[swarm] ${l}`));
@@ -1092,7 +1132,10 @@ export async function startDashboardServer(
         setCors();
         const body = await readBody(req).catch(() => ({}));
         const { startSwarmAnalysis } = await import('./security-swarm-runner.js');
-        const result = startSwarmAnalysis({ full: !!(body as { full?: boolean }).full });
+        const result = startSwarmAnalysis({
+          full: !!(body as { full?: boolean }).full,
+          tenantId: requestTenantId,
+        });
         if (!result.ok) {
           writeJson(res, result.status ?? 409, {
             error: result.error,
@@ -1106,7 +1149,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/status' && method === 'GET') {
         setCors();
         const { getSwarmJobStatus } = await import('./security-swarm-runner.js');
-        writeJson(res, 200, getSwarmJobStatus());
+        writeJson(res, 200, getSwarmJobStatus(requestTenantId));
         return;
       }
       if (
@@ -1115,7 +1158,7 @@ export async function startDashboardServer(
       ) {
         setCors();
         const { readAnalysisReport } = await import('./security-swarm-runner.js');
-        const report = readAnalysisReport();
+        const report = readAnalysisReport(requestTenantId);
         if (!report.ok || !report.text) {
           writeJson(res, 404, { error: report.error || 'Report not ready' });
           return;
@@ -1134,7 +1177,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/latest' && method === 'GET') {
         setCors();
         const { readSwarmLatest } = await import('./security-swarm-runner.js');
-        const latest = readSwarmLatest();
+        const latest = readSwarmLatest(requestTenantId);
         if (!latest) {
           writeJson(res, 404, { error: 'latest.json not found — run analysis first' });
           return;
@@ -1145,7 +1188,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/figures' && method === 'GET') {
         setCors();
         const { readFiguresManifest } = await import('./swarm-artifacts.js');
-        const manifest = readFiguresManifest();
+        const manifest = readFiguresManifest(requestTenantId);
         writeJson(res, 200, {
           generatedAt: manifest.generatedAt ?? null,
           figures: manifest.figures,
@@ -1157,9 +1200,9 @@ export async function startDashboardServer(
         try {
           const { readVisualsData } = await import('./swarm-artifacts.js');
           const { writeVisualsData } = await import('./export-visuals-data.js');
-          let data = readVisualsData();
+          let data = readVisualsData(requestTenantId);
           if (!data) {
-            data = await writeVisualsData() as unknown as Record<string, unknown>;
+            data = await writeVisualsData({ tenantId: requestTenantId }) as unknown as Record<string, unknown>;
           }
           writeJson(res, 200, data);
         } catch (err: unknown) {
@@ -1172,7 +1215,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/summary' && method === 'GET') {
         setCors();
         const { readSwarmSummaryMd } = await import('./security-swarm-runner.js');
-        const md = readSwarmSummaryMd();
+        const md = readSwarmSummaryMd(requestTenantId);
         if (!md) {
           writeJson(res, 404, { error: 'summary.md not found' });
           return;
@@ -1196,7 +1239,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/report-json' && method === 'GET') {
         setCors();
         const { ensurePlainEnglishReport } = await import('./swarm-artifacts.js');
-        const report = ensurePlainEnglishReport();
+        const report = ensurePlainEnglishReport(requestTenantId);
         if (!report) {
           writeJson(res, 404, { error: 'report.json not found — run analysis first' });
           return;
@@ -1207,7 +1250,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/traffic-summary' && method === 'GET') {
         setCors();
         const { readTrafficSummary } = await import('./swarm-artifacts.js');
-        const traffic = readTrafficSummary();
+        const traffic = readTrafficSummary(requestTenantId);
         if (!traffic) {
           writeJson(res, 404, { error: 'traffic-summary.json not found' });
           return;
@@ -1218,7 +1261,7 @@ export async function startDashboardServer(
       if (url === '/api/security-swarm/user-servers' && method === 'GET') {
         setCors();
         const { readUserServersSession } = await import('./swarm-artifacts.js');
-        const session = readUserServersSession();
+        const session = readUserServersSession(requestTenantId);
         if (!session) {
           writeJson(res, 404, { error: 'user-servers-session.json not found' });
           return;

@@ -2,7 +2,12 @@
  * Chunked streaming inspection for large tool responses (SSE/WS/stdio).
  * Scans 64KB windows with overlap so patterns spanning chunk boundaries are caught.
  */
-import { evaluateResponseDlp, type ResponseDlpFinding } from '../policy/response-dlp.js';
+import {
+  evaluateResponseDlp,
+  getResponseDlpMode,
+  shouldBlockResponseDlp,
+  type ResponseDlpFinding,
+} from '../policy/response-dlp.js';
 import { MAX_RESPONSE_DLP_BYTES, utf8ByteLength } from './eval-bounds.js';
 
 export const STREAMING_INSPECTOR_CHUNK_BYTES = 64 * 1024;
@@ -21,6 +26,8 @@ export interface StreamingInspectResult {
   hasCritical: boolean;
   hasHigh: boolean;
   truncated?: boolean;
+  redactedBody?: string;
+  dlpMode?: string;
 }
 
 export const STREAMING_INSPECTOR_MAX_CARRY_CHARS = 128 * 1024;
@@ -131,17 +138,23 @@ export function inspectFullResponse(
   }
 
   const state = createStreamingInspectorState();
-  if (responseText.length <= STREAMING_INSPECTOR_CHUNK_BYTES) {
-    inspectResponseChunk(state, responseText, opts);
-    return finalizeStreamingInspect(state);
-  }
-  const chunkSize = STREAMING_INSPECTOR_CHUNK_BYTES;
-  const step = chunkSize - STREAMING_INSPECTOR_OVERLAP_BYTES;
-  for (let i = 0; i < responseText.length; i += step) {
-    inspectResponseChunk(state, responseText.slice(i, i + chunkSize), opts);
-  }
-  return finalizeStreamingInspect(state);
+  const dlp = evaluateResponseDlp(opts.toolName, opts.serverName, responseText);
+  mergeDlpFindings(state, dlp.findings);
+
+  // Full-buffer DLP above; chunked walk is for streaming feeds only.
+
+  const out = finalizeStreamingInspect(state);
+  return {
+    ...out,
+    redactedBody: dlp.redactedBody,
+    dlpMode: dlp.mode,
+    hasCritical: dlp.hasCritical || out.hasCritical,
+    hasHigh: dlp.hasHigh || out.hasHigh,
+    clean: dlp.clean && out.clean,
+  };
 }
+
+export { shouldBlockResponseDlp, getResponseDlpMode };
 
 export function finalizeStreamingInspect(state: StreamingInspectorState): StreamingInspectResult {
   const hasCritical = state.findings.some((f) => f.severity === 'critical');

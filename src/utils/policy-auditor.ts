@@ -6,6 +6,7 @@
 
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { Logger } from './logger.js';
+import { appendChainedJsonlLine, isAuditHashChainEnabled } from './audit-hash-chain.js';
 
 export interface PolicyChangeRecord {
   timestamp: string;
@@ -29,8 +30,13 @@ export class PolicyAuditor {
   record(change: PolicyChangeRecord): void {
     if (!this.enabled) return;
     try {
-      const line = JSON.stringify({ ...change, source: 'mcp-guardian-policy-auditor' }) + '\n';
-      writeFileSync(this.auditPath, line, { flag: 'a' });
+      const payload = { ...change, source: 'mcp-guardian-policy-auditor' };
+      if (isAuditHashChainEnabled()) {
+        appendChainedJsonlLine(this.auditPath, payload);
+      } else {
+        const line = JSON.stringify(payload) + '\n';
+        writeFileSync(this.auditPath, line, { flag: 'a' });
+      }
       Logger.debug(`[policy-auditor] Change recorded: ${change.change}`);
     } catch (err: any) {
       Logger.error(`[policy-auditor] Failed to write audit log: ${err?.message}`);

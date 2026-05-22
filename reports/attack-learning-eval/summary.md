@@ -1,6 +1,6 @@
 # Attack learning evaluation — enterprise stream scenario
 
-Generated: 2026-05-22T10:30:26.424Z
+Generated: 2026-05-22T12:59:52.312Z
 
 ## Scenario
 
@@ -15,14 +15,14 @@ Generated: 2026-05-22T10:30:26.424Z
 | Suggestions queued | 5 | 5 |
 | Unique rule×tool groups learned | 5 | 5 |
 | Avg blocks to first suggestion | 3.00 | 48.00 |
-| Median time-to-suggestion | 242.1s | 2980.0s |
+| Median time-to-suggestion | 243.0s | 2972.0s |
 | Total blocks processed | 240 | 240 |
 
 ## Findings
 
-1. **Instant learning outperforms batch-only on latency** — median time from first block to queued suggestion is 242.1s vs 2980.0s.
+1. **Instant learning outperforms batch-only on latency** — median time from first block to queued suggestion is 243.0s vs 2972.0s.
 2. **Suggestion throughput** — instant queued **5** attack-pattern suggestions vs **5** under batch-only debounced `learnAttackPatterns` flushes.
-3. **Repeat clusters** — top repeat rule×tool within 5min: `semantic-shell-guard:search` (29 repeats).
+3. **Repeat clusters** — top repeat rule×tool within 5min: `semantic-shell-guard:search` (27 repeats).
 4. **Per-block sync path** — instant learning updates rolling state on every block; batch-only waits for **30s** quiet period before evaluating patterns.
 
 ## Verdict

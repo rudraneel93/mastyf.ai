@@ -9,7 +9,8 @@ import {
   loadAllCallRecords,
   summarizeRecords,
 } from './db-aggregate.js';
-import { REPO_ROOT } from './security-swarm-runner.js';
+import { getEffectiveSwarmDir } from '../tenant/swarm-tenant-paths.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { resolveAiPendingSuggestionsPath } from '../ai/ai-paths.js';
 import { getAiEngine } from '../ai/suggestion-engine.js';
 
@@ -21,10 +22,10 @@ export function wireDashboardWsProviders(ws: WsBroadcaster | null, historyDb: un
   const db = historyDb as Parameters<typeof loadAllCallRecords>[0];
 
   ws.setDataProviders({
-    auditTrail: async () => {
+    auditTrail: async (tenantId: string) => {
       try {
-        const srvs = await getAllActiveServerNames(db);
-        const records = await loadAllCallRecords(db, srvs);
+        const srvs = await getAllActiveServerNames(db, tenantId);
+        const records = await loadAllCallRecords(db, srvs, tenantId);
         const sorted = [...records].sort((a, b) =>
           (b.timestamp || '').localeCompare(a.timestamp || ''),
         );
@@ -41,10 +42,10 @@ export function wireDashboardWsProviders(ws: WsBroadcaster | null, historyDb: un
         return [];
       }
     },
-    metrics: async () => {
+    metrics: async (tenantId: string) => {
       try {
-        const srvs = await getAllActiveServerNames(db);
-        const records = await loadAllCallRecords(db, srvs);
+        const srvs = await getAllActiveServerNames(db, tenantId);
+        const records = await loadAllCallRecords(db, srvs, tenantId);
         const sum = summarizeRecords(records);
         const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
         const passRate = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : 100;
@@ -63,9 +64,9 @@ export function wireDashboardWsProviders(ws: WsBroadcaster | null, historyDb: un
         return null;
       }
     },
-    suggestions: () => {
+    suggestions: (tenantId: string) => {
       try {
-        const path = resolveAiPendingSuggestionsPath();
+        const path = resolveAiPendingSuggestionsPath(tenantId);
         if (existsSync(path)) {
           const body = JSON.parse(readFileSync(path, 'utf-8')) as { suggestions?: unknown[] };
           return body.suggestions || [];
@@ -75,23 +76,23 @@ export function wireDashboardWsProviders(ws: WsBroadcaster | null, historyDb: un
       }
       return [];
     },
-    aiState: () => {
+    aiState: (_tenantId: string) => {
       try {
         return getAiEngine()?.getSelfImprovement()?.getState() ?? null;
       } catch {
         return null;
       }
     },
-    baselines: () => {
+    baselines: (_tenantId: string) => {
       try {
         return getAiEngine()?.getBaselineLearner()?.getAllBaselines() ?? [];
       } catch {
         return [];
       }
     },
-    logs: () => {
+    logs: (tenantId: string) => {
       const lines: string[] = [];
-      const jobLog = join(REPO_ROOT, 'reports', 'security-swarm', 'job.log');
+      const jobLog = join(getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID), 'job.log');
       if (existsSync(jobLog)) {
         const tail = readFileSync(jobLog, 'utf-8').split('\n').filter(Boolean).slice(-40);
         lines.push(...tail.map((l) => `[swarm] ${l}`));

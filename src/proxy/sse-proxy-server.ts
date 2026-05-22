@@ -5,19 +5,16 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import { URL } from 'url';
 import { PolicyEngine } from '../policy/policy-engine.js';
-import {
-  findingsToMessages,
-  inspectFullResponse,
-  isResponseScanSkipped,
-} from '../utils/streaming-inspector.js';
+import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { TokenCounter, extractModelFromPayload } from '../utils/token-counter.js';
 import { Logger } from '../utils/logger.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import * as Metrics from '../utils/metrics.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
-import { MtlsConfig, createMtlsAgent, loadMtlsConfig } from '../utils/mtls-config.js';
-import type { Agent as HttpsAgent } from 'https';
+import type { MtlsConfig } from '../utils/mtls-config.js';
+import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
 
 interface SseProxyOptions {
@@ -48,7 +45,6 @@ interface SseSession {
 export class SseProxyServer extends EventEmitter {
   private opts: SseProxyOptions;
   private tokenCounter: TokenCounter;
-  private httpsAgent: HttpsAgent | undefined;
   private sessions = new Map<string, SseSession>();
   private httpServer: Server | null = null;
   private boundPort = 0;
@@ -57,9 +53,9 @@ export class SseProxyServer extends EventEmitter {
     super();
     this.opts = opts;
     this.tokenCounter = new TokenCounter();
-    const mtls = opts.mtlsConfig ?? loadMtlsConfig();
-    this.httpsAgent = createMtlsAgent(mtls);
-    if (this.httpsAgent) {
+    void opts.mtlsConfig;
+    getMtlsAgent();
+    if (getMtlsAgent()) {
       Logger.info(`[sse-proxy:${opts.serverName}] mTLS enabled for upstream connection`);
     }
   }
@@ -189,7 +185,8 @@ export class SseProxyServer extends EventEmitter {
         ...(this.opts.authHeader ? { Authorization: this.opts.authHeader } : {}),
       },
     };
-    if (isHttps && this.httpsAgent) reqOpts.agent = this.httpsAgent;
+    const agent = getMtlsAgent();
+    if (isHttps && agent) reqOpts.agent = agent;
 
     const upstreamReq = client.request(reqOpts, (upstreamRes) => {
       upstreamRes.on('data', (chunk: Buffer) => {
@@ -281,7 +278,8 @@ export class SseProxyServer extends EventEmitter {
         },
         timeout: 5000,
       };
-      if (isHttps && this.httpsAgent) reqOpts.agent = this.httpsAgent;
+      const probeAgent = getMtlsAgent();
+      if (isHttps && probeAgent) reqOpts.agent = probeAgent;
 
       const req = client.request(reqOpts, (res) => {
         let data = '';
@@ -312,6 +310,7 @@ export class SseProxyServer extends EventEmitter {
     session?: SseSession,
   ): Promise<Record<string, unknown>> {
     const isToolCall = jsonRpcRequest.method === 'tools/call';
+    let resolvedTenantId = 'default';
 
     if (isToolCall && this.opts.policy) {
       let tenantId: string;
@@ -330,6 +329,7 @@ export class SseProxyServer extends EventEmitter {
         }
         throw err;
       }
+      resolvedTenantId = tenantId;
       const context = {
         serverName: this.opts.serverName,
         toolName: (jsonRpcRequest.params as { name?: string })?.name || 'unknown',
@@ -359,7 +359,12 @@ export class SseProxyServer extends EventEmitter {
 
     if (isToolCall) {
       const toolName = (jsonRpcRequest.params as { name?: string } | undefined)?.name ?? 'unknown';
-      const blockedResponse = this.inspectToolResponse(toolName, response, jsonRpcRequest.id);
+      const blockedResponse = await this.inspectToolResponse(
+        toolName,
+        response,
+        jsonRpcRequest.id,
+        resolvedTenantId,
+      );
       if (blockedResponse) return blockedResponse;
     }
 
@@ -400,24 +405,38 @@ export class SseProxyServer extends EventEmitter {
     return response;
   }
 
-  private inspectToolResponse(
+  private async inspectToolResponse(
     toolName: string,
     response: Record<string, unknown>,
     requestId: unknown,
-  ): Record<string, unknown> | null {
+    tenantId?: string,
+  ): Promise<Record<string, unknown> | null> {
     const result = (response as { result?: unknown }).result;
     if (result == null || isResponseScanSkipped()) return null;
 
     const responseText = JSON.stringify(result);
-    const inspect = inspectFullResponse(responseText, {
+    const gate = await gateToolResponseText({
+      responseText,
       toolName,
       serverName: this.opts.serverName,
       policy: this.opts.policy,
+      requestId: requestId as string | number | undefined,
+      tenantId,
     });
+    const inspect = gate.inspect;
+    if (!inspect || inspect.clean) {
+      if (gate.outcome.action === 'redact' && gate.outcome.body) {
+        try {
+          (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+        } catch {
+          /* keep upstream */
+        }
+      }
+      return null;
+    }
+
     const hasCritical = inspect.hasCritical;
     const hasHigh = inspect.hasHigh;
-    if (inspect.clean) return null;
-
     const allMessages = findingsToMessages(inspect.findings);
     Logger.warn(
       `[sse-proxy:${this.opts.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
@@ -427,22 +446,29 @@ export class SseProxyServer extends EventEmitter {
       serverName: this.opts.serverName,
       toolName,
       detections: allMessages,
-      blocked: (hasCritical || hasHigh) && this.opts.policy?.getMode() === 'block',
+      blocked: gate.outcome.action === 'block',
     });
     Metrics.injectionDetectedTotal?.inc({
       server_name: this.opts.serverName,
       severity: hasCritical ? 'critical' : 'high',
     });
 
-    const policyMode = this.opts.policy?.getMode() ?? 'audit';
-    if ((hasCritical || hasHigh) && policyMode === 'block') {
+    if (gate.outcome.action === 'redact') {
+      try {
+        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+      } catch {
+        /* keep upstream */
+      }
+      return null;
+    }
+
+    if (gate.outcome.action === 'block') {
       return {
         jsonrpc: '2.0',
         id: requestId,
         error: {
           code: -32002,
-          message:
-            'MCP Guardian: Tool response blocked — prompt injection detected in upstream response',
+          message: gate.outcome.message,
         },
       };
     }
@@ -479,8 +505,9 @@ export class SseProxyServer extends EventEmitter {
         timeout: 30_000,
       };
 
-      if (isHttps && this.httpsAgent) {
-        reqOpts.agent = this.httpsAgent;
+      const fwdAgent = getMtlsAgent();
+      if (isHttps && fwdAgent) {
+        reqOpts.agent = fwdAgent;
       }
 
       const req = client.request(reqOpts, (res) => {

@@ -6,6 +6,10 @@ import { createHash } from 'crypto';
 import { walkStringLeaves } from '../policy/arg-leaf-walker.js';
 import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
 import { learningFingerprint } from './learning-quorum.js';
+import {
+  isLocalSemanticEnabledForTenant,
+  isLocalSemanticEnabledGlobal,
+} from '../tenant/tenant-semantic-config.js';
 
 export interface LocalSemanticScore {
   risk: number;
@@ -47,10 +51,9 @@ function cacheKey(input: {
   return createHash('sha256').update(raw).digest('hex').slice(0, 24);
 }
 
-export function isLocalSemanticEnabled(): boolean {
-  if (process.env['GUARDIAN_LOCAL_SEMANTIC'] === 'false') return false;
-  if (process.env['GUARDIAN_LOCAL_SEMANTIC'] === 'true') return true;
-  return process.env['GUARDIAN_DISABLE_SEMANTIC'] !== 'true';
+export function isLocalSemanticEnabled(tenantId?: string): boolean {
+  if (tenantId) return isLocalSemanticEnabledForTenant(tenantId);
+  return isLocalSemanticEnabledGlobal();
 }
 
 function normalizeText(parts: string[]): string {
@@ -150,6 +153,38 @@ export function scoreLocalSemanticRisk(input: {
   }
   localSemanticCache.set(key, score);
   return score;
+}
+
+/** Score arbitrary text (e.g. tool response body) with the same heuristic patterns. */
+export function scoreLocalSemanticText(
+  text: string,
+  ctx: { serverName: string; toolName: string },
+): LocalSemanticScore {
+  const normalized = normalizeText([ctx.toolName, ctx.serverName, text]);
+  if (!normalized) {
+    return { risk: 0, suspicious: false, categories: ['none'], reasoning: 'Empty response' };
+  }
+  let risk = entropyScore(normalized) + base64ShellScore(normalized);
+  const categories = new Set<string>();
+  const hits: string[] = [];
+  for (const p of RISK_PATTERNS) {
+    p.re.lastIndex = 0;
+    if (p.re.test(normalized)) {
+      risk += p.weight;
+      categories.add(p.category);
+      hits.push(p.id);
+    }
+  }
+  risk = Math.min(1, Math.round(risk * 1000) / 1000);
+  const suspicious = risk >= SUSPICIOUS_THRESHOLD;
+  return {
+    risk,
+    suspicious,
+    categories: categories.size > 0 ? [...categories] : suspicious ? ['unknown'] : ['none'],
+    reasoning: suspicious
+      ? `Response heuristic risk ${risk.toFixed(2)} (${hits.slice(0, 4).join(', ') || 'features'})`
+      : `Response heuristic risk ${risk.toFixed(2)} below threshold`,
+  };
 }
 
 /** @internal test helper */

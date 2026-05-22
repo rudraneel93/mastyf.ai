@@ -150,6 +150,7 @@ Per-tenant spend caps:
 
 ```bash
 export GUARDIAN_TENANT_DAILY_BUDGET_JSON='{"acme-corp":100,"beta":25}'
+export GUARDIAN_TENANT_SEMANTIC_JSON='{"acme-corp":{"syncResponse":true,"asyncAudit":true},"beta":{"strict":true}}'
 ```
 
 ## Limits
@@ -157,8 +158,27 @@ export GUARDIAN_TENANT_DAILY_BUDGET_JSON='{"acme-corp":100,"beta":25}'
 - **Not** full network/data-plane isolation — tenants share process memory, SQLite file, and Redis instance unless you deploy separate deployments/namespaces.
 - Policy overrides are file-based merges in-process; hot-reload applies to the base policy watcher, not every tenant file automatically.
 - Dashboard and TUI list/metric APIs scope to the resolved tenant (`X-Guardian-Tenant` / `X-Tenant-Id` on HTTP, `GUARDIAN_TENANT_ID` for TUI/CLI).
+- Dashboard WebSocket clients send `tenantId` on `subscribe`; live metrics/audit pushes are per connection.
+- Security-swarm artifacts and visuals data live under `reports/tenants/{tenantId}/security-swarm/` (legacy `reports/security-swarm/` remains for `default` until migrated).
 - PostgreSQL `aggregated_metrics` remains instance-global; tenant-scoped PG aggregates use `unified_*` tables via `AuditTrailSync.getAggregatedMetrics(tenantId)`.
 
 ## API
 
 `GET /api/admin/tenant` returns resolved tenant, source (`env` | `header`), and multi-tenant mode flag.
+
+## Production pilot checklist
+
+Run after enabling multi-tenant mode in a staging cluster:
+
+1. Issue JWTs with `tenant_id` (or `GUARDIAN_JWT_TENANT_CLAIM`) for two tenants (`acme`, `beta`).
+2. Dashboard login — confirm tenant bar is read-only when session-bound; `X-Guardian-Tenant` cannot override JWT tenant.
+3. `GET /api/metrics` and `/api/audit` with each tenant header — rows must not cross tenants.
+4. WebSocket subscribe with `{ "type": "subscribe", "tenantId": "acme" }` — live metrics exclude `beta` traffic.
+5. Trigger security swarm for `acme` — artifacts under `reports/tenants/acme/security-swarm/` only.
+6. Automated regression: `pnpm exec vitest run tests/dashboard/dashboard-multi-tenant.test.ts`.
+
+```bash
+export GUARDIAN_MULTI_TENANT_ENABLED=true
+export DASHBOARD_JWT_SECRET=...   # or DASHBOARD_API_KEY + GUARDIAN_DASHBOARD_ROLES
+pnpm enterprise:preflight
+```

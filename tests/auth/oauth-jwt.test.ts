@@ -40,6 +40,8 @@ describe('OAuthValidator JWT', () => {
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
       .setIssuer(issuer)
       .setAudience(audience)
+      .setIssuedAt(Math.floor(Date.now() / 1000))
+
       .setSubject('agent-1')
       .setExpirationTime('2h')
       .sign(privateKey);
@@ -55,6 +57,8 @@ describe('OAuthValidator JWT', () => {
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
       .setIssuer(issuer)
       .setAudience(audience)
+      .setIssuedAt(Math.floor(Date.now() / 1000))
+
       .setSubject('agent-1')
       .setIssuedAt(Math.floor(Date.now() / 1000) - 7200)
       .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)

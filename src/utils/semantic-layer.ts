@@ -5,6 +5,7 @@
  * (no API key / LLM disabled). Mirrors GUARDIAN_STRICT_MODE patterns in enterprise-bootstrap.
  */
 import { getLlmConfig } from '../config/llm-config.js';
+import { isSemanticStrictForTenant } from '../tenant/tenant-semantic-config.js';
 import { StructuredLogger } from './structured-logger.js';
 import { broadcastDashboardEvent } from './dashboard-events.js';
 
@@ -18,8 +19,8 @@ export function isSemanticLlmConfigured(): boolean {
   return true;
 }
 
-export function isSemanticStrictMode(): boolean {
-  return process.env.GUARDIAN_SEMANTIC_STRICT === 'true';
+export function isSemanticStrictMode(tenantId?: string): boolean {
+  return isSemanticStrictForTenant(tenantId);
 }
 
 /** Structured log + dashboard alert (deduped per reason per process). */

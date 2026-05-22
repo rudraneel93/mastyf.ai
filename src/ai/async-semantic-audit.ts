@@ -18,6 +18,7 @@ import {
   isLocalSemanticEnabled,
   scoreLocalSemanticRisk,
 } from './local-semantic-classifier.js';
+import { isSemanticAsyncEnabledForTenant } from '../tenant/tenant-semantic-config.js';
 import { withSemanticTimeout } from '../utils/semantic-timeout.js';
 import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
@@ -29,6 +30,7 @@ export interface SemanticAuditJob {
   arguments?: Record<string, unknown>;
   syncDecision: PolicyDecision;
   timestamp: string;
+  tenantId?: string;
 }
 
 export interface SemanticAuditResult {
@@ -76,10 +78,8 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let llm: LlmAssistant | null = null;
 let stats = { processed: 0, flagged: 0, dropped: 0 };
 
-export function isSemanticAsyncEnabled(): boolean {
-  if (process.env.GUARDIAN_SEMANTIC_ASYNC === 'false') return false;
-  if (process.env.GUARDIAN_SEMANTIC_ASYNC === 'true') return true;
-  return process.env.GUARDIAN_LLM_ENABLED !== 'false';
+export function isSemanticAsyncEnabled(tenantId?: string): boolean {
+  return isSemanticAsyncEnabledForTenant(tenantId);
 }
 
 /** @internal test helper */
@@ -154,9 +154,9 @@ function getLlm(): LlmAssistant {
 
 /** Enqueue async semantic audit (debounced batch drain). Never blocks the caller. */
 export function enqueueSemanticAudit(job: SemanticAuditJob): void {
-  if (!isSemanticAsyncEnabled()) return;
+  if (!isSemanticAsyncEnabled(job.tenantId)) return;
   if (!getLlm().isAvailable() || !isSemanticLlmConfigured()) {
-    if (isLocalSemanticEnabled()) {
+    if (isLocalSemanticEnabled(job.tenantId)) {
       void runLocalSemanticAudit(job);
       return;
     }
@@ -405,5 +405,6 @@ export function buildSemanticAuditJob(
     arguments: ctx.arguments,
     syncDecision,
     timestamp: ctx.timestamp ?? new Date().toISOString(),
+    tenantId: ctx.tenantId,
   };
 }

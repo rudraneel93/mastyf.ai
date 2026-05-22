@@ -41,5 +41,6 @@ export interface OIDCDiscovery {
   jwks_uri: string;
   authorization_endpoint?: string;
   token_endpoint?: string;
+  introspection_endpoint?: string;
   scopes_supported?: string[];
 }

@@ -1,11 +1,11 @@
 /**
  * mTLS certificate file watcher (skeleton).
  *
- * Watches CA/cert/key paths and logs when files change. Full hot-reload of the
- * HTTPS agent is not implemented yet — restart the pod/process after rotating certs.
+ * Watches CA/cert/key paths and hot-reloads the shared mTLS HTTPS agent.
  */
 import { watch, type FSWatcher } from 'fs';
 import { Logger } from './logger.js';
+import { reloadMtlsAgent } from './mtls-agent-registry.js';
 
 export interface MtlsWatchPaths {
   caPath?: string;
@@ -27,9 +27,8 @@ export class MtlsCertWatcher {
       if (!filePath) continue;
       try {
         const watcher = watch(filePath, () => {
-          Logger.warn(
-            `[mtls-watcher] ${label} file changed (${filePath}) — restart required to reload mTLS credentials`,
-          );
+          Logger.warn(`[mtls-watcher] ${label} file changed (${filePath}) — reloading mTLS agent`);
+          reloadMtlsAgent();
         });
         this.watchers.push(watcher);
         Logger.info(`[mtls-watcher] Watching ${label}: ${filePath}`);

@@ -1,17 +1,22 @@
 /**
  * Enterprise response DLP — output filtering for tool results (secrets, PII, exfil markers).
+ * Modes: block (default), redact (scrub-and-pass), audit (detect only, never block).
  */
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { MAX_RESPONSE_DLP_BYTES, truncateForPolicy, utf8ByteLength } from '../utils/eval-bounds.js';
 
 export type DlpSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type ResponseDlpMode = 'block' | 'redact' | 'audit';
 
 export interface ResponseDlpFinding {
   category: 'secret' | 'pii' | 'injection' | 'exfil' | 'sensitive-content';
   severity: DlpSeverity;
   ruleId: string;
   message: string;
+  /** Match span in scanned text (for redaction). */
+  start?: number;
+  end?: number;
 }
 
 export interface ResponseDlpResult {
@@ -21,31 +26,123 @@ export interface ResponseDlpResult {
   hasHigh: boolean;
   truncated: boolean;
   scannedBytes: number;
+  redactedBody?: string;
+  mode: ResponseDlpMode;
 }
 
-const PII_PATTERNS: Array<{ id: string; severity: DlpSeverity; regex: RegExp }> = [
-  {
-    id: 'pii-ssn',
-    severity: 'high',
-    regex: /\b\d{3}-\d{2}-\d{4}\b/,
-  },
+interface PatternDef {
+  id: string;
+  severity: DlpSeverity;
+  category: ResponseDlpFinding['category'];
+  regex: RegExp;
+  redactLabel: string;
+}
+
+const PII_PATTERNS: PatternDef[] = [
+  { id: 'pii-ssn', severity: 'high', category: 'pii', regex: /\b\d{3}-\d{2}-\d{4}\b/g, redactLabel: 'SSN' },
   {
     id: 'pii-credit-card',
     severity: 'high',
-    regex: /\b(?:\d{4}[- ]?){3}\d{4}\b/,
+    category: 'pii',
+    regex: /\b(?:\d{4}[- ]?){3}\d{4}\b/g,
+    redactLabel: 'CARD',
+  },
+  {
+    id: 'pii-phone',
+    severity: 'medium',
+    category: 'pii',
+    regex: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
+    redactLabel: 'PHONE',
+  },
+  {
+    id: 'pii-e164',
+    severity: 'medium',
+    category: 'pii',
+    regex: /\b\+[1-9]\d{7,14}\b/g,
+    redactLabel: 'PHONE',
+  },
+  {
+    id: 'pii-iban',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/g,
+    redactLabel: 'IBAN',
+  },
+  {
+    id: 'pii-npi',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b\d{10}\b(?=.*\b(?:npi|provider|healthcare|patient)\b)/gi,
+    redactLabel: 'NPI',
   },
   {
     id: 'pii-email-bulk',
     severity: 'medium',
-    regex: /(?:[\w.+-]+@[\w.-]+\.\w{2,}[\s,;]){5,}/i,
+    category: 'pii',
+    regex: /(?:[\w.+-]+@[\w.-]+\.\w{2,}[\s,;]){5,}/gi,
+    redactLabel: 'EMAIL',
+  },
+  {
+    id: 'pii-passport',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b[A-Z]{1,2}\d{6,9}\b/g,
+    redactLabel: 'ID',
   },
 ];
 
-const SENSITIVE_CONTENT_MARKERS: Array<{ id: string; severity: DlpSeverity; regex: RegExp }> = [
-  { id: 'content-passwd', severity: 'critical', regex: /root:.*?:\/bin\// },
-  { id: 'content-aws-key', severity: 'critical', regex: /AKIA[0-9A-Z]{16}/ },
-  { id: 'content-private-key', severity: 'critical', regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
-  { id: 'content-connection-string', severity: 'high', regex: /(?:postgres|mysql|mongodb)(?:\+srv)?:\/\/[^:]+:[^@\s]+@/i },
+const SENSITIVE_CONTENT_MARKERS: PatternDef[] = [
+  { id: 'content-passwd', severity: 'critical', category: 'sensitive-content', regex: /root:.*?:\/bin\//g, redactLabel: 'PASSWD' },
+  { id: 'content-aws-key', severity: 'critical', category: 'sensitive-content', regex: /AKIA[0-9A-Z]{16}/g, redactLabel: 'AWS_KEY' },
+  {
+    id: 'content-private-key',
+    severity: 'critical',
+    category: 'sensitive-content',
+    regex: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
+    redactLabel: 'PRIVATE_KEY',
+  },
+  {
+    id: 'content-connection-string',
+    severity: 'high',
+    category: 'sensitive-content',
+    regex: /(?:postgres|mysql|mongodb)(?:\+srv)?:\/\/[^:]+:[^@\s]+@/gi,
+    redactLabel: 'CONN_STRING',
+  },
+  {
+    id: 'content-azure-sas',
+    severity: 'critical',
+    category: 'sensitive-content',
+    regex: /[?&]sig=[A-Za-z0-9%+/=]{20,}/g,
+    redactLabel: 'AZURE_SAS',
+  },
+  {
+    id: 'content-gcp-sa-json',
+    severity: 'critical',
+    category: 'sensitive-content',
+    regex: /"type"\s*:\s*"service_account"/g,
+    redactLabel: 'GCP_SA',
+  },
+  {
+    id: 'content-k8s-secret',
+    severity: 'high',
+    category: 'sensitive-content',
+    regex: /kind:\s*Secret[\s\S]{0,200}?data:\s*\n/gi,
+    redactLabel: 'K8S_SECRET',
+  },
+  {
+    id: 'content-jwt',
+    severity: 'high',
+    category: 'sensitive-content',
+    regex: /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+    redactLabel: 'JWT',
+  },
+  {
+    id: 'content-phi-marker',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b(?:MRN|patient\s*id|medical\s*record|diagnosis|HIPAA)\s*[:=]\s*\S+/gi,
+    redactLabel: 'PHI',
+  },
 ];
 
 const RESPONSE_EXFIL_PATTERNS: RegExp[] = [
@@ -54,32 +151,40 @@ const RESPONSE_EXFIL_PATTERNS: RegExp[] = [
   /\b(?:send|post|upload|transmit)\b.*\b(?:secret|password|credential|api[_-]?key)/i,
 ];
 
-function scanPii(text: string): ResponseDlpFinding[] {
+export function getResponseDlpMode(): ResponseDlpMode {
+  const raw = (process.env['GUARDIAN_RESPONSE_DLP_MODE'] || 'block').toLowerCase();
+  if (raw === 'redact' || raw === 'audit') return raw;
+  return 'block';
+}
+
+function collectPatternFindings(text: string, patterns: PatternDef[]): ResponseDlpFinding[] {
   const out: ResponseDlpFinding[] = [];
-  for (const { id, severity, regex } of PII_PATTERNS) {
-    if (regex.test(text)) {
+  for (const { id, severity, category, regex } of patterns) {
+    regex.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
       out.push({
-        category: 'pii',
+        category,
         severity,
         ruleId: id,
-        message: `PII pattern ${id} in tool response`,
+        message: `${category} pattern ${id} in tool response`,
+        start: m.index,
+        end: m.index + m[0].length,
       });
+      if (!regex.global) break;
     }
   }
   return out;
 }
 
-function scanSensitiveMarkers(text: string): ResponseDlpFinding[] {
-  const out: ResponseDlpFinding[] = [];
-  for (const { id, severity, regex } of SENSITIVE_CONTENT_MARKERS) {
-    if (regex.test(text)) {
-      out.push({
-        category: 'sensitive-content',
-        severity,
-        ruleId: id,
-        message: `Sensitive content marker ${id} in response`,
-      });
-    }
+function redactSpans(text: string, findings: ResponseDlpFinding[]): string {
+  const spans = findings
+    .filter((f) => f.start != null && f.end != null && f.end > f.start)
+    .sort((a, b) => (b.start! - a.start!));
+  let out = text;
+  for (const f of spans) {
+    const label = f.ruleId.replace(/^[^-]+-/, '').toUpperCase().slice(0, 12);
+    out = out.slice(0, f.start!) + `[REDACTED:${label}]` + out.slice(f.end!);
   }
   return out;
 }
@@ -92,8 +197,17 @@ export function evaluateResponseDlp(
   serverName: string,
   responseBody: string | null | undefined,
 ): ResponseDlpResult {
+  const mode = getResponseDlpMode();
   if (responseBody == null || typeof responseBody !== 'string') {
-    return { clean: true, findings: [], hasCritical: false, hasHigh: false, truncated: false, scannedBytes: 0 };
+    return {
+      clean: true,
+      findings: [],
+      hasCritical: false,
+      hasHigh: false,
+      truncated: false,
+      scannedBytes: 0,
+      mode,
+    };
   }
 
   let truncated = false;
@@ -130,8 +244,8 @@ export function evaluateResponseDlp(
     });
   }
 
-  findings.push(...scanPii(scanText));
-  findings.push(...scanSensitiveMarkers(scanText));
+  findings.push(...collectPatternFindings(scanText, PII_PATTERNS));
+  findings.push(...collectPatternFindings(scanText, SENSITIVE_CONTENT_MARKERS));
 
   for (const pattern of RESPONSE_EXFIL_PATTERNS) {
     if (pattern.test(scanText)) {
@@ -166,6 +280,14 @@ export function evaluateResponseDlp(
   const hasCritical = findings.some((f) => f.severity === 'critical');
   const hasHigh = findings.some((f) => f.severity === 'high');
 
+  let redactedBody: string | undefined;
+  if (mode === 'redact' && findings.length > 0) {
+    redactedBody = redactSpans(scanText, findings);
+    if (redactedBody !== scanText && body !== scanText) {
+      redactedBody = body.slice(0, body.length - scanText.length) + redactedBody;
+    }
+  }
+
   return {
     clean: findings.length === 0,
     findings,
@@ -173,9 +295,17 @@ export function evaluateResponseDlp(
     hasHigh,
     truncated,
     scannedBytes: utf8ByteLength(scanText),
+    redactedBody,
+    mode,
   };
 }
 
 export function responseDlpToLegacyDetections(result: ResponseDlpResult): string[] {
   return result.findings.map((f) => f.message);
+}
+
+/** Whether response DLP should block forwarding (respects audit/redact modes). */
+export function shouldBlockResponseDlp(result: ResponseDlpResult): boolean {
+  if (result.mode === 'audit' || result.mode === 'redact') return false;
+  return result.hasCritical || result.hasHigh;
 }

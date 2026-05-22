@@ -7,6 +7,8 @@ import { IDatabase } from '../database/database-interface.js';
 import { registerReadinessCheck } from './readiness.js';
 import { Logger } from './logger.js';
 import { createRedisClient, isRedisConfigured } from './redis-client.js';
+import { MtlsCertWatcher } from './mtls-watcher.js';
+import { getMtlsAgent } from './mtls-agent-registry.js';
 import {
   setAttackLearningSharedStore,
   loadAttackLearningFromSharedStore,
@@ -15,6 +17,7 @@ import {
 let exporterManager: ExporterManager | null = null;
 let policyAuditor: PolicyAuditor | null = null;
 let auditTrailSync: AuditTrailSync | null = null;
+let mtlsWatcher: MtlsCertWatcher | null = null;
 
 const SECRET_KEYS = [
   'NVD_API_KEY',
@@ -104,7 +107,27 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
     });
   }
 
+  bootstrapMtlsHotReload();
+
   Logger.info('[bootstrap] Enterprise compliance modules initialized');
+}
+
+/** Start mTLS cert watcher and prime shared HTTPS agent for HTTP/SSE proxies. */
+export function bootstrapMtlsHotReload(): void {
+  if (process.env['MCP_TLS_ENABLED'] !== 'true') return;
+  if (process.env['GUARDIAN_MTLS_HOT_RELOAD'] === 'false') return;
+  try {
+    getMtlsAgent();
+    mtlsWatcher = new MtlsCertWatcher();
+    mtlsWatcher.start({
+      caPath: process.env['MCP_TLS_CA'],
+      certPath: process.env['MCP_TLS_CERT'],
+      keyPath: process.env['MCP_TLS_KEY'],
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    Logger.warn(`[bootstrap] mTLS hot-reload not started: ${msg}`);
+  }
 }
 
 export function getPolicyAuditor(): PolicyAuditor | null {
@@ -120,6 +143,8 @@ export function getExporterManager(): ExporterManager | null {
 }
 
 export async function shutdownEnterprise(): Promise<void> {
+  mtlsWatcher?.stop();
+  mtlsWatcher = null;
   const { stopDashboardTelemetry } = await import('./dashboard-telemetry.js');
   await stopDashboardTelemetry();
   if (auditTrailSync) {
@@ -131,6 +156,8 @@ export async function shutdownEnterprise(): Promise<void> {
 }
 
 export async function exportSiemEvent(type: string, payload: Record<string, unknown>): Promise<void> {
+  const { appendSiemChainedEvent } = await import('./audit-hash-chain.js');
+  appendSiemChainedEvent(type, payload);
   if (!exporterManager) return;
   await exporterManager.export({
     type,

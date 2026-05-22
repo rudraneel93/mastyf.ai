@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-05-22T12:42:01.082483Z",
+  "generatedAt": "2026-05-22T12:59:53.557883Z",
   "figures": [
     {
       "name": "fig1-gates-dashboard.png",
       "title": "Regression gates",
       "category": "regression",
       "url": "/reports/security-swarm/figures/fig1-gates-dashboard.png",
-      "generatedAt": "2026-05-22T12:42:00.199036Z",
+      "generatedAt": "2026-05-22T12:59:52.697254Z",
       "dataSource": "latest.json"
     },
     {
@@ -14,7 +14,7 @@
       "title": "Corpus rates",
       "category": "regression",
       "url": "/reports/security-swarm/figures/fig2-corpus-rates.png",
-      "generatedAt": "2026-05-22T12:42:00.238781Z",
+      "generatedAt": "2026-05-22T12:59:52.736720Z",
       "dataSource": "latest.json + corpus-eval"
     },
     {
@@ -22,7 +22,7 @@
       "title": "Category recall",
       "category": "regression",
       "url": "/reports/security-swarm/figures/fig3-category-recall.png",
-      "generatedAt": "2026-05-22T12:42:00.296361Z",
+      "generatedAt": "2026-05-22T12:59:52.793130Z",
       "dataSource": "corpus-eval-report.json"
     },
     {
@@ -30,7 +30,7 @@
       "title": "Pipeline timings",
       "category": "infrastructure",
       "url": "/reports/security-swarm/figures/fig4-step-timings.png",
-      "generatedAt": "2026-05-22T12:42:00.354627Z",
+      "generatedAt": "2026-05-22T12:59:52.849582Z",
       "dataSource": "latest.json"
     },
     {
@@ -38,7 +38,7 @@
       "title": "Calls over time",
       "category": "traffic",
       "url": "/reports/security-swarm/figures/traffic-calls-over-time.png",
-      "generatedAt": "2026-05-22T12:42:00.419748Z",
+      "generatedAt": "2026-05-22T12:59:52.914954Z",
       "dataSource": "history.db"
     },
     {
@@ -46,7 +46,7 @@
       "title": "Latency by server",
       "category": "traffic",
       "url": "/reports/security-swarm/figures/traffic-latency-percentiles.png",
-      "generatedAt": "2026-05-22T12:42:00.480940Z",
+      "generatedAt": "2026-05-22T12:59:52.977203Z",
       "dataSource": "history.db"
     },
     {
@@ -54,7 +54,7 @@
       "title": "Cost by server",
       "category": "traffic",
       "url": "/reports/security-swarm/figures/traffic-cost-by-server.png",
-      "generatedAt": "2026-05-22T12:42:00.530568Z",
+      "generatedAt": "2026-05-22T12:59:53.026385Z",
       "dataSource": "history.db"
     },
     {
@@ -62,7 +62,7 @@
       "title": "Top tools",
       "category": "traffic",
       "url": "/reports/security-swarm/figures/traffic-top-tools.png",
-      "generatedAt": "2026-05-22T12:42:00.586410Z",
+      "generatedAt": "2026-05-22T12:59:53.081662Z",
       "dataSource": "history.db"
     },
     {
@@ -70,7 +70,7 @@
       "title": "Block rules",
       "category": "traffic",
       "url": "/reports/security-swarm/figures/traffic-block-rules.png",
-      "generatedAt": "2026-05-22T12:42:00.641010Z",
+      "generatedAt": "2026-05-22T12:59:53.135625Z",
       "dataSource": "history.db"
     },
     {
@@ -78,7 +78,7 @@
       "title": "Blocks per minute",
       "category": "learning",
       "url": "/reports/security-swarm/figures/learning-blocks-per-minute.png",
-      "generatedAt": "2026-05-22T12:42:00.709114Z",
+      "generatedAt": "2026-05-22T12:59:53.191773Z",
       "dataSource": "attack-learning-state (live)"
     },
     {
@@ -86,7 +86,7 @@
       "title": "Rule:tool clusters",
       "category": "learning",
       "url": "/reports/security-swarm/figures/learning-rule-tool-heatmap.png",
-      "generatedAt": "2026-05-22T12:42:00.768847Z",
+      "generatedAt": "2026-05-22T12:59:53.250019Z",
       "dataSource": "attack-learning-state.json"
     },
     {
@@ -94,7 +94,7 @@
       "title": "Suggestion queue",
       "category": "learning",
       "url": "/reports/security-swarm/figures/learning-suggestion-rate.png",
-      "generatedAt": "2026-05-22T12:42:00.807598Z",
+      "generatedAt": "2026-05-22T12:59:53.288064Z",
       "dataSource": "attack-learning-state.json"
     },
     {
@@ -102,7 +102,7 @@
       "title": "Attack class confidence",
       "category": "learning",
       "url": "/reports/security-swarm/figures/learning-class-confidence.png",
-      "generatedAt": "2026-05-22T12:42:00.832734Z",
+      "generatedAt": "2026-05-22T12:59:53.312585Z",
       "dataSource": "empty"
     },
     {
@@ -110,7 +110,7 @@
       "title": "Semantic totals",
       "category": "semantic",
       "url": "/reports/security-swarm/figures/fig6-semantic-calibration.png",
-      "generatedAt": "2026-05-22T12:42:00.874508Z",
+      "generatedAt": "2026-05-22T12:59:53.355543Z",
       "dataSource": "calibration.json"
     },
     {
@@ -118,7 +118,7 @@
       "title": "Confidence distribution",
       "category": "semantic",
       "url": "/reports/security-swarm/figures/semantic-confidence-hist.png",
-      "generatedAt": "2026-05-22T12:42:00.909434Z",
+      "generatedAt": "2026-05-22T12:59:53.390571Z",
       "dataSource": "calibration.json"
     },
     {
@@ -126,7 +126,7 @@
       "title": "Label mix",
       "category": "semantic",
       "url": "/reports/security-swarm/figures/semantic-labels-pie.png",
-      "generatedAt": "2026-05-22T12:42:00.949502Z",
+      "generatedAt": "2026-05-22T12:59:53.428619Z",
       "dataSource": "calibration.json"
     },
     {
@@ -134,7 +134,7 @@
       "title": "Live filesystem scenarios",
       "category": "regression",
       "url": "/reports/security-swarm/figures/fig7-live-filesystem-results.png",
-      "generatedAt": "2026-05-22T12:42:00.988972Z",
+      "generatedAt": "2026-05-22T12:59:53.466351Z",
       "dataSource": "live-filesystem-session.json"
     },
     {
@@ -142,7 +142,7 @@
       "title": "Server probes",
       "category": "infrastructure",
       "url": "/reports/security-swarm/figures/user-servers-probe-status.png",
-      "generatedAt": "2026-05-22T12:42:01.024956Z",
+      "generatedAt": "2026-05-22T12:59:53.501520Z",
       "dataSource": "user-servers-session.json"
     },
     {
@@ -150,7 +150,7 @@
       "title": "Pipeline waterfall",
       "category": "infrastructure",
       "url": "/reports/security-swarm/figures/pipeline-phase-waterfall.png",
-      "generatedAt": "2026-05-22T12:42:01.082340Z",
+      "generatedAt": "2026-05-22T12:59:53.557781Z",
       "dataSource": "latest.json"
     }
   ]

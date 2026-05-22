@@ -10,9 +10,10 @@ import { getAllActiveServerNames, loadAllCallRecords } from './db-aggregate.js';
 import type { ProxyCallRecord } from '../types.js';
 import { resolveAttackLearningStatePath, resolveAiPendingSuggestionsPath } from '../ai/ai-paths.js';
 import type { AttackLearningState } from '../ai/instant-attack-learning.js';
-import { REPO_ROOT, SWARM_DIR } from './swarm-artifacts.js';
+import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
+import { getEffectiveSwarmDir, resolveTenantSwarmDir } from '../tenant/swarm-tenant-paths.js';
+import { REPO_ROOT } from './swarm-artifacts.js';
 
-export const VISUALS_DATA_PATH = join(SWARM_DIR, 'visuals-data.json');
 
 const RULE_GLOSSARY: Record<string, string> = {
   'request-prompt-injection': 'Prompt injection in tool args',
@@ -41,6 +42,7 @@ export interface VisualsDataBundle {
   windowDays: number;
   meta: {
     dbPath: string;
+    tenantId?: string;
     hasTraffic: boolean;
     hasInstantLearning: boolean;
     hasSemantic: boolean;
@@ -134,8 +136,8 @@ function buildHourlyBuckets(records: ProxyCallRecord[], sinceMs: number): Hourly
     });
 }
 
-function loadAttackLearningState(): AttackLearningState | null {
-  const p = resolveAttackLearningStatePath();
+function loadAttackLearningState(tenantId?: string): AttackLearningState | null {
+  const p = resolveAttackLearningStatePath(tenantId);
   if (!existsSync(p)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as AttackLearningState;
@@ -169,8 +171,14 @@ function loadJsonSafe<T>(path: string): T | null {
   }
 }
 
-export async function buildVisualsData(opts: { windowDays?: number; dbPath?: string } = {}): Promise<VisualsDataBundle> {
+export async function buildVisualsData(opts: {
+  windowDays?: number;
+  dbPath?: string;
+  tenantId?: string;
+} = {}): Promise<VisualsDataBundle> {
   const windowDays = opts.windowDays ?? 7;
+  const tenantId = opts.tenantId || DEFAULT_TENANT_ID;
+  const swarmDir = getEffectiveSwarmDir(tenantId);
   const dbPath = opts.dbPath ?? resolveGuardianDbPath();
   const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
   const emptyReasons: Record<string, string> = {};
@@ -179,8 +187,8 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
   try {
     const db = await createDatabase(dbPath);
     await db.initialize();
-    const servers = await getAllActiveServerNames(db);
-    allRecords = await loadAllCallRecords(db, servers);
+    const servers = await getAllActiveServerNames(db, tenantId);
+    allRecords = await loadAllCallRecords(db, servers, tenantId);
     await db.close();
   } catch (err) {
     emptyReasons.traffic = `history.db: ${err instanceof Error ? err.message : String(err)}`;
@@ -233,7 +241,7 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
     emptyReasons.traffic = 'No proxied calls in window — use IDE MCP through Guardian proxy.';
   }
 
-  const attackState = loadAttackLearningState();
+  const attackState = loadAttackLearningState(tenantId);
   let instantLearning: VisualsDataBundle['instantLearning'] = {
     source: 'none',
     totalEvents: 0,
@@ -251,7 +259,7 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
     }
     pairs.sort((a, b) => b.count - a.count);
     let pending = 0;
-    const pendingPath = resolveAiPendingSuggestionsPath();
+    const pendingPath = resolveAiPendingSuggestionsPath(tenantId);
     if (existsSync(pendingPath)) {
       try {
         const raw = JSON.parse(readFileSync(pendingPath, 'utf-8')) as { suggestions?: unknown[] };
@@ -293,7 +301,7 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
     totals?: Record<string, number>;
     metrics?: { avgFlagConfidence?: number };
     sampleFlagged?: Array<{ confidence?: number; label?: string | null }>;
-  }>(join(SWARM_DIR, 'calibration.json'));
+  }>(join(swarmDir, 'calibration.json'));
 
   const confidenceBuckets = new Map<string, number>();
   const labelMix = new Map<string, number>();
@@ -312,15 +320,15 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
     emptyReasons.semantic = 'No calibration.json or empty semantic outcomes.';
   }
 
-  const latest = loadJsonSafe<Record<string, unknown>>(join(SWARM_DIR, 'latest.json'));
+  const latest = loadJsonSafe<Record<string, unknown>>(join(swarmDir, 'latest.json'));
   const corpus = loadJsonSafe<{ byCategory?: Array<{ category: string; recall: number; total: number }> }>(
     join(REPO_ROOT, 'corpus-eval-report.json'),
   );
   const userSession = loadJsonSafe<{ servers?: Array<{ serverName: string; status: string; toolCount?: number }> }>(
-    join(SWARM_DIR, 'user-servers-session.json'),
+    join(swarmDir, 'user-servers-session.json'),
   );
 
-  const job = loadJsonSafe<{ state?: string; phase?: string }>(join(SWARM_DIR, 'job.json'));
+  const job = loadJsonSafe<{ state?: string; phase?: string }>(join(swarmDir, 'job.json'));
   const phases = [
     { id: 'preflight', label: 'Preflight', progressPct: 5 },
     { id: 'live-mcp', label: 'Live MCP', progressPct: 25 },
@@ -335,6 +343,7 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
     windowDays,
     meta: {
       dbPath,
+      tenantId,
       hasTraffic: windowRecords.length > 0,
       hasInstantLearning: instantLearning.source === 'live',
       hasSemantic: semanticHas,
@@ -392,13 +401,21 @@ export async function buildVisualsData(opts: { windowDays?: number; dbPath?: str
   };
 }
 
-export async function writeVisualsData(opts?: { windowDays?: number; dbPath?: string }): Promise<VisualsDataBundle> {
-  mkdirSync(SWARM_DIR, { recursive: true });
-  const bundle = await buildVisualsData(opts);
-  writeFileSync(VISUALS_DATA_PATH, JSON.stringify(bundle, null, 2) + '\n', 'utf-8');
+export async function writeVisualsData(opts?: {
+  windowDays?: number;
+  dbPath?: string;
+  tenantId?: string;
+}): Promise<VisualsDataBundle> {
+  const tenantId = opts?.tenantId || DEFAULT_TENANT_ID;
+  const outDir = resolveTenantSwarmDir(tenantId);
+  mkdirSync(outDir, { recursive: true });
+  const bundle = await buildVisualsData({ ...opts, tenantId });
+  const path = join(outDir, 'visuals-data.json');
+  writeFileSync(path, JSON.stringify(bundle, null, 2) + '\n', 'utf-8');
   return bundle;
 }
 
-export function readVisualsData(): VisualsDataBundle | null {
-  return loadJsonSafe<VisualsDataBundle>(VISUALS_DATA_PATH);
+export function readVisualsData(tenantId?: string): VisualsDataBundle | null {
+  const path = join(getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID), 'visuals-data.json');
+  return loadJsonSafe<VisualsDataBundle>(path);
 }

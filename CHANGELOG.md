@@ -5,6 +5,14 @@ All notable changes to MCP Guardian will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Unified response security gate** — `gateToolResponseText()` (DLP, sync semantic, inspection) on stdio, HTTP, SSE, WebSocket, and streamable HTTP (`GUARDIAN_SEMANTIC_SYNC_RESPONSE`).
+- **Per-tenant semantic JSON** — `GUARDIAN_TENANT_SEMANTIC_JSON` overrides `syncResponse`, `asyncAudit`, `strict`, etc. per tenant.
+- **Audit hash chain** — `GUARDIAN_AUDIT_HASH_CHAIN` for policy audit + optional SIEM JSONL (`GUARDIAN_AUDIT_HASH_CHAIN_SIEM`).
+- **OIDC token introspection** — `GUARDIAN_OIDC_INTROSPECTION` (RFC 7662) after JWT verify.
+- **Redis token revocation** — cluster-wide denylist when `REDIS_URL` is set.
+- **mTLS hot-reload** — `getMtlsAgent()` + `MtlsCertWatcher` wired into HTTP/SSE proxies.
+- **Streamable HTTP upstream relay** — `GUARDIAN_STREAMABLE_HTTP_UPSTREAM_RELAY` with response gate and session rotation.
+- **Integration test config** — `vitest.integration.config.ts`; `pnpm test:integration` runs `tests/integration/**`.
 - **Dashboard RBAC** — roles `viewer`, `analyst`, `operator`, `admin`, `tenant-admin`; `GUARDIAN_DASHBOARD_ROLES` API key mapping; route guards in `dashboard-server.ts`; `POST /api/policy/test` for operators; tests `tests/auth/dashboard-rbac.test.ts`.
 - **Streaming response inspection** — `src/utils/streaming-inspector.ts` (64KB windows + overlap); wired to stdio/SSE/WS proxies; `GUARDIAN_SKIP_RESPONSE_SCAN` for trusted upstream.
 - **Local semantic fallback** — `src/ai/local-semantic-classifier.ts` heuristic risk 0–1 when no LLM API key; wired in `async-semantic-audit.ts`; `GUARDIAN_LOCAL_SEMANTIC` (default on without keys).
@@ -90,6 +98,28 @@ All notable changes to MCP Guardian will be documented in this file.
 | `GUARDIAN_BLOCKING_MODE` | `false` | Require DPoP on authenticated HTTP/SSE/WS |
 | `GUARDIAN_LEGACY_NO_DPOP` | `false` | Disable DPoP requirement for legacy clients |
 | `GUARDIAN_SPIFFE_SOCKET_PATH` | — | SPIFFE Workload API Unix socket |
+
+## [2.9.3] - 2026-05-22
+
+Seamless analysis platform and npm publish of post-2.9.2 dashboard work ([`6b445c6`](https://github.com/rudraneel93/mcp-guardian/commit/6b445c6)).
+
+### Added
+- **Enterprise deploy** — [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md), Helm [values-enterprise.yaml](deploy/helm/mcp-guardian/values-enterprise.yaml), `pnpm enterprise:preflight`, `pnpm enterprise:evidence-pack`.
+- **Enterprise roadmap** — [docs/ENTERPRISE_ROADMAP.md](docs/ENTERPRISE_ROADMAP.md) (v3 control plane, gateway, multi-region priorities).
+- **Solo onboarding** — `pnpm onboard` / `mcp-guardian onboard` wraps IDE MCP configs and patches Cursor/Cline settings.
+- **Dashboard SPA** — Setup, Agent flow, and Analysis tabs; WebSocket timeline; plain-English `report.json` inline; infrastructure visuals (`GET /api/visuals/live`, Recharts + matplotlib gallery).
+- **Security swarm analyze** — `pnpm security-swarm:analyze` orchestrator; `traffic-summary.json`, `visuals-data.json`, `plain-english-report.mjs`; `scripts/start-dashboard-proxy.sh`.
+- **Agent proxy traffic** — `pnpm agent:proxy-traffic` records benign filesystem MCP calls through Guardian for personalized reports.
+- **Live filesystem scenario** — `scenarios/real-life/run-official-filesystem-scenario.mjs`; CI workflows for corpus PR and semantic calibrate.
+
+### Fixed
+- **adv-066 allowlist bypass** — allowlisted tools re-check encoding + prompt-injection on arguments before `allowlist` pass ([`yaml-rules-strategy.ts`](src/policy/strategies/yaml-rules-strategy.ts)); regression [`tests/policy/allowlist-evasion.test.ts`](tests/policy/allowlist-evasion.test.ts).
+- **Plain-English report** — pass `visuals` into template builder (fixes crash when regenerating `report.json`).
+- **Dashboard proxy** — rebuild stale `dist` when dashboard API sources change; improved visuals API error messaging; timeline scroll confined to panel.
+
+### Changed
+- **README** — Start here, dashboard & seamless analysis, Security Swarm architecture diagram, expanded FAQ.
+- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.9.3** with root.
 
 ## [2.9.2] - 2026-05-22
 

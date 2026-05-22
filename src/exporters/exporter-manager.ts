@@ -1,5 +1,6 @@
 /** Manages all SIEM/observability exporters */
 import { Logger } from '../utils/logger.js';
+import { sendWithRetry, flushExporterDlq } from './exporter-dlq.js';
 
 export interface ExporterConfig {
   splunk?: { enabled: boolean; hecUrl: string; hecToken: string; index?: string };
@@ -103,10 +104,25 @@ export class ExporterManager {
     }
 
     Logger.info(`[ExporterManager] Started with ${count} exporters`);
+    if (process.env['GUARDIAN_EXPORTER_DLQ_FLUSH'] !== 'false') {
+      void this.flushDlq();
+    }
   }
 
   async export(event: { type: string; payload: any; timestamp: string }): Promise<void> {
-    await Promise.allSettled(this.exporters.map(e => e.send(event)));
+    await Promise.allSettled(
+      this.exporters.map((e) =>
+        sendWithRetry(e.name, () => e.send(event), event),
+      ),
+    );
+  }
+
+  async flushDlq(): Promise<number> {
+    const senders: Record<string, (ev: { type: string; payload: unknown; timestamp: string }) => Promise<void>> = {};
+    for (const e of this.exporters) {
+      senders[e.name] = (ev) => e.send(ev);
+    }
+    return flushExporterDlq(senders);
   }
 
   private async sendToSplunk(event: any): Promise<void> {
@@ -129,10 +145,10 @@ export class ExporterManager {
         signal: AbortSignal.timeout(5000),
       });
       if (!response.ok) {
-        Logger.debug(`[SplunkExporter] Send failed: HTTP ${response.status}`);
+        throw new Error(`HTTP ${response.status}`);
       }
-    } catch (err: any) {
-      Logger.debug(`[SplunkExporter] Send failed: ${err?.message}`);
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -145,21 +161,22 @@ export class ExporterManager {
         headers['Authorization'] = 'Basic ' + Buffer.from(`${cfg.username}:${cfg.password || ''}`).toString('base64');
       }
 
-      await fetch(`${cfg.url}/mcp-guardian-${new Date().toISOString().split('T')[0]}/_doc`, {
+      const res = await fetch(`${cfg.url}/mcp-guardian-${new Date().toISOString().split('T')[0]}/_doc`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ '@timestamp': event.timestamp, ...event }),
         signal: AbortSignal.timeout(5000),
       });
-    } catch (err: any) {
-      Logger.debug(`[ElasticExporter] Send failed: ${err?.message}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
   private async sendToDatadog(event: any): Promise<void> {
     const cfg = this.config.datadog!;
     try {
-      await fetch(`https://http-intake.logs.${cfg.site}/v1/input`, {
+      const res = await fetch(`https://http-intake.logs.${cfg.site}/v1/input`, {
         method: 'POST',
         headers: {
           'DD-API-KEY': cfg.apiKey,
@@ -175,15 +192,16 @@ export class ExporterManager {
         }),
         signal: AbortSignal.timeout(5000),
       });
-    } catch (err: any) {
-      Logger.debug(`[DatadogExporter] Send failed: ${err?.message}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
   private async sendToChronicle(event: any): Promise<void> {
     try {
       // Chronicle Ingestion API expects UDM format
-      await fetch('https://chronicle.googleapis.com/v1alpha/ingestion/events', {
+      const res = await fetch('https://chronicle.googleapis.com/v1alpha/ingestion/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,14 +216,15 @@ export class ExporterManager {
         }),
         signal: AbortSignal.timeout(5000),
       });
-    } catch (err: any) {
-      Logger.debug(`[ChronicleExporter] Send failed: ${err?.message}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
   private async sendToOtel(event: any): Promise<void> {
     try {
-      await fetch(this.config.otel!.endpoint, {
+      const res = await fetch(this.config.otel!.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -226,8 +245,9 @@ export class ExporterManager {
         }),
         signal: AbortSignal.timeout(5000),
       });
-    } catch (err: any) {
-      Logger.debug(`[OtelExporter] Send failed: ${err?.message}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 }

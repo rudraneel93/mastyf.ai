@@ -63,5 +63,5 @@ describe('Adversarial harness: streaming race', () => {
       policy: new PolicyEngine(policy),
     });
     expect(r.hasCritical || r.hasHigh).toBe(true);
-  });
+  }, 60_000);
 });

@@ -9,6 +9,7 @@ import * as jose from 'jose';
 import { AuthConfig, AuthValidationResult, AgentIdentity, OIDCDiscovery } from './auth-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { extractTenantFromJwtPayload } from '../tenant/jwt-tenant-binding.js';
+import { isBearerTokenRevoked } from './token-revocation.js';
 
 export class OAuthValidator {
   private config: AuthConfig;
@@ -94,17 +95,32 @@ export class OAuthValidator {
     try {
       // ═══ GAP 11: JWT algorithm pinning — prevents algorithm confusion attacks ═══
       const ALLOWED_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'PS256'];
+      const maxLifetimeSec = parseInt(
+        process.env['GUARDIAN_JWT_MAX_LIFETIME_SEC'] || '86400',
+        10,
+      );
       const { payload } = await jose.jwtVerify(token, this.jwks, {
         issuer: this.config.issuer,
         audience: this.config.audience,
         algorithms: ALLOWED_ALGORITHMS,
         clockTolerance: this.config.clockTolerance || 30,
+        maxTokenAge: Number.isFinite(maxLifetimeSec) && maxLifetimeSec > 0
+          ? `${maxLifetimeSec}s`
+          : '24h',
       });
 
       if (!payload.sub) {
         return { valid: false, error: 'JWT missing required sub claim' };
       }
       const payloadRecord = payload as Record<string, unknown>;
+      const jti = typeof payload.jti === 'string' ? payload.jti : undefined;
+      if (await isBearerTokenRevoked(token, jti)) {
+        return { valid: false, error: 'Token has been revoked' };
+      }
+      const introspect = await this.introspectTokenActive(token);
+      if (introspect === false) {
+        return { valid: false, error: 'Token inactive per OIDC introspection' };
+      }
       const identity: AgentIdentity = {
         sub: payload.sub,
         clientId: (payloadRecord.client_id as string) || (payloadRecord.azp as string),
@@ -117,6 +133,55 @@ export class OAuthValidator {
       return { valid: true, identity };
     } catch (err: any) {
       return { valid: false, error: `JWT validation failed: ${err?.message}` };
+    }
+  }
+
+  /**
+   * RFC 7662 token introspection when GUARDIAN_OIDC_INTROSPECTION=true.
+   * Returns true/false when introspection runs; null when skipped or unavailable.
+   */
+  private async introspectTokenActive(token: string): Promise<boolean | null> {
+    if (process.env['GUARDIAN_OIDC_INTROSPECTION'] !== 'true') return null;
+    try {
+      const discovery = await this.discover();
+      const endpoint = discovery.introspection_endpoint;
+      if (!endpoint) {
+        StructuredLogger.info({
+          event: 'oidc_introspection_skipped',
+          reason: 'no_introspection_endpoint',
+          issuer: this.config.issuer,
+        });
+        return null;
+      }
+      const clientId = process.env['GUARDIAN_OIDC_CLIENT_ID']?.trim();
+      const clientSecret = process.env['GUARDIAN_OIDC_CLIENT_SECRET']?.trim();
+      const body = new URLSearchParams({ token, token_type_hint: 'access_token' });
+      if (clientId) body.set('client_id', clientId);
+      if (clientSecret) body.set('client_secret', clientSecret);
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      if (!res.ok) {
+        StructuredLogger.logError({
+          event: 'oidc_introspection_error',
+          serverName: 'oauth',
+          error: `Introspection HTTP ${res.status}`,
+        });
+        return process.env['GUARDIAN_OIDC_INTROSPECTION_FAIL_OPEN'] === 'true' ? null : false;
+      }
+      const data = (await res.json()) as { active?: boolean };
+      return data.active === true;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      StructuredLogger.logError({
+        event: 'oidc_introspection_error',
+        serverName: 'oauth',
+        error: message,
+      });
+      return process.env['GUARDIAN_OIDC_INTROSPECTION_FAIL_OPEN'] === 'true' ? null : false;
     }
   }
 

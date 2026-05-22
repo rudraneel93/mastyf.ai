@@ -81,6 +81,18 @@ Prior passes: test-23, tests-25, adversarial-harness zip — see linked summarie
 2. **H-3 external Redlock npm package** — Quorum SET-NX across `GUARDIAN_DPOP_QUORUM_REDIS` nodes implemented natively; full Redlock library not required for single-region.
 3. **E2E MCP fixture integration** — `mcp-fixtures.test.ts` may flake when MCP subprocess unavailable in sandbox CI.
 
+## Post-findings enterprise slice (2026-05-22)
+
+| Capability | Status |
+|------------|--------|
+| Unified `gateToolResponseText` (stdio/HTTP/SSE/WS/streamable) | Shipped |
+| Sync semantic response + per-tenant `GUARDIAN_TENANT_SEMANTIC_JSON` | Shipped |
+| OIDC introspection + Redis token revocation | Shipped |
+| mTLS `getMtlsAgent()` hot-reload | Shipped |
+| Audit hash chain (policy + SIEM JSONL) | Shipped |
+| Streamable HTTP upstream relay | Shipped + `tests/integration/streamable-http-relay.test.ts` |
+| `pnpm test:integration` (51 tests) + corpus 154/154 | Verified |
+
 ---
 
 ## New env vars

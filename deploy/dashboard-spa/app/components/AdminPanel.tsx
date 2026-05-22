@@ -12,9 +12,10 @@ import { hasPermission } from '@/lib/dashboard-roles';
 
 type Props = {
   roles?: string[];
+  tenantLocked?: boolean;
 };
 
-export function AdminPanel({ roles }: Props) {
+export function AdminPanel({ roles, tenantLocked = false }: Props) {
   const canAdmin = hasPermission(roles, 'admin');
   const [tenantId, setTenantIdLocal] = useState('default');
   const [multiTenant, setMultiTenant] = useState(false);
@@ -48,17 +49,25 @@ export function AdminPanel({ roles }: Props) {
       <h2>Admin &amp; compliance</h2>
 
       <div className="session-bar">
-        <span className="tenant-inline">
-          Tenant ID:
-          <input
-            type="text"
-            value={tenantId}
-            onChange={(e) => setTenantIdLocal(e.target.value)}
-          />
-        </span>
-        <button type="button" className="secondary" onClick={applyTenant}>
-          Apply tenant &amp; reload
-        </button>
+        {tenantLocked ? (
+          <span>
+            Tenant ID: <strong>{tenantId}</strong> <span className="muted">(session-bound)</span>
+          </span>
+        ) : (
+          <>
+            <span className="tenant-inline">
+              Tenant ID:
+              <input
+                type="text"
+                value={tenantId}
+                onChange={(e) => setTenantIdLocal(e.target.value)}
+              />
+            </span>
+            <button type="button" className="secondary" onClick={applyTenant}>
+              Apply tenant &amp; reload
+            </button>
+          </>
+        )}
         {multiTenant ? <span className="muted">Multi-tenant mode on</span> : null}
       </div>
 

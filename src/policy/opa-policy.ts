@@ -36,6 +36,23 @@ export function resetOpaCacheForTests(): void {
   opaCache.clear();
 }
 
+/** Validate OPA decision document: { allow: boolean, reason?: string }. */
+export function parseOpaResult(
+  result: unknown,
+): { ok: true; allow: boolean; reason?: string } | { ok: false; error: string } {
+  if (result == null || typeof result !== 'object') {
+    return { ok: false, error: 'result is not an object' };
+  }
+  const r = result as Record<string, unknown>;
+  if (typeof r.allow !== 'boolean') {
+    return { ok: false, error: 'allow must be boolean' };
+  }
+  if (r.reason != null && typeof r.reason !== 'string') {
+    return { ok: false, error: 'reason must be string when present' };
+  }
+  return { ok: true, allow: r.allow, reason: r.reason as string | undefined };
+}
+
 /** Returns a block decision only — never a pass. YAML runs when this returns null. */
 export async function evaluateOpaPolicy(ctx: CallContext): Promise<PolicyDecision | null> {
   const opaUrl = process.env['OPA_URL'];
@@ -62,12 +79,18 @@ export async function evaluateOpaPolicy(ctx: CallContext): Promise<PolicyDecisio
       Logger.warn(`[opa] evaluation failed: HTTP ${res.status}`);
       decision = null;
     } else {
-      const data = (await res.json()) as { result?: { allow?: boolean; reason?: string } };
-      if (data.result?.allow === false) {
+      const data = (await res.json()) as { result?: unknown };
+      const parsed = parseOpaResult(data.result);
+      if (!parsed.ok) {
+        Logger.warn(`[opa] invalid result shape: ${parsed.error}`);
+        decision = process.env['GUARDIAN_STRICT_MODE'] === 'true'
+          ? { action: 'block', rule: 'opa', reason: 'OPA returned invalid result shape' }
+          : null;
+      } else if (parsed.allow === false) {
         decision = {
           action: 'block',
           rule: 'opa',
-          reason: data.result.reason || 'Denied by OPA policy',
+          reason: parsed.reason || 'Denied by OPA policy',
         };
       }
     }

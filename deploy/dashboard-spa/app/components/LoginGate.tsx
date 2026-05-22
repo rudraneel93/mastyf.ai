@@ -134,15 +134,21 @@ export function LoginGate({ children, onAuthenticated }: Props) {
             Signed in as <strong>{status.identity || 'operator'}</strong>
             {status.roles?.length ? ` (${status.roles.join(', ')})` : ''}
           </span>
-          <span className="tenant-inline">
-            Tenant:
-            <input
-              type="text"
-              value={tenant}
-              onChange={(ev) => setTenant(ev.target.value)}
-              onBlur={() => setTenantId(tenant)}
-            />
-          </span>
+          {status.tenantLocked ? (
+            <span>
+              Tenant: <strong>{status.sessionTenantId || tenant}</strong>
+            </span>
+          ) : (
+            <span className="tenant-inline">
+              Tenant:
+              <input
+                type="text"
+                value={tenant}
+                onChange={(ev) => setTenant(ev.target.value)}
+                onBlur={() => setTenantId(tenant)}
+              />
+            </span>
+          )}
           <button type="button" className="secondary" onClick={() => void onLogout()}>
             Sign out
           </button>

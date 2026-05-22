@@ -14,5 +14,5 @@ export function getWsBroadcaster(): WsBroadcaster | null {
 }
 
 export function broadcastDashboardEvent(event: DashboardEvent): void {
-  broadcaster?.broadcast(event);
+  broadcaster?.broadcast(event, event.tenantId);
 }

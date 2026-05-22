@@ -12,7 +12,8 @@ import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
 import { createSessionCache, validateSessionToken, type GuardianSessionCache } from '../auth/session-factory.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
-import { MtlsConfig, createMtlsAgent } from '../utils/mtls-config.js';
+import type { MtlsConfig } from '../utils/mtls-config.js';
+import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import * as Metrics from '../utils/metrics.js';
 import { Logger } from '../utils/logger.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
@@ -28,6 +29,9 @@ import {
   validateRequestUrlPath,
   validateResponseHeaders,
 } from './http-proxy-security.js';
+import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -44,7 +48,6 @@ export class HttpProxyServer {
   private db: HistoryDatabase;
   private port: number;
   private server: ReturnType<typeof createServer> | null = null;
-  private httpsAgent: HttpsAgent | undefined;
 
   constructor(
     targetUrl: string,
@@ -64,9 +67,10 @@ export class HttpProxyServer {
     this.tokenCounter = new TokenCounter();
     this.db = db || new HistoryDatabase(':memory:');
     this.port = port;
-    this.httpsAgent = createMtlsAgent(mtlsConfig || { enabled: false, rejectUnauthorized: true });
+    void mtlsConfig;
+    getMtlsAgent();
     Metrics.circuitBreakerState.set({ server_name: this.serverName }, 0);
-    if (this.httpsAgent) {
+    if (getMtlsAgent()) {
       Logger.info(`[http-proxy:${this.serverName}] mTLS enabled for upstream connection`);
     }
   }
@@ -131,6 +135,7 @@ export class HttpProxyServer {
     // ── Auth check ───────────────────────────────────────────
     let agentIdentity: AgentIdentity | undefined;
     let authnSuccess = false;
+    let rotatedSessionToken: string | undefined;
 
     if (this.authValidator) {
       const authHeader = req.headers['authorization'];
@@ -149,6 +154,7 @@ export class HttpProxyServer {
           if (sessionResult) {
             result = { valid: true, identity: sessionResult.identity };
             if (sessionResult.rotatedToken) {
+              rotatedSessionToken = sessionResult.rotatedToken;
               res.setHeader('x-mcp-guardian-session-token', sessionResult.rotatedToken);
             }
           }
@@ -238,6 +244,9 @@ export class HttpProxyServer {
       }
     }
 
+    let toolsCallId: string | number | undefined;
+    let toolsCallName: string | undefined;
+
     // ── Policy evaluation (if tools/call) ────────────────────
     if (this.policyEngine) {
       try {
@@ -252,6 +261,10 @@ export class HttpProxyServer {
         };
         if (msg.method === 'tools/call') {
           const toolName = msg.params?.name || 'unknown';
+          if (msg.id != null) {
+            toolsCallId = msg.id as string | number;
+            toolsCallName = toolName;
+          }
           const tokens = this.tokenCounter.count(body);
 
           const context: CallContext = {
@@ -302,8 +315,9 @@ export class HttpProxyServer {
       };
 
       // Attach mTLS agent for HTTPS connections
-      if (isHttps && this.httpsAgent) {
-        reqOpts.agent = this.httpsAgent;
+      const agent = getMtlsAgent();
+      if (isHttps && agent) {
+        reqOpts.agent = agent;
       }
 
       const proxyReq = (isHttps ? httpsReq : httpReq)(reqOpts, (upstreamRes) => {
@@ -324,15 +338,107 @@ export class HttpProxyServer {
         }
         const safeHeaders = { ...upstreamRes.headers } as Record<string, string | string[] | undefined>;
         applySafeCorsHeaders(req.headers, safeHeaders);
-        res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
-        upstreamRes.pipe(res);
-        // Record success on 'end', not when headers arrive — avoids false success on mid-stream drops
-        upstreamRes.on('end', () => {
+        const gateResponse = toolsCallId != null && toolsCallName != null;
+
+        const recordSuccess = () => {
           tenantBreaker.recordSuccess();
-          Metrics.circuitBreakerState.set({ server_name: this.serverName }, tenantBreaker.getState() === 'OPEN' ? 1 : 0);
+          Metrics.circuitBreakerState.set(
+            { server_name: this.serverName },
+            tenantBreaker.getState() === 'OPEN' ? 1 : 0,
+          );
           Metrics.proxyLatencyMs.observe({ server_name: this.serverName }, Date.now() - start);
-          Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'pass', authn_success: String(authnSuccess) });
+          Metrics.requestsTotal.inc({
+            server_name: this.serverName,
+            decision: 'pass',
+            authn_success: String(authnSuccess),
+          });
+        };
+
+        if (!gateResponse) {
+          res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
+          upstreamRes.pipe(res);
+          upstreamRes.on('end', recordSuccess);
+          upstreamRes.on('error', () => {
+            tenantBreaker.recordFailure();
+            Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
+          });
+          return;
+        }
+
+        const respChunks: Buffer[] = [];
+        let respSize = 0;
+        upstreamRes.on('data', (chunk: Buffer) => {
+          respSize += chunk.length;
+          if (respSize > MAX_BODY_SIZE) {
+            upstreamRes.destroy();
+            if (!res.headersSent) {
+              res.writeHead(413, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Upstream response too large' }));
+            }
+            tenantBreaker.recordFailure();
+            return;
+          }
+          respChunks.push(chunk);
         });
+
+        upstreamRes.on('end', () => {
+          void (async () => {
+            try {
+              const raw = Buffer.concat(respChunks).toString();
+              let outbound = raw;
+              const parsed = parseJsonWithDepthLimit(raw);
+              if (parsed.ok) {
+                const msg = parsed.value as Record<string, unknown>;
+                const blocked = await this.inspectToolResponse(
+                  toolsCallName!,
+                  msg,
+                  toolsCallId!,
+                  requestTenantId,
+                );
+                if (blocked) {
+                  if (!res.headersSent) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(blocked));
+                  }
+                  Metrics.blockedRequestsTotal.inc({
+                    server_name: this.serverName,
+                    block_reason: 'response_gate',
+                    rule: 'response-gate',
+                  });
+                  Metrics.requestsTotal.inc({
+                    server_name: this.serverName,
+                    decision: 'block',
+                    authn_success: String(authnSuccess),
+                  });
+                  return;
+                }
+                injectRotatedSessionIntoResult(msg, rotatedSessionToken);
+                outbound = JSON.stringify(msg);
+              }
+              if (rotatedSessionToken) {
+                res.setHeader('x-mcp-guardian-session-token', rotatedSessionToken);
+              }
+              delete safeHeaders['content-length'];
+              delete safeHeaders['Content-Length'];
+              delete safeHeaders['transfer-encoding'];
+              delete safeHeaders['Transfer-Encoding'];
+              safeHeaders['content-length'] = String(Buffer.byteLength(outbound));
+              if (!res.headersSent) {
+                res.writeHead(upstreamRes.statusCode || 200, safeHeaders);
+              }
+              res.end(outbound);
+              recordSuccess();
+            } catch (err: unknown) {
+              tenantBreaker.recordFailure();
+              const message = err instanceof Error ? err.message : String(err);
+              if (!res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Response gate error: ${message}` }));
+              }
+            }
+          })();
+        });
+
         upstreamRes.on('error', () => {
           tenantBreaker.recordFailure();
           Metrics.circuitBreakerState.set({ server_name: this.serverName }, 1);
@@ -367,6 +473,61 @@ export class HttpProxyServer {
         res.end(JSON.stringify({ error: `Proxy error: ${err.message}` }));
       }
     }
+  }
+
+  private async inspectToolResponse(
+    toolName: string,
+    response: Record<string, unknown>,
+    requestId: string | number,
+    tenantId?: string,
+  ): Promise<Record<string, unknown> | null> {
+    const result = (response as { result?: unknown }).result;
+    if (result == null || isResponseScanSkipped()) return null;
+
+    const responseText = JSON.stringify(result);
+    const gate = await gateToolResponseText({
+      responseText,
+      toolName,
+      serverName: this.serverName,
+      policy: this.policyEngine,
+      requestId,
+      tenantId,
+    });
+    const inspect = gate.inspect;
+    if (inspect && !inspect.clean) {
+      const allMessages = findingsToMessages(inspect.findings);
+      Logger.warn(
+        `[http-proxy:${this.serverName}] Suspicious response from '${toolName}': ${allMessages.slice(0, 5).join('; ')}`,
+      );
+      StructuredLogger.info({
+        event: 'response_flagged',
+        serverName: this.serverName,
+        toolName,
+        detections: allMessages,
+        blocked: gate.outcome.action === 'block',
+      });
+    }
+
+    if (gate.outcome.action === 'redact' && gate.outcome.body) {
+      try {
+        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+      } catch {
+        /* keep upstream */
+      }
+      return null;
+    }
+
+    if (gate.outcome.action === 'block') {
+      return {
+        jsonrpc: '2.0',
+        id: requestId,
+        error: {
+          code: -32002,
+          message: gate.outcome.message,
+        },
+      };
+    }
+    return null;
   }
 
   getPort(): number {

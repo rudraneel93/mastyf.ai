@@ -31,11 +31,8 @@ import {
   reportSemanticDegradation,
 } from '../utils/semantic-layer.js';
 import { isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
-import {
-  findingsToMessages,
-  inspectFullResponse,
-  isResponseScanSkipped,
-} from '../utils/streaming-inspector.js';
+import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
+import { gateToolResponseText } from '../utils/response-security-gate.js';
 import {
   flowSessionKey,
   recordSessionToolCall,
@@ -54,6 +51,8 @@ import {
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
+import { publishRugPullAlert, isClusterRugPullActive } from './rug-pull-cluster.js';
+import { resolveToolTimeoutMs } from '../utils/tool-timeout.js';
 import type { HistoryDatabase } from '../database/history-db.js';
 import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js';
 import { extractDpopProof, validateRequiredDpop } from '../auth/dpop-enforcement.js';
@@ -213,6 +212,15 @@ export class McpProxyServer {
   private setupStdout(): void {
     const rl = createInterface({ input: this.child.stdout! });
     rl.on('line', (line: string) => {
+      void this.handleStdoutLine(line);
+    });
+
+    rl.on('close', () => {
+      Logger.debug(`[proxy:${this.serverName}] stdout closed`);
+    });
+  }
+
+  private async handleStdoutLine(line: string): Promise<void> {
       try {
         const msg = JSON.parse(line);
 
@@ -233,6 +241,7 @@ export class McpProxyServer {
             const alert = `[proxy:${this.serverName}] 🚨 RUG-PULL DETECTED (OWASP MCP03): tool definitions changed mid-session. Previous fingerprint: ${prev}, New: ${hash}. Server may have been compromised.`;
             Logger.error(alert);
             this.rugPullBlocked = true;
+            void publishRugPullAlert(this.serverName, this.defaultTenantId, hash);
             StructuredLogger.info({
               event: 'rug_pull_detected' as any,
               serverName: this.serverName,
@@ -306,27 +315,27 @@ export class McpProxyServer {
             proxyLatencyMs,
           });
 
-          // ── v2.5+: Chunked response inspection (PI / secrets / exfil) ──
           if (msg?.result && !isResponseScanSkipped()) {
             const responseText = JSON.stringify(msg.result);
-            const inspect = inspectFullResponse(responseText, {
+            const gate = await gateToolResponseText({
+              responseText,
               toolName: reqCtx.requestToolName || 'unknown',
               serverName: this.serverName,
               policy: this.policyEngine,
+              requestId: msg.id,
+              tenantId: reqCtx.tenantId,
             });
+            const inspect = gate.inspect;
+            const policyMode = this.policyEngine?.getMode() ?? 'audit';
 
-            const hasCritical = inspect.hasCritical;
-            const hasHigh = inspect.hasHigh;
-            const hasDetections = !inspect.clean;
-
-            if (hasDetections) {
+            if (inspect && !inspect.clean) {
               const allMessages = findingsToMessages(inspect.findings);
-
+              const hasCritical = inspect.hasCritical;
+              const hasHigh = inspect.hasHigh;
               Logger.warn(
                 `[proxy:${this.serverName}] Suspicious response from '${reqCtx.requestToolName}': ${allMessages.slice(0, 5).join('; ')}` +
                 (allMessages.length > 5 ? `... (+${allMessages.length - 5} more)` : '')
               );
-
               StructuredLogger.info({
                 event: 'response_flagged',
                 serverName: this.serverName,
@@ -334,35 +343,39 @@ export class McpProxyServer {
                 detections: allMessages,
                 criticalCount: inspect.findings.filter((f) => f.severity === 'critical').length,
                 highCount: inspect.findings.filter((f) => f.severity === 'high').length,
-                blocked: (hasCritical || hasHigh) && this.policyEngine?.getMode() === 'block',
+                blocked: gate.outcome.action === 'block',
                 requestId: msg.id,
               });
-
               Metrics.injectionDetectedTotal?.inc({
                 server_name: this.serverName,
                 severity: hasCritical ? 'critical' : 'high',
               });
+              if (inspect.hasCritical || inspect.hasHigh) {
+                recordSensitiveResponseAccess(
+                  flowSessionKey({
+                    serverName: this.serverName,
+                    toolName: reqCtx.requestToolName || 'unknown',
+                    requestId: String(msg.id),
+                    requestTokens: reqCtx.requestTokens,
+                    timestamp: new Date().toISOString(),
+                    tenantId: reqCtx.tenantId,
+                    agentIdentity: reqCtx.agentIdentity,
+                  } as CallContext),
+                  reqCtx.requestToolName || 'unknown',
+                );
+              }
             }
 
-            // ═══ BLOCK response forwarding when policy is in block mode ═══
-            const policyMode = this.policyEngine?.getMode() ?? 'audit';
-            if (!inspect.clean && (inspect.hasCritical || inspect.hasHigh)) {
-              recordSensitiveResponseAccess(
-                flowSessionKey({
-                  serverName: this.serverName,
-                  toolName: reqCtx.requestToolName || 'unknown',
-                  requestId: String(msg.id),
-                  requestTokens: reqCtx.requestTokens,
-                  timestamp: new Date().toISOString(),
-                  tenantId: reqCtx.tenantId,
-                  agentIdentity: reqCtx.agentIdentity,
-                } as CallContext),
-                reqCtx.requestToolName || 'unknown',
-              );
+            if (gate.outcome.action === 'redact') {
+              try {
+                msg.result = JSON.parse(gate.outcome.body);
+                line = JSON.stringify(msg);
+              } catch {
+                /* keep upstream */
+              }
             }
 
-            if ((hasCritical || hasHigh) && policyMode === 'block') {
-              // Record as blocked
+            if (gate.outcome.action === 'block' && policyMode === 'block') {
               const blockedRecord: ProxyCallRecord = {
                 serverName: this.serverName,
                 toolName: reqCtx.requestToolName || 'unknown',
@@ -374,7 +387,7 @@ export class McpProxyServer {
               };
               persistCallRecord(
                 this.db,
-                { ...blockedRecord, blocked: true, blockRule: 'response-inspection' },
+                { ...blockedRecord, blocked: true, blockRule: gate.outcome.rule },
                 undefined,
                 this.spawnEnv,
                 this.spawnArgs,
@@ -383,8 +396,8 @@ export class McpProxyServer {
                 Metrics.withTenantMetricLabels(
                   {
                     server_name: this.serverName,
-                    block_reason: hasCritical ? 'response_injection_critical' : 'response_injection_high',
-                    rule: 'response-inspection',
+                    block_reason: gate.outcome.rule,
+                    rule: gate.outcome.rule,
                   },
                   reqCtx.tenantId,
                 ),
@@ -395,17 +408,10 @@ export class McpProxyServer {
                   reqCtx.tenantId,
                 ),
               );
-
-              // Send error response instead of the malicious upstream response
-              const blockSummary = findingsToMessages(inspect.findings).slice(0, 3).join('; ');
-              this.sendError(
-                msg.id,
-                -32002,
-                `MCP Guardian: Tool response blocked by output DLP — ${blockSummary || 'sensitive data in response'}`,
-              );
+              this.sendError(msg.id, -32002, gate.outcome.message);
               this.requestContexts.delete(msg.id);
               this.currentRequestId = null;
-              return; // ❌ Do NOT forward the malicious response to the AI client
+              return;
             }
           }
 
@@ -421,14 +427,23 @@ export class McpProxyServer {
           this.currentRequestId = null;
         }
         process.stdout.write(line + '\n');
-      } catch {
-        process.stdout.write(line + '\n');
+      } catch (parseErr: unknown) {
+        if (this.currentRequestId != null) {
+          const rid = this.currentRequestId;
+          this.sendError(
+            rid,
+            -32700,
+            `MCP Guardian: malformed JSON from upstream MCP server`,
+          );
+          this.requestContexts.delete(rid);
+          this.currentRequestId = null;
+        } else {
+          process.stdout.write(line + '\n');
+        }
+        Logger.debug(
+          `[proxy:${this.serverName}] Non-JSON stdout line: ${parseErr instanceof Error ? parseErr.message : 'parse error'}`,
+        );
       }
-    });
-
-    rl.on('close', () => {
-      Logger.debug(`[proxy:${this.serverName}] stdout closed`);
-    });
   }
 
   private setupStderr(): void {
@@ -460,7 +475,8 @@ export class McpProxyServer {
       if (this.currentRequestId !== requestId) return;
       const reqCtx = this.requestContexts.get(requestId);
       const durationMs = Date.now() - (reqCtx?.requestStartTime ?? Date.now());
-      const reason = `Upstream request timed out after ${this.requestTimeoutMs}ms`;
+      const timeoutMs = resolveToolTimeoutMs(toolName, this.requestTimeoutMs);
+      const reason = `Upstream request timed out after ${timeoutMs}ms`;
       this.recordDeniedCall(toolName, reqCtx?.requestTokens ?? 0, durationMs, 'request-timeout', reason, undefined, reqCtx?.tenantId);
       this.breakerFor(reqCtx?.tenantId || this.defaultTenantId).recordFailure();
       Metrics.blockedRequestsTotal.inc({
@@ -484,7 +500,7 @@ export class McpProxyServer {
       this.sendError(requestId, -32006, `MCP Guardian: ${reason}`, { rule: 'request-timeout' });
       this.requestContexts.delete(requestId);
       this.currentRequestId = null;
-    }, this.requestTimeoutMs);
+    }, resolveToolTimeoutMs(toolName, this.requestTimeoutMs));
   }
 
   private recordDeniedCall(
@@ -570,7 +586,16 @@ export class McpProxyServer {
       }
 
       if (msg.method === 'tools/call' && msg.id) {
-        if (this.rugPullBlocked) {
+        const meta = msg.params?._meta as Record<string, unknown> | undefined;
+        const tenantForRug = resolveProxyTenantId({
+          meta,
+          authenticated: false,
+          jwtTenantId: this.defaultTenantId,
+        });
+        if (
+          this.rugPullBlocked
+          || (await isClusterRugPullActive(this.serverName, tenantForRug))
+        ) {
           const toolName = msg.params?.name || 'unknown';
           this.recordDeniedCall(
             toolName,
@@ -928,12 +953,12 @@ export class McpProxyServer {
             return;
           }
 
-          if (isSemanticAsyncEnabled() && !isSemanticLlmConfigured()) {
+          if (isSemanticAsyncEnabled(context.tenantId) && !isSemanticLlmConfigured()) {
             reportSemanticDegradation('llm_unavailable', {
               serverName: this.serverName,
               toolName,
             });
-            if (isSemanticStrictMode()) {
+            if (isSemanticStrictMode(context.tenantId)) {
               this.recordDeniedCall(
                 toolName,
                 requestTokens,

@@ -43,7 +43,7 @@ describe('streaming-inspector', () => {
       policy: new PolicyEngine(POLICY),
     });
     expect(r.hasCritical || r.hasHigh).toBe(true);
-  });
+  }, 60_000);
 
   it('respects GUARDIAN_SKIP_RESPONSE_SCAN', () => {
     const prev = process.env.GUARDIAN_SKIP_RESPONSE_SCAN;

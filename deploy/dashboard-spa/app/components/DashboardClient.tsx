@@ -26,7 +26,9 @@ import { SwarmPanel } from './SwarmPanel';
 import { AiLearningPanel } from './AiLearningPanel';
 import { PolicyPanel } from './PolicyPanel';
 import { AdminPanel } from './AdminPanel';
+import { TenantContextBar } from './TenantContextBar';
 import { hasPermission } from '@/lib/dashboard-roles';
+import type { AuthStatus } from '@/lib/guardian-api';
 
 type TabId =
   | 'setup'
@@ -77,6 +79,7 @@ export function DashboardClient() {
   const [actionMsg, setActionMsg] = useState('');
   const [sessionKey, setSessionKey] = useState(0);
   const [roles, setRoles] = useState<string[]>([]);
+  const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [auditAction, setAuditAction] = useState('');
   const [auditServer, setAuditServer] = useState('');
 
@@ -117,7 +120,10 @@ export function DashboardClient() {
           fetchFleetInstances(),
           fetchAuthStatus(),
         ]);
-      if (authRes?.roles) setRoles(authRes.roles);
+      if (authRes) {
+        setAuthStatus(authRes);
+        if (authRes.roles) setRoles(authRes.roles);
+      }
 
       if (!auditRes && !costRes) {
         pollFailuresRef.current += 1;
@@ -220,6 +226,7 @@ export function DashboardClient() {
           {status}
         </p>
         <p className="subtitle">Data-authentic agentic SOC — metrics from real proxy call_records</p>
+        <TenantContextBar authStatus={authStatus} />
       </header>
 
       {apiUnreachable && <MotionlessBanner />}
@@ -445,7 +452,9 @@ export function DashboardClient() {
         <SwarmPanel pipeline={ws.pipeline} swarmDoneTick={ws.swarmDoneTick} />
       )}
 
-      {tab === 'admin' && <AdminPanel roles={roles} />}
+      {tab === 'admin' && (
+        <AdminPanel roles={roles} tenantLocked={!!authStatus?.tenantLocked} />
+      )}
 
       {tab === 'fleet' && (
         <section>

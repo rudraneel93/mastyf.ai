@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fetchSwarmStatus,
+  getTenantId,
   resolveWsUrl,
   type AggregateMetrics,
   type AuditEvent,
@@ -360,6 +361,7 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
           JSON.stringify({
             type: 'subscribe',
             channels: ['flow', 'policy', 'health', 'metrics', 'audit', 'ai', 'cost', 'swarm'],
+            tenantId: getTenantId(),
           }),
         );
       };
