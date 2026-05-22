@@ -4,7 +4,22 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+## [2.9.4] - 2026-05-22
+
+Enterprise multi-tenant hardening release on npm — CI stability fixes and compliance evidence pack.
+
 ### Added
+- **Enterprise compliance pack** — `reports/compliance-pack/` with summary and manifest; `pnpm enterprise:compliance-report`.
+- **Dedicated harness vitest config** — `vitest.harness.config.ts` for Security Swarm node tests (separate from main `pnpm test`).
+
+### Fixed
+- **CI vitest worker RPC timeout** — exclude `adversarial-harness/**` from default vitest suite; long harness tests run via `pnpm harness:node` / Security Swarm only.
+- **Sanitize symlink test** — use `/usr/bin/true` target (not `/etc/passwd`, which is allowlisted).
+- **Streaming inspector CI flakes** — 90s test timeout; harness streaming-race aligned.
+
+### Changed
+- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.9.4** with root.
+
 - **Unified response security gate** — `gateToolResponseText()` (DLP, sync semantic, inspection) on stdio, HTTP, SSE, WebSocket, and streamable HTTP (`GUARDIAN_SEMANTIC_SYNC_RESPONSE`).
 - **Per-tenant semantic JSON** — `GUARDIAN_TENANT_SEMANTIC_JSON` overrides `syncResponse`, `asyncAudit`, `strict`, etc. per tenant.
 - **Audit hash chain** — `GUARDIAN_AUDIT_HASH_CHAIN` for policy audit + optional SIEM JSONL (`GUARDIAN_AUDIT_HASH_CHAIN_SIEM`).
@@ -71,9 +86,6 @@ All notable changes to MCP Guardian will be documented in this file.
 - **HTTP proxy method forwarding** — `packages/server/src/http-proxy.ts` preserves client HTTP method for non-JSON and non-`tools/call` bodies (GET/stream regression).
 - **Cost auditor empty DB** — distinguishes no `call_records` for server vs empty database; points to `run-live-proxy-test.mjs`.
 - **Health probes** — `GUARDIAN_HEALTH_PROBE_RETRIES` (default 2 retries) + `GUARDIAN_HEALTH_PROBE_TIMEOUT_MS` for `McpClient.probe`.
-
-### Changed
-- **Workspace versions** — `@mcp-guardian/core`, `@mcp-guardian/server`, `@mcp-guardian/cli` aligned to **2.8.4** with root; `@mcp-guardian/plugin-sdk` remains **3.0.0** (independent semver).
 
 ### Environment
 | Variable | Default | Purpose |

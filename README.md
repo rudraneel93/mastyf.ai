@@ -23,7 +23,7 @@ Evidence is split into four layers — use the right source when quoting numbers
 
 **Enterprise findings (May 2026 sim)** — **17/17** items closed in **2.9.2** ([`reports/enterprise-findings-fixes/summary.md`](reports/enterprise-findings-fixes/summary.md)); original list in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md).
 
-**v2.9.3 (enterprise multi-tenant hardening)** — unified **response security gate** on all transports (stdio / HTTP / SSE / WebSocket / streamable HTTP), **JWT-bound multi-tenant** dashboard + proxy isolation, **OIDC introspection** + Redis **token revocation**, **audit hash chain**, **mTLS hot-reload**, mock-free **MCP echo fixtures** for integration tests, and CI **Enterprise Preflight** job (Redis + Postgres). Deploy: [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) · pilot: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md). Open PR: [#15](https://github.com/rudraneel93/mcp-guardian/pull/15).
+**v2.9.4 (enterprise multi-tenant hardening)** — unified **response security gate** on all transports (stdio / HTTP / SSE / WebSocket / streamable HTTP), **JWT-bound multi-tenant** dashboard + proxy isolation, **OIDC introspection** + Redis **token revocation**, **audit hash chain**, **mTLS hot-reload**, mock-free **MCP echo fixtures** for integration tests, and CI **Enterprise Preflight** job (Redis + Postgres). Deploy: [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) · pilot: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
 
 **M-2 prompt injection** — sync regex path is the default; enable **`GUARDIAN_SEMANTIC_ASYNC`** for tier-2 LLM semantic audit on high-risk deployments ([`docs/AI_LEARNING.md`](docs/AI_LEARNING.md)).
 
