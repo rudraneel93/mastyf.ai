@@ -25,6 +25,8 @@ Evidence is split into four layers — use the right source when quoting numbers
 
 **v2.9.4 (enterprise multi-tenant hardening)** — unified **response security gate** on all transports (stdio / HTTP / SSE / WebSocket / streamable HTTP), **JWT-bound multi-tenant** dashboard + proxy isolation, **OIDC introspection** + Redis **token revocation**, **audit hash chain**, **mTLS hot-reload**, mock-free **MCP echo fixtures** for integration tests, and CI **Enterprise Preflight** job (Redis + Postgres). Deploy: [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) · pilot: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
 
+**Latest (main, post-2.9.6)** — dashboard serves **live data only** (APIs return `{ available: true/false }` — no fake zeros or committed report fallbacks); **ThreatIntel** polls live feeds into `~/.mcp-guardian/.threat-state.json` (SPA + `GET /api/ai/threats`); security-swarm artifacts are **tenant-scoped** at `reports/tenants/{tenantId}/security-swarm/` (opt-in legacy: `GUARDIAN_SWARM_USE_LEGACY_ARTIFACTS=true`); **`pnpm dashboard:proxy`** auto-picks a single-server config from `guardian-configs/`; **`pnpm real-life:continuous`** runs a long-lived Ollama/hybrid attack stream for block-rate validation; free OSS **cloud control plane** at `apps/cloud` ([docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)).
+
 **M-2 prompt injection** — sync regex path is the default; enable **`GUARDIAN_SEMANTIC_ASYNC`** for tier-2 LLM semantic audit on high-risk deployments ([`docs/AI_LEARNING.md`](docs/AI_LEARNING.md)).
 
 **v2.9.2** leads with **CI-gated adversarial harness** evidence (**154/154** corpus, **84/85** evasion, **adv-066** tracked), **four-layer README evidence** (repo eval vs harness vs enterprise sim vs SCA), and **[enterprise attack-sim](reports/enterprise-attack-sim/)** reports; adds the **seamless analysis platform** (solo `pnpm onboard`, dashboard Setup/Agent flow/Analysis tabs, plain-English `report.json`, live infrastructure visuals from `history.db`, personalized traffic summary). Continues per-block instant attack learning, dashboard RBAC, streaming response inspection, and bounded audit queue. See [CHANGELOG.md](CHANGELOG.md).
@@ -125,10 +127,10 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.9.5** fixes npm tarball smoke (plugin-sdk prepack), publish workflow build order, and CI coverage gates; adds staging docker-compose, migration script, and pilot JWT helper. **2.9.4** adds **enterprise multi-tenant hardening**: per-tenant JWT binding, response DLP gate on every transport, streamable HTTP upstream relay, session rotation, compliance/evidence scripts, and **54** integration tests with real echo upstreams (no mock MCP servers). **2.9.2** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+**Latest main** adds **live-only dashboard data**, **tenant-scoped security-swarm artifacts**, **ThreatIntel polling** in the SPA, a **continuous live attack runner** (`pnpm real-life:continuous`), and the free OSS **cloud control plane** (`apps/cloud`). **2.9.6** fixes publish workflow build order and npm tarball smoke. **2.9.5** adds staging docker-compose, migration script, and pilot JWT helper. **2.9.4** adds **enterprise multi-tenant hardening**: per-tenant JWT binding, response DLP gate on every transport, streamable HTTP upstream relay, session rotation, compliance/evidence scripts, and **54** integration tests with real echo upstreams (no mock MCP servers). **2.9.2** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC**, **browser SPA** (`deploy/dashboard-spa/`), **streaming response inspection**, **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** + **audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit + **local semantic fallback**, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E + **comprehensive harness**, **instant + batch AI learning** (quorum/drift/rollback), [enterprise attack sim](reports/enterprise-attack-sim/README.md) (synthetic), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
+> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC**, **browser SPA** (`deploy/dashboard-spa/`) with **live-only metrics** (no demo/stale fallbacks), **ThreatIntel polling**, **tenant-scoped swarm artifacts**, **streaming response inspection**, **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** + **audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit + **local semantic fallback**, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E + **comprehensive harness**, **instant + batch AI learning** (quorum/drift/rollback), [enterprise attack sim](reports/enterprise-attack-sim/README.md) (synthetic), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
 > **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline.
 
 ### Production blockers (v2.8.0 — all resolved)
@@ -371,7 +373,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Live JSON-RPC probes** — Latency, success rate, tool count
 - **Circuit breaker** — CLOSED / OPEN / HALF_OPEN
 - **Prometheus** — `/metrics`, `/healthz`, `/readyz` on port 9090
-- **Web dashboard** — Browser SPA at `http://localhost:4000/` when proxy runs (`deploy/dashboard-spa/`; REST + WebSocket; Setup/Agent flow/Analysis; plain-English report + live infrastructure visuals; `GUARDIAN_DASHBOARD_SPA=false` for legacy HTML)
+- **Web dashboard** — Browser SPA at `http://localhost:4000/` when proxy runs (`deploy/dashboard-spa/`; REST + WebSocket; Setup/Agent flow/Analysis; **live-only** Overview/Audit/Cost/AI panels; plain-English report + infrastructure visuals from `history.db`; ThreatIntel status; `GUARDIAN_DASHBOARD_SPA=false` for legacy HTML)
 - **Interactive TUI** — Terminal dashboard (Overview–Fleet, nine tabs); complements the SPA for SSH-only or headless hosts
 - **OpenTelemetry** — OTLP tracing
 - **SIEM hooks** — Structured JSON (`policy_decision`, `tool_blocked`) via `MCP_GUARDIAN_SIEM_*`
@@ -483,17 +485,20 @@ MCP_GUARDIAN_DB_PATH=~/.mcp-guardian/history.db node security-swarm/agents/traff
 MCP_GUARDIAN_DB_PATH=~/.mcp-guardian/history.db node security-swarm/agents/plain-english-report.mjs
 ```
 
-**Artifacts (dashboard reads these):**
+**Artifacts (dashboard reads these — per tenant):**
 
 | File | Purpose |
 |------|---------|
 | `~/.mcp-guardian/onboard.json` | Last onboard run (client, wrapped servers) |
 | `~/.mcp-guardian/history.db` | All proxied `tools/call` records (source of truth for traffic) |
-| `reports/security-swarm/report.json` | Plain-English headline + sections (dashboard primary) |
-| `reports/security-swarm/traffic-summary.json` | Per-server calls/blocks/top tools (last 7 days) |
-| `reports/security-swarm/visuals-data.json` | Live chart bundle (`history.db` + instant learning) |
-| `reports/security-swarm/figures/manifest.json` | Static PNG gallery metadata |
-| `reports/security-swarm/analysis.txt` | Technical appendix |
+| `~/.mcp-guardian/.threat-state.json` | Live ThreatIntel feed state (known attack IDs + timestamps) |
+| `reports/tenants/{tenantId}/security-swarm/report.json` | Plain-English headline + sections (dashboard primary; `default` when single-tenant) |
+| `reports/tenants/{tenantId}/security-swarm/traffic-summary.json` | Per-server calls/blocks/top tools (last 7 days) |
+| `reports/tenants/{tenantId}/security-swarm/visuals-data.json` | Live chart bundle (`history.db` + instant learning) |
+| `reports/tenants/{tenantId}/security-swarm/figures/manifest.json` | Static PNG gallery metadata |
+| `reports/tenants/{tenantId}/security-swarm/analysis.txt` | Technical appendix |
+
+Committed `reports/security-swarm/` is **CI evidence only** — the dashboard does not read it unless `GUARDIAN_SWARM_USE_LEGACY_ARTIFACTS=true` (local dev opt-in).
 
 **Optional:** weekly analysis — `node scripts/security-swarm/schedule-analysis.mjs`
 
@@ -677,7 +682,7 @@ pnpm dashboard:build          # export Next.js SPA → deploy/dashboard-spa/out/
 pnpm dashboard:proxy          # free :4000, rebuild stale dist if dashboard-server.ts changed, start proxy + SPA
 ```
 
-`scripts/start-dashboard-proxy.sh` sets `MCP_GUARDIAN_DB_PATH`, `DASHBOARD_AUTH_DISABLED=true` (local only), `GUARDIAN_WS_ENABLED=true`, and uses `deploy/dashboard-proxy-mcp.json` + `policy-demo.yaml` by default. Override config/policy as trailing args.
+`scripts/start-dashboard-proxy.sh` sets `MCP_GUARDIAN_DB_PATH`, `DASHBOARD_AUTH_DISABLED=true` (local only), `GUARDIAN_WS_ENABLED=true`, auto-picks the first **single-server** config from `guardian-configs/` (default `filesystem.json`), and uses `default-policy.yaml`. Pass config/policy as trailing args; multi-server configs (e.g. `scenarios/real-life/mcp-config.json`) need one proxy per server.
 
 `dashboard:serve` is **SPA-only** (no `call_records`, no `/api/visuals/live`). For real Overview/Audit/Cost/Agent data, always use **`dashboard:proxy`** or `scripts/guardian-proxy.sh` with `DASHBOARD_ENABLED=true`.
 
@@ -707,21 +712,22 @@ node security-swarm/agents/plain-english-report.mjs
 
 On the dashboard, click **Refresh report** on Agent flow / Analysis after new traffic.
 
-### Infrastructure visuals (live vs eval)
+### Infrastructure visuals (live only)
 
 | Layer | Source | Where |
 |-------|--------|--------|
-| **Interactive charts** | `GET /api/visuals/live` → `visuals-data.json` or on-the-fly export from `history.db` | Agent flow / Analysis → Infrastructure visuals panel (Recharts) |
-| **Static PNGs** | `reports/security-swarm/scripts/generate-swarm-visuals.py` (~19 figures) | `figures/*.png` + `figures/manifest.json` |
-| **Eval fallback** | `reports/attack-learning-eval/metrics.json` | Chart subtitles when no live blocks in proxy state |
+| **Interactive charts** | `GET /api/visuals/live` — exports from the proxy's open `history.db` (no per-request open/close) | Agent flow / Analysis → Infrastructure visuals panel (Recharts) |
+| **Static PNGs** | `security-swarm/scripts/generate-swarm-visuals.py` (~19 figures) after analyze | `reports/tenants/{tenantId}/security-swarm/figures/` |
+
+When there is no proxied traffic yet, charts show an empty/unavailable state — not synthetic eval data. Run **`pnpm agent:proxy-traffic`** or use MCP tools through a wrapped proxy first.
 
 ```bash
 pnpm security-swarm:visuals-data   # export visuals-data.json only (no full analyze)
 # Python figures (optional .venv-charts):
-.venv-charts/bin/python reports/security-swarm/scripts/generate-swarm-visuals.py
+.venv-charts/bin/python security-swarm/scripts/generate-swarm-visuals.py
 ```
 
-WebSocket `analysis:artifact` events refresh the dashboard when `traffic-summary.json`, `visuals-data.json`, or `report.json` change during `pnpm security-swarm:analyze`. Swarm architecture: [docs/assets/security-swarm-architecture.png](docs/assets/security-swarm-architecture.png) (also in [Security Swarm](#security-swarm-ci--runtime-learning-loop) below).
+WebSocket `analysis:artifact` events refresh the dashboard when tenant-scoped `traffic-summary.json`, `visuals-data.json`, or `report.json` change during analyze (Agent flow → **Run full security analysis** or `POST /api/security-swarm/run`). Swarm architecture: [docs/assets/security-swarm-architecture.png](docs/assets/security-swarm-architecture.png) (also in [Security Swarm](#security-swarm-ci--runtime-learning-loop) below).
 
 ### Dashboard HTTP APIs (local dev)
 
@@ -729,11 +735,14 @@ WebSocket `analysis:artifact` events refresh the dashboard when `traffic-summary
 |----------|-------------|
 | `GET /api/onboarding/status` | Last onboard metadata |
 | `GET /api/servers/registry` | Wrapped / probed servers |
-| `GET /api/security-swarm/traffic-summary` | Personalized traffic JSON |
+| `GET /api/security-swarm/traffic-summary` | Personalized traffic JSON (tenant-scoped dir) |
 | `GET /api/security-swarm/report-json` | Plain-English `report.json` (generates if missing) |
-| `GET /api/visuals/live` | Live `visuals-data` bundle |
+| `GET /api/visuals/live` | Live `visuals-data` bundle from open `history.db` |
 | `GET /api/security-swarm/figures` | PNG manifest + categories |
 | `GET /api/security-swarm/status` | Analysis job state |
+| `POST /api/security-swarm/run` | Start full security analysis (Agent flow button) |
+| `GET /api/ai/threats` | ThreatIntel status (known IDs, last poll) |
+| `POST /api/ai/threats/poll` | Force ThreatIntel feed refresh |
 | `WS /ws` | Live timeline, pipeline, artifact notifications |
 
 ### `pnpm onboard` vs global CLI
@@ -898,6 +907,7 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_RATE_LIMIT_DISTRIBUTED_LOCK` | `false` | Redis NX window lock (active-passive) |
 | `GUARDIAN_FLEET_DB_PATHS` | — | Comma-separated SQLite paths for fleet CLI/TUI |
 | `GUARDIAN_DASHBOARD_SPA` | on | Serve `deploy/dashboard-spa/` at `/` |
+| `GUARDIAN_SWARM_USE_LEGACY_ARTIFACTS` | `false` | When `true`, `default` tenant may read committed `reports/security-swarm/` |
 | `GUARDIAN_FP_WHITELIST_THRESHOLD` | `3` | FP confirmations before auto-whitelist |
 | `GUARDIAN_FP_WHITELIST_PATH` | `~/.mcp-guardian/.fp-whitelist.json` | FP whitelist file |
 | `POLICY_AUDIT_ENABLED` | `false` | Policy change JSONL audit |
@@ -1117,31 +1127,41 @@ Closed-loop **agentic** workflow for MCP Guardian: CI agents discover and gate p
 
 | Track | Components | Output |
 |-------|------------|--------|
-| **CI agents** | Scout · Corpus · Evasion · Parity · Proxy · Report | `reports/security-swarm/latest.json`, adversarial harness, corpus eval |
+| **CI agents** | Scout · Corpus · Evasion · Parity · Proxy · Report | `reports/security-swarm/latest.json` (CI evidence), adversarial harness, corpus eval |
 | **Runtime (proxy)** | BlockGuard · InstantLearner · SemanticAuditor · PatternSynthesizer · Calibrator | `history.db`, attack-learning state, policy suggestions |
-| **Solo analyze** | `run-analysis.mjs` orchestrator | `report.json`, `traffic-summary.json`, `visuals-data.json`, `analysis.txt` |
+| **Solo analyze** | `run-analysis.mjs` orchestrator | `reports/tenants/{tenantId}/security-swarm/*` — `report.json`, `traffic-summary.json`, `visuals-data.json`, `analysis.txt` |
+| **Continuous attack** | `run-continuous-live-attack.mjs` | Long-lived Ollama/hybrid stream → block-rate validation (`pnpm real-life:continuous`) |
 
 Gates: **228/228** corpus, **0** bypasses, **100%** corpus parity. Full agent table: [security-swarm/README.md](security-swarm/README.md).
 
 ```bash
-pnpm security-swarm:analyze  # one-click: live MCP + gates → analysis.txt (~2–15 min)
-pnpm security-swarm          # full (nightly)
-pnpm security-swarm:fast     # PR path (~5–15 min)
-pnpm security-swarm:calibrate # LLM threshold recommendations from labeled audits
+pnpm security-swarm:analyze       # one-click: live MCP + gates → tenant artifacts (~2–15 min)
+pnpm security-swarm:analyze:full  # includes continuous attack phase when Ollama configured
+pnpm real-life:continuous         # 60-min hybrid attack stream (LIVE_ATTACK_DURATION_MINUTES=60)
+pnpm security-swarm               # full CI swarm (nightly)
+pnpm security-swarm:fast          # PR path (~5–15 min)
+pnpm security-swarm:calibrate     # LLM threshold recommendations from labeled audits
 ```
 
-Primary report after analyze: [`reports/security-swarm/report.json`](reports/security-swarm/report.json) (plain English) and [`analysis.txt`](reports/security-swarm/analysis.txt) (technical appendix). Dashboard **Agent flow** / **Analysis** tabs show the report inline, **personalized traffic** tables (`traffic-summary.json`), **live interactive charts** (`GET /api/visuals/live` from `history.db` + instant learning), and a categorized PNG gallery (`figures/manifest.json`).
+Primary report after analyze: `reports/tenants/{tenantId}/security-swarm/report.json` (plain English) and `analysis.txt` (technical appendix). Dashboard **Agent flow** → **Run full security analysis** writes tenant-scoped artifacts; **Analysis** tab shows the same inline — **personalized traffic** (`traffic-summary.json`), **live interactive charts** (`GET /api/visuals/live`), and PNG gallery (`figures/manifest.json`).
 
-**Pipeline phases** (`run-analysis.mjs`): user-server probes → **traffic summary** → calibrate → swarm gates → **visuals-data** + matplotlib figures → plain-English **report.json** → `analysis.txt`.
+**Pipeline phases** (`run-analysis.mjs`): user-server probes → **traffic summary** → calibrate → swarm gates → **visuals-data** + matplotlib figures → plain-English **report.json** → `analysis.txt`. Optional **`--continuous`** phase runs `pnpm real-life:continuous` for sustained block-rate evidence.
 
-**Learning charts:** When the proxy has recorded blocks, figures use live `~/.mcp-guardian/.attack-learning-state.json`. Otherwise they fall back to simulated [`reports/attack-learning-eval/metrics.json`](reports/attack-learning-eval/metrics.json) (labeled in chart subtitles).
+**Continuous attack env** (see [scenarios/real-life/README.md](scenarios/real-life/README.md)):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LIVE_ATTACK_DURATION_MINUTES` | `60` | Wall-clock duration (max 180) |
+| `LIVE_ATTACK_INTERVAL_MS` | `250` | Pause between tool calls |
+| `LIVE_ATTACK_BENIGN_RATIO` | `0.08` | Benign calls for false-positive tracking |
+| `LIVE_ATTACK_ESCALATION` | `true` | Phase 2: unicode-mutated repeats of blocked patterns |
 
 ```bash
 pnpm security-swarm:visuals-data   # export visuals-data.json only
 pnpm agent:proxy-traffic           # seed history.db via Guardian (IDE alternative)
 ```
 
-Reports: [`reports/security-swarm/`](reports/security-swarm/) · [`security-swarm/README.md`](security-swarm/README.md) · deployment profiles in [`docs/AI_LEARNING.md`](docs/AI_LEARNING.md#deployment-profiles-security-swarm).
+Tenant artifacts: [`reports/tenants/`](reports/tenants/) · CI evidence: [`reports/security-swarm/`](reports/security-swarm/) · [`security-swarm/README.md`](security-swarm/README.md) · deployment profiles in [`docs/AI_LEARNING.md`](docs/AI_LEARNING.md#deployment-profiles-security-swarm).
 
 ### Enterprise five-scenario simulation (May 2026 package)
 
