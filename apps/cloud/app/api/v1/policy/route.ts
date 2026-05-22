@@ -1,0 +1,99 @@
+import { extractBearerToken } from '@/lib/api-keys';
+import { auth } from '@/lib/auth';
+import {
+  getUserOrg,
+  resolveOrgFromApiKey,
+  userCanManageOrg,
+} from '@/lib/org-context';
+import { getDefaultPolicyYaml } from '@/lib/default-policy';
+import { getDb } from '@/lib/db';
+import { policies } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
+import { NextResponse } from 'next/server';
+
+async function resolveWriteContext(request: Request) {
+  const bearer = extractBearerToken(request.headers.get('authorization'));
+  if (bearer) {
+    const apiCtx = await resolveOrgFromApiKey(bearer);
+    if (!apiCtx) return null;
+    return {
+      orgId: apiCtx.org.id,
+      canManage: true,
+    };
+  }
+
+  const session = await auth();
+  if (!session?.user?.id) return null;
+  const ctx = await getUserOrg(session.user.id);
+  if (!ctx) return null;
+  const canManage = userCanManageOrg(ctx.membership);
+  return { orgId: ctx.org.id, canManage };
+}
+
+export async function GET(request: Request) {
+  const bearer = extractBearerToken(request.headers.get('authorization'));
+  if (!bearer) {
+    return NextResponse.json({ error: 'Bearer API key required' }, { status: 401 });
+  }
+
+  const ctx = await resolveOrgFromApiKey(bearer);
+  if (!ctx) {
+    return NextResponse.json({ error: 'Invalid or inactive API key' }, { status: 401 });
+  }
+
+  const policy = await getDb().query.policies.findFirst({
+    where: eq(policies.orgId, ctx.org.id),
+  });
+
+  return new NextResponse(policy?.yamlContent ?? getDefaultPolicyYaml(), {
+    headers: { 'Content-Type': 'text/yaml; charset=utf-8' },
+  });
+}
+
+export async function PUT(request: Request) {
+  const writeCtx = await resolveWriteContext(request);
+  if (!writeCtx) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!writeCtx.canManage) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  let yaml: string;
+  const contentType = request.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const body = (await request.json()) as { yaml?: string };
+    yaml = body.yaml ?? '';
+  } else {
+    yaml = await request.text();
+  }
+
+  if (!yaml.trim()) {
+    return NextResponse.json({ error: 'Policy YAML required' }, { status: 400 });
+  }
+
+  const existing = await getDb().query.policies.findFirst({
+    where: eq(policies.orgId, writeCtx.orgId),
+  });
+
+  if (existing) {
+    await getDb()
+      .update(policies)
+      .set({
+        yamlContent: yaml,
+        version: existing.version + 1,
+        updatedAt: new Date(),
+      })
+      .where(eq(policies.id, existing.id));
+  } else {
+    const { randomUUID } = await import('crypto');
+    await getDb().insert(policies).values({
+      id: randomUUID(),
+      orgId: writeCtx.orgId,
+      yamlContent: yaml,
+      version: 1,
+    });
+  }
+
+  return NextResponse.json({ ok: true });
+}

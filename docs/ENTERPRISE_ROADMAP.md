@@ -13,22 +13,24 @@ Self-hosted **v2.9.x** is production-viable with [ENTERPRISE_DEPLOY.md](./ENTERP
 
 ## P1 — Platform (v2.10 – v2.11)
 
-| Item | Rationale |
-|------|-----------|
-| **Inbound HTTP/SSE gateway** | Non-stdio MCP ingress for shared gateways |
-| **Full WebSocket transport parity** | Match stdio feature set (see TRANSPORT.md) |
-| **Enhanced SIEM templates** | Splunk/Datadog field mappings out of the box |
-| **Dashboard policy editor** | YAML remains source of truth; guided edit + test |
-| **Production MSI / code-sign CI** | Windows enterprise desktop rollout |
+| Item | Rationale | Priority |
+|------|-----------|----------|
+| **Dashboard policy editor** | YAML remains source of truth; guided edit + test in SPA (Policy tab already loads live YAML) | **Next (v2.10.0)** |
+| **Inbound HTTP/SSE gateway** | Non-stdio MCP ingress for shared gateways | v2.10.x |
+| **Full WebSocket transport parity** | Match stdio feature set (see TRANSPORT.md) | v2.10.x |
+| **Enhanced SIEM templates** | Splunk/Datadog field mappings out of the box | v2.11 |
+| **Production MSI / code-sign CI** | Windows enterprise desktop rollout | v2.11 |
+
+**Recommended next P1 (May 2026):** **Dashboard policy editor** — completes the live-data dashboard loop (metrics + analysis + editable policy + test sandbox) without new transport work. HTTP/SSE gateway follows for K8s/shared-gateway deployments.
 
 ## P2 — v3.0 control plane
 
-| Item | Rationale |
-|------|-----------|
-| **Multi-tenant control plane** | Central onboarding, policy distribution, billing |
-| **Hosted SaaS option** | Managed Guardian cloud |
-| **gRPC transport** | High-throughput agent ↔ gateway |
-| **Signed plugin marketplace** | Curated third-party detectors |
+| Item | Rationale | Status |
+|------|-----------|--------|
+| **Multi-tenant control plane** | Central onboarding, policy distribution | MVP: [`docs/SAAS_CONTROL_PLANE.md`](./SAAS_CONTROL_PLANE.md) — `apps/cloud` (free OSS) |
+| **Hosted SaaS option** | Managed Guardian cloud | Control plane shipped; managed proxy hosting remains future |
+| **gRPC transport** | High-throughput agent ↔ gateway | Planned |
+| **Signed plugin marketplace** | Curated third-party detectors | Planned |
 
 ## P3 — Global scale
 

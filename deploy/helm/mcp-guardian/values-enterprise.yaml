@@ -34,7 +34,6 @@ config:
     POLICY_AUDIT_ENABLED: "true"
     GUARDIAN_ENCODING_GUARD: "true"
     GUARDIAN_HTTP_TOOLS_POLICY: "true"
-
 database:
   type: postgres
   # Route through PgBouncer (transaction mode), port 6432 — NOT postgres:5432
@@ -58,6 +57,12 @@ dpop:
 
 multiTenant:
   enabled: true
+
+# Optional MCP Guardian Cloud control plane (policy sync / SSO — no license paywall)
+controlPlane:
+  url: ""  # e.g. https://cloud.example.com
+  # licenseKey: optional gcp_... API key from cloud Settings
+  licenseKey: ""
 
 monitoring:
   serviceMonitor:

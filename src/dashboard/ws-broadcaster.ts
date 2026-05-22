@@ -1,10 +1,33 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import type { IncomingMessage } from 'http';
 import { Logger } from '../utils/logger.js';
-import { DEFAULT_TENANT_ID, validateTenantId, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
+import {
+  DEFAULT_TENANT_ID,
+  validateTenantId,
+  InvalidTenantIdError,
+  isMultiTenantModeEnabled,
+} from '../tenant/resolve-tenant.js';
 import type { AuditTrailSync } from '../aggregator/audit-trail-sync.js';
 import type { TelemetryCollector } from '../aggregator/telemetry-collector.js';
 import type { LogShipper } from '../aggregator/log-shipper.js';
+import type { DashboardAuth } from '../auth/dashboard-auth.js';
+import type { DashboardRole } from '../auth/dashboard-rbac.js';
+import { getLicenseClient } from '../license/license-client.js';
+
+export type WsAuthContext = {
+  authenticated: boolean;
+  tenantId: string;
+  roles: DashboardRole[];
+};
+
+export type WsBroadcasterOptions = {
+  dashboardAuth?: DashboardAuth;
+  /** Ignored unless GUARDIAN_REQUIRE_LICENSE=true (license paywall removed by default). */
+  requireLicense?: boolean;
+};
+
+const WS_AUTH_KEY = '__wsAuthContext';
 
 /**
  * WebSocket push broadcaster — replaces polling with real-time push
@@ -16,6 +39,8 @@ export class WsBroadcaster {
   private clients = new Set<WebSocket>();
   private clientSubscriptions = new Map<WebSocket, Set<string>>();
   private clientTenants = new Map<WebSocket, string>();
+  private clientRoles = new Map<WebSocket, DashboardRole[]>();
+  private options: WsBroadcasterOptions;
   private auditSync?: AuditTrailSync;
   private telemetryCollector?: TelemetryCollector;
   private logShipper?: LogShipper;
@@ -35,17 +60,50 @@ export class WsBroadcaster {
     instances?: (tenantId: string) => unknown[];
   } = {};
 
-  constructor(server: Server) {
-    this.wss = new WebSocketServer({ server, path: '/ws' });
+  constructor(server: Server, options: WsBroadcasterOptions = {}) {
+    this.options = options;
+
+    this.wss = new WebSocketServer({
+      server,
+      path: '/ws',
+      verifyClient: (info, done) => {
+        const auth = options.dashboardAuth;
+        if (auth?.isEnabled()) {
+          const result = auth.authenticateWebSocket({
+            url: info.req.url,
+            headers: info.req.headers as Record<string, string | string[] | undefined>,
+          });
+          if (!result.authenticated) {
+            done(false, 4401, 'Authentication required');
+            return;
+          }
+          const license = getLicenseClient();
+          const tenantId =
+            result.sessionTenantId ?? license.getTenantSlug() ?? DEFAULT_TENANT_ID;
+          (info.req as IncomingMessage & Record<string, unknown>)[WS_AUTH_KEY] = {
+            authenticated: true,
+            tenantId,
+            roles: result.roles ?? ['viewer'],
+          } satisfies WsAuthContext;
+        }
+        done(true);
+      },
+    });
     this.wss.on('error', (err) => {
       Logger.warn(`[dashboard] WebSocket server error: ${err.message}`);
     });
 
-    this.wss.on('connection', (ws) => {
+    this.wss.on('connection', (ws, req) => {
+      const authCtx = (req as IncomingMessage & Record<string, unknown>)[WS_AUTH_KEY] as
+        | WsAuthContext
+        | undefined;
+      const boundTenant = authCtx?.tenantId ?? DEFAULT_TENANT_ID;
+
       this.clients.add(ws);
       this.clientSubscriptions.set(ws, new Set(['policy', 'health', 'metrics']));
-      this.clientTenants.set(ws, DEFAULT_TENANT_ID);
-      Logger.debug('[dashboard] WS client connected');
+      this.clientTenants.set(ws, boundTenant);
+      this.clientRoles.set(ws, authCtx?.roles ?? ['viewer']);
+      Logger.debug(`[dashboard] WS client connected tenant=${boundTenant}`);
 
       ws.on('message', (data) => {
         try {
@@ -55,8 +113,12 @@ export class WsBroadcaster {
             tenantId?: string;
           };
           if (msg.type === 'subscribe' && Array.isArray(msg.channels)) {
-            this.clientSubscriptions.set(ws, new Set(msg.channels));
-            if (msg.tenantId?.trim()) {
+            const allowed = msg.channels.filter((ch) =>
+              this.isChannelAllowed(ch, authCtx?.roles ?? []),
+            );
+            this.clientSubscriptions.set(ws, new Set(allowed));
+
+            if (msg.tenantId?.trim() && !isMultiTenantModeEnabled()) {
               try {
                 this.clientTenants.set(ws, validateTenantId(msg.tenantId));
               } catch (err) {
@@ -68,9 +130,11 @@ export class WsBroadcaster {
                   }));
                 }
               }
+            } else if (authCtx?.tenantId) {
+              this.clientTenants.set(ws, authCtx.tenantId);
             }
             Logger.debug(
-              `[dashboard] WS subscribed tenant=${this.clientTenants.get(ws)} channels=${msg.channels.join(', ')}`,
+              `[dashboard] WS subscribed tenant=${this.clientTenants.get(ws)} channels=${allowed.join(', ')}`,
             );
           } else if (msg.type === 'ping') {
             ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
@@ -84,6 +148,7 @@ export class WsBroadcaster {
         this.clients.delete(ws);
         this.clientSubscriptions.delete(ws);
         this.clientTenants.delete(ws);
+        this.clientRoles.delete(ws);
         Logger.debug('[dashboard] WS client disconnected');
       });
 
@@ -92,10 +157,18 @@ export class WsBroadcaster {
         this.clients.delete(ws);
         this.clientSubscriptions.delete(ws);
         this.clientTenants.delete(ws);
+        this.clientRoles.delete(ws);
       });
 
       this.sendSnapshot(ws).catch(() => {});
     });
+  }
+
+  private isChannelAllowed(channel: string, roles: DashboardRole[]): boolean {
+    if (channel === 'swarm' && !roles.some((r) => ['operator', 'admin', 'tenant-admin'].includes(r))) {
+      return roles.length === 0;
+    }
+    return true;
   }
 
   setDataProviders(providers: typeof this.dataProviders): void {

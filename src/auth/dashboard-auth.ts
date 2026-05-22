@@ -20,6 +20,10 @@ import { StructuredLogger } from '../utils/structured-logger.js';
 import { resolveTenantContext, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { validateJwtTenantBinding } from '../tenant/jwt-tenant-binding.js';
 import {
+  getLicenseClient,
+  isCloudLicenseKey,
+} from '../license/license-client.js';
+import {
   type DashboardRole,
   parseDashboardRolesEnv,
   resolveRolesForApiKey,
@@ -174,6 +178,27 @@ export class DashboardAuth {
             identity: 'api_key',
             roles: resolveRolesForApiKey(token, this.apiKeyRoles),
           };
+        }
+
+        // Cloud control plane API key (gcp_...) when configured (optional)
+        if (isCloudLicenseKey(token)) {
+          const license = getLicenseClient();
+          const licenseOk =
+            license.matchesLicenseKey(token)
+            && (!license.isEnabled() || license.isLicensed());
+          if (license.isEnabled() && licenseOk) {
+            const tenant = license.getTenantSlug() ?? DEFAULT_TENANT_ID;
+            const bind = validateJwtTenantBinding(requestTenantId, tenant);
+            if (!bind.ok) {
+              return { authenticated: false, reason: bind.reason };
+            }
+            return {
+              authenticated: true,
+              identity: 'cloud_license',
+              roles: ['tenant-admin'],
+              sessionTenantId: tenant,
+            };
+          }
         }
 
         // Check if it's a valid session token
@@ -464,6 +489,31 @@ ${csrfField}
    */
   hasJwtSessionAuth(): boolean {
     return this.config.enabled && !!this.config.jwtSecret;
+  }
+
+  /**
+   * Create a session from cloud SSO exchange (OAuth via control plane).
+   */
+  createCloudSession(
+    tenantSlug: string,
+    identity: string,
+    roles: DashboardRole[] = ['tenant-admin'],
+  ): string {
+    if (!this.config.jwtSecret) {
+      throw new Error('DASHBOARD_JWT_SECRET required for cloud session');
+    }
+    Logger.info(`[dashboard-auth] Cloud session for ${identity} tenant=${tenantSlug}`);
+    return this.createSessionToken(tenantSlug, roles);
+  }
+
+  /**
+   * Authenticate a WebSocket upgrade request (session cookie or bearer token).
+   */
+  authenticateWebSocket(req: {
+    url?: string;
+    headers?: Record<string, string | string[] | undefined>;
+  }): AuthResult {
+    return this.authenticate({ ...req, method: 'GET' });
   }
 
   /**

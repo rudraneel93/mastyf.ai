@@ -1,10 +1,15 @@
-# Local staging stack for enterprise pilot (Postgres + Redis).
+# Local staging stack for enterprise pilot (Postgres + Redis) and optional cloud control plane.
 # Usage:
 #   docker compose -f deploy/docker-compose.staging.yml up -d
 #   export DATABASE_URL=postgresql://guardian:guardian@127.0.0.1:5432/guardian
 #   export REDIS_URL=redis://127.0.0.1:6379
 #   ./scripts/staging-apply-migrations.sh
 #   env -u DASHBOARD_AUTH_DISABLED pnpm enterprise:preflight
+#
+# Cloud control plane (optional profile):
+#   docker compose -f deploy/docker-compose.staging.yml --profile cloud up -d
+#   createdb via: psql -c "CREATE DATABASE mcp_guardian_cloud;"
+#   see docs/SAAS_CONTROL_PLANE.md
 
 services:
   postgres:
@@ -30,3 +35,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  cloud:
+    profiles: ["cloud"]
+    build:
+      context: ..
+      dockerfile: apps/cloud/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://guardian:guardian@postgres:5432/mcp_guardian_cloud
+      AUTH_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
+    env_file:
+      - ../apps/cloud/.env.local
+    depends_on:
+      postgres:
+        condition: service_healthy

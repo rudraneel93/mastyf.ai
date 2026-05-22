@@ -410,6 +410,18 @@ pnpm enterprise:compliance-report      # auditor evidence JSON
 
 Helm overlay: [`deploy/helm/mcp-guardian/values-enterprise.yaml`](deploy/helm/mcp-guardian/values-enterprise.yaml). Apply Postgres migrations **004** (tenant scoping) and **005** (tenant cost/security/health) before multi-tenant traffic.
 
+### Cloud control plane (v3.0 MVP)
+
+Optional **cloud control plane** at **`apps/cloud`** — free, open source; Google/GitHub OAuth, tenant provisioning, policy editor, and API keys for connecting **self-hosted** Guardian. Does not host Guardian proxies.
+
+```bash
+pnpm cloud:dev          # http://localhost:3001
+pnpm cloud:migrate      # requires DATABASE_URL → mcp_guardian_cloud
+pnpm cloud:test
+```
+
+See **[docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)** · export bundle: `node scripts/export-tenant-bundle.mjs`
+
 ### Enterprise (v2.5+)
 - **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview
 - **Fleet aggregation (v2.7)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`)
@@ -1452,7 +1464,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 - **Production MSI pipeline** — org code-signing and CI for Windows installers (script ships in v2.7)
 - **Inbound HTTP/SSE gateway** — non-stdio MCP ingress
 - **Enhanced SIEM templates** — richer export mappings
-- **v3.0** — Multi-tenant control plane; gRPC transport
+- **v3.0** — Cloud control plane MVP shipped (`apps/cloud`); managed proxy hosting + gRPC transport remain planned
 
 ---
 
@@ -1462,6 +1474,6 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Enterprise deploy](docs/ENTERPRISE_DEPLOY.md) · [Enterprise evidence pack](docs/ENTERPRISE_EVIDENCE_PACK.md) · [Enterprise roadmap](docs/ENTERPRISE_ROADMAP.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Enterprise deploy](docs/ENTERPRISE_DEPLOY.md) · [SaaS control plane](docs/SAAS_CONTROL_PLANE.md) · [Enterprise evidence pack](docs/ENTERPRISE_EVIDENCE_PACK.md) · [Enterprise roadmap](docs/ENTERPRISE_ROADMAP.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.
