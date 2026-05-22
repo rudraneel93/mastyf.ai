@@ -777,6 +777,92 @@ export async function startDashboardServer(
         writeJson(res, 200, { status: 'rejected', id: b2.suggestionId });
         return;
       }
+      if (url === '/api/learning/semantic/outcomes' && method === 'GET') {
+        setCors();
+        const { loadSemanticAuditRecords } = await import('../ai/semantic-audit-store.js');
+        const records = loadSemanticAuditRecords({ limit: 200 });
+        writeJson(res, 200, { records, total: records.length });
+        return;
+      }
+
+      if (url === '/api/learning/label' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const userId = authResult.identity || String(body.userId || 'dashboard');
+        const label = String(body.label || '') as 'true_positive' | 'false_positive' | 'ignored';
+
+        if (body.semanticAuditId) {
+          const { labelSemanticAuditRecord } = await import('../ai/semantic-audit-store.js');
+          const ok = labelSemanticAuditRecord(String(body.semanticAuditId), label, userId);
+          if (!ok) {
+            writeJson(res, 404, { error: 'Semantic audit record not found' });
+            return;
+          }
+          if (label === 'false_positive' || label === 'true_positive') {
+            try {
+              const { getAiEngine } = await import('../ai/suggestion-engine.js');
+              const engine = getAiEngine();
+              const si = engine?.getSelfImprovement();
+              if (si) {
+                si.recordOutcome(
+                  {
+                    suggestionId: String(body.semanticAuditId),
+                    ruleName: String(body.ruleName || 'async-semantic'),
+                    source: 'pattern',
+                    action: label === 'true_positive' ? 'applied' : 'rejected',
+                    confidence: typeof body.confidence === 'number' ? body.confidence : 0.7,
+                    timestamp: new Date().toISOString(),
+                    userId,
+                  },
+                  { userId, pattern: body.pattern ? String(body.pattern) : undefined },
+                );
+              }
+            } catch {
+              /* non-fatal */
+            }
+          }
+          writeJson(res, 200, { status: 'labeled', id: body.semanticAuditId, label });
+          return;
+        }
+
+        if (body.suggestionId) {
+          const ruleName = String(body.ruleName || body.suggestionId);
+          const source = (body.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack') || 'pattern';
+          const confidence = typeof body.confidence === 'number' ? body.confidence : 0.5;
+          if (label === 'ignored') {
+            const { getAiEngine } = await import('../ai/suggestion-engine.js');
+            const si = getAiEngine()?.getSelfImprovement();
+            si?.recordOutcome(
+              {
+                suggestionId: String(body.suggestionId),
+                ruleName,
+                source,
+                action: 'ignored',
+                confidence,
+                timestamp: new Date().toISOString(),
+                userId,
+              },
+              { userId, pattern: body.pattern ? String(body.pattern) : undefined },
+            );
+          } else {
+            const { recordSuggestionOutcome } = await import('../ai/suggestion-engine.js');
+            const action = label === 'true_positive' ? 'applied' : 'rejected';
+            await recordSuggestionOutcome(String(body.suggestionId), action, {
+              ruleName,
+              source,
+              confidence,
+              userId,
+              pattern: body.pattern ? String(body.pattern) : undefined,
+            });
+          }
+          writeJson(res, 200, { status: 'labeled', id: body.suggestionId, label });
+          return;
+        }
+
+        writeJson(res, 400, { error: 'semanticAuditId or suggestionId required' });
+        return;
+      }
+
       if (url === '/api/policy/fp/reject' && method === 'POST') {
         setCors();
         const body = await readBody(req);

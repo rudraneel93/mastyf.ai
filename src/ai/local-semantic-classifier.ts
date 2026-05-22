@@ -2,8 +2,10 @@
  * Local semantic risk scorer — heuristic + expanded regex when no LLM API key.
  * Not a mock API: deterministic feature scoring on normalized tool-call text.
  */
+import { createHash } from 'crypto';
 import { walkStringLeaves } from '../policy/arg-leaf-walker.js';
 import { deobfuscateRecursive } from '../utils/payload-normalizer.js';
+import { learningFingerprint } from './learning-quorum.js';
 
 export interface LocalSemanticScore {
   risk: number;
@@ -29,6 +31,21 @@ const RISK_PATTERNS: { id: string; category: string; weight: number; re: RegExp 
 ];
 
 const SUSPICIOUS_THRESHOLD = parseFloat(process.env['GUARDIAN_LOCAL_SEMANTIC_THRESHOLD'] || '0.55');
+
+/** LRU cache of prior local semantic scores (swarm calibrator / repeat-call perf). */
+const localSemanticCache = new Map<string, LocalSemanticScore>();
+const LOCAL_CACHE_MAX = parseInt(process.env.GUARDIAN_LOCAL_SEMANTIC_CACHE_MAX || '2048', 10);
+
+function cacheKey(input: {
+  serverName: string;
+  toolName: string;
+  arguments?: Record<string, unknown>;
+  syncRule?: string;
+}): string {
+  const leaves = walkStringLeaves(input.arguments ?? {}).map((l) => l.value).join('\n');
+  const raw = `${input.serverName}\0${input.toolName}\0${input.syncRule || ''}\0${leaves}`;
+  return createHash('sha256').update(raw).digest('hex').slice(0, 24);
+}
 
 export function isLocalSemanticEnabled(): boolean {
   if (process.env['GUARDIAN_LOCAL_SEMANTIC'] === 'false') return false;
@@ -81,6 +98,10 @@ export function scoreLocalSemanticRisk(input: {
   arguments?: Record<string, unknown>;
   syncRule?: string;
 }): LocalSemanticScore {
+  const key = cacheKey(input);
+  const cached = localSemanticCache.get(key);
+  if (cached) return cached;
+
   const leaves = walkStringLeaves(input.arguments ?? {});
   const parts = [
     input.toolName,
@@ -114,12 +135,24 @@ export function scoreLocalSemanticRisk(input: {
   const suspicious = risk >= SUSPICIOUS_THRESHOLD;
   const cats = categories.size > 0 ? [...categories] : suspicious ? ['unknown'] : ['none'];
 
-  return {
+  const score: LocalSemanticScore = {
     risk,
     suspicious,
     categories: cats,
     reasoning: suspicious
-      ? `Local heuristic risk ${risk.toFixed(2)} (${hits.slice(0, 4).join(', ') || 'features'})`
+      ? `Local heuristic risk ${risk.toFixed(2)} (${hits.slice(0, 4).join(', ') || 'features'}) fp=${learningFingerprint(input.syncRule || 'local', key)}`
       : `Local heuristic risk ${risk.toFixed(2)} below threshold`,
   };
+
+  if (localSemanticCache.size >= LOCAL_CACHE_MAX) {
+    const first = localSemanticCache.keys().next().value;
+    if (first) localSemanticCache.delete(first);
+  }
+  localSemanticCache.set(key, score);
+  return score;
+}
+
+/** @internal test helper */
+export function clearLocalSemanticCacheForTests(): void {
+  localSemanticCache.clear();
 }

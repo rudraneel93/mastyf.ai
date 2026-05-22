@@ -159,6 +159,32 @@ Regenerate: `cd sca && python3 generate-attack-visualizations.py` (after running
 
 ---
 
+## Deployment profiles (Security Swarm)
+
+Three operational profiles for balancing detection vs latency. Orchestrator: [`security-swarm/run.mjs`](../security-swarm/run.mjs); report: [`reports/security-swarm/latest.json`](../reports/security-swarm/latest.json).
+
+| Profile | When to use | Key env |
+|---------|-------------|---------|
+| **sync-only** | Default low-latency; regex + semantic guards only | `GUARDIAN_SEMANTIC_ASYNC=false`, `GUARDIAN_AI_INSTANT_LLM=false` |
+| **hybrid** | Enterprise default; async LLM after allow, instant learning on blocks | `GUARDIAN_AI_INSTANT_LEARNING=true`, optional `GUARDIAN_SEMANTIC_ASYNC=true` |
+| **high-paranoia** | High-risk tenants, post-bypass hardening | `GUARDIAN_SEMANTIC_ASYNC=true`, `GUARDIAN_AI_INSTANT_LLM=true`, strict quorum (`GUARDIAN_AI_MIN_DISTINCT_LABELERS=2`) |
+
+**Calibrate thresholds** from real labeled outcomes (no synthetic data):
+
+```bash
+pnpm security-swarm:calibrate
+# → reports/security-swarm/calibration.json
+```
+
+**Dashboard labels** (feeds `SelfImprovement` + semantic store):
+
+- `GET /api/learning/semantic/outcomes`
+- `POST /api/learning/label` with `{ semanticAuditId, label: "true_positive"|"false_positive"|"ignored" }`
+
+**Semantic result cache:** repeat tool-call fingerprints use in-process LRU in `local-semantic-classifier.ts` (`GUARDIAN_LOCAL_SEMANTIC_CACHE_MAX`, default 2048). For multi-replica LLM dedup use `GUARDIAN_LLM_CACHE` + `REDIS_URL` (see LLM response cache below).
+
+---
+
 ## Async semantic audit (post-hoc LLM)
 
 Non-blocking queue after sync policy passes:

@@ -1,0 +1,16 @@
+{
+  "agent": "scout",
+  "timestamp": "2026-05-22T09:46:28.036Z",
+  "audit": {
+    "ok": true,
+    "status": 1,
+    "advisories": [],
+    "summary": {
+      "info": 0,
+      "low": 1,
+      "moderate": 1,
+      "high": 0,
+      "critical": 0
+    }
+  }
+}

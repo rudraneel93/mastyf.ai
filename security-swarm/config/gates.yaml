@@ -1,0 +1,21 @@
+# Security swarm quality gates (see security-swarm/README.md)
+version: 1
+
+corpus:
+  minAttackBlockRate: 1.0
+  maxBenignFalsePositiveRate: 0.0
+  minEntries: 228
+
+parity:
+  minCorpusAgreementRate: 1.0
+  minOverallAgreementRate: 0.97
+
+evasion:
+  maxBypasses: 0
+
+vitest:
+  maxFailures: 0
+
+duration:
+  fastMaxMinutes: 15
+  fullMaxMinutes: 45

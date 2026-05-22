@@ -900,6 +900,18 @@ node adversarial-harness/run-harness.mjs
 pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
 ```
 
+### Security Swarm (CI + runtime learning loop)
+
+Closed-loop agentic workflow: **Scout → Corpus → Evasion → Parity → Proxy → Report** (CI) plus in-process **BlockGuard / InstantLearner / SemanticAuditor / Calibrator** (production). Architecture: [docs/assets/security-swarm-architecture.png](docs/assets/security-swarm-architecture.png). Gates: **228/228** corpus, **0** bypasses, **100%** corpus parity.
+
+```bash
+pnpm security-swarm          # full (nightly)
+pnpm security-swarm:fast     # PR path (~5–15 min)
+pnpm security-swarm:calibrate # LLM threshold recommendations from labeled audits
+```
+
+Reports: [`reports/security-swarm/`](reports/security-swarm/) · [`security-swarm/README.md`](security-swarm/README.md) · deployment profiles in [`docs/AI_LEARNING.md`](docs/AI_LEARNING.md#deployment-profiles-security-swarm).
+
 ### Enterprise five-scenario simulation (May 2026 package)
 
 **Synthetic** harness: **330** requests, **93.33%** block rate, **0** false positives, **38.8 ms** avg simulated detection latency ([`attack-simulation-metrics.json`](reports/enterprise-attack-sim/attack-simulation-metrics.json)). Open [attack-simulation-dashboard.html](reports/enterprise-attack-sim/attack-simulation-dashboard.html) for inline SVG charts. Reports: [enterprise-attack-sim/README.md](reports/enterprise-attack-sim/README.md) · [MCP_GUARDIAN_FINDINGS.md](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md). **Not** CI-gated; prefer repo eval above for learning latency claims.

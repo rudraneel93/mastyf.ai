@@ -98,13 +98,20 @@ describe('enterprise five mitigations', () => {
     });
 
     it('PolicyEngine applies min-eval timing envelope on pass', () => {
-      const engine = new PolicyEngine({
-        version: '1.0',
-        policy: { mode: 'block', default_action: 'pass', rules: [] },
-      });
-      const t0 = Date.now();
-      engine.evaluate(ctx('noop', { x: 1 }));
-      expect(Date.now() - t0).toBeGreaterThanOrEqual(20);
+      const prev = process.env.GUARDIAN_POLICY_TIMING_ENVELOPE;
+      process.env.GUARDIAN_POLICY_TIMING_ENVELOPE = 'true';
+      try {
+        const engine = new PolicyEngine({
+          version: '1.0',
+          policy: { mode: 'block', default_action: 'pass', rules: [] },
+        });
+        const t0 = Date.now();
+        engine.evaluate(ctx('noop', { x: 1 }));
+        expect(Date.now() - t0).toBeGreaterThanOrEqual(20);
+      } finally {
+        if (prev === undefined) delete process.env.GUARDIAN_POLICY_TIMING_ENVELOPE;
+        else process.env.GUARDIAN_POLICY_TIMING_ENVELOPE = prev;
+      }
     });
   });
 

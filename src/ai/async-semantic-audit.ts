@@ -248,6 +248,24 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   };
 
   StructuredLogger.info(auditPayload);
+
+  try {
+    const { appendSemanticAuditRecord } = await import('./semantic-audit-store.js');
+    appendSemanticAuditRecord({
+      requestId: job.requestId,
+      serverName: job.serverName,
+      toolName: job.toolName,
+      syncDecision: job.syncDecision,
+      semanticAudit: result,
+      model: response.model,
+      durationMs: response.durationMs,
+      timestamp: job.timestamp,
+    });
+  } catch (err) {
+    Logger.debug(
+      `[async-semantic] Failed to persist audit record: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /** Build job from proxy context after sync policy evaluation. */
