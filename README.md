@@ -23,6 +23,8 @@ Evidence is split into four layers — use the right source when quoting numbers
 
 **Enterprise findings (May 2026 sim)** — **17/17** items closed in **2.9.2** ([`reports/enterprise-findings-fixes/summary.md`](reports/enterprise-findings-fixes/summary.md)); original list in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md).
 
+**v2.9.3 (enterprise multi-tenant hardening)** — unified **response security gate** on all transports (stdio / HTTP / SSE / WebSocket / streamable HTTP), **JWT-bound multi-tenant** dashboard + proxy isolation, **OIDC introspection** + Redis **token revocation**, **audit hash chain**, **mTLS hot-reload**, mock-free **MCP echo fixtures** for integration tests, and CI **Enterprise Preflight** job (Redis + Postgres). Deploy: [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) · pilot: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md). Open PR: [#15](https://github.com/rudraneel93/mcp-guardian/pull/15).
+
 **M-2 prompt injection** — sync regex path is the default; enable **`GUARDIAN_SEMANTIC_ASYNC`** for tier-2 LLM semantic audit on high-risk deployments ([`docs/AI_LEARNING.md`](docs/AI_LEARNING.md)).
 
 **v2.9.2** leads with **CI-gated adversarial harness** evidence (**154/154** corpus, **84/85** evasion, **adv-066** tracked), **four-layer README evidence** (repo eval vs harness vs enterprise sim vs SCA), and **[enterprise attack-sim](reports/enterprise-attack-sim/)** reports; adds the **seamless analysis platform** (solo `pnpm onboard`, dashboard Setup/Agent flow/Analysis tabs, plain-English `report.json`, live infrastructure visuals from `history.db`, personalized traffic summary). Continues per-block instant attack learning, dashboard RBAC, streaming response inspection, and bounded audit queue. See [CHANGELOG.md](CHANGELOG.md).
@@ -123,7 +125,7 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Version 2.9.2** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+**Version 2.9.3** adds **enterprise multi-tenant hardening**: per-tenant JWT binding, response DLP gate on every transport, streamable HTTP upstream relay, session rotation, compliance/evidence scripts, and **54** integration tests with real echo upstreams (no mock MCP servers). **2.9.2** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 > **Experimental vs shipped (honest)**  
 > **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC**, **browser SPA** (`deploy/dashboard-spa/`), **streaming response inspection**, **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** + **audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit + **local semantic fallback**, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E + **comprehensive harness**, **instant + batch AI learning** (quorum/drift/rollback), [enterprise attack sim](reports/enterprise-attack-sim/README.md) (synthetic), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
@@ -393,11 +395,29 @@ Verify integration: `./scripts/verify-live-integration.sh`
 
 See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an honest production vs pilot scorecard (dashboard RBAC, streaming response scan, local semantic fallback, multi-replica policy cache, integration fixtures).
 
+**Verify before staging / production:**
+
+```bash
+pnpm build
+pnpm test                              # unit + harness (~1054 tests)
+pnpm test:integration                  # 54 tests — real echo HTTP/WS/SSE/stdio fixtures
+GUARDIAN_DISABLE_SEMANTIC=true pnpm verify:corpus   # 154/154 attacks, 74/74 benign
+pnpm enterprise:preflight              # hard checks (needs REDIS_URL + DATABASE_URL in prod)
+pnpm enterprise:pilot                  # multi-tenant dashboard + JWT binding regression
+pnpm enterprise:cutover                # full cutover checklist (build, tests, Helm, migrations)
+pnpm enterprise:compliance-report      # auditor evidence JSON
+```
+
+Helm overlay: [`deploy/helm/mcp-guardian/values-enterprise.yaml`](deploy/helm/mcp-guardian/values-enterprise.yaml). Apply Postgres migrations **004** (tenant scoping) and **005** (tenant cost/security/health) before multi-tenant traffic.
+
 ### Enterprise (v2.5+)
 - **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview
 - **Fleet aggregation (v2.7)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`)
 - **Detector Plugin SDK (v2.8)** — [`@mcp-guardian/plugin-sdk`](https://www.npmjs.com/package/@mcp-guardian/plugin-sdk) on npm (`PLUGIN_SDK_VERSION` 3.0.0); `createDetectorPlugin` + lifecycle hooks; monorepo `workspace:*` — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md), [packages/plugin-sdk/](packages/plugin-sdk/)
-- **Tenant isolation** — per-tenant circuit breakers, rate limits, sessions, attack learning, and audit scoping; see [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md)
+- **Tenant isolation** — per-tenant circuit breakers, rate limits, sessions, attack learning, and audit scoping; JWT-authoritative binding when `GUARDIAN_MULTI_TENANT_ENABLED=true`; see [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md)
+- **Response security gate (v2.9.3)** — unified DLP + optional sync semantic on tool **responses** across stdio, HTTP, SSE, WebSocket, and streamable HTTP (`gateToolResponseText`; `GUARDIAN_RESPONSE_DLP_MODE`, `GUARDIAN_SEMANTIC_SYNC_RESPONSE`)
+- **Enterprise auth (v2.9.3)** — OIDC introspection (`GUARDIAN_OIDC_INTROSPECTION`), Redis token revocation denylist, mTLS cert hot-reload (`MtlsCertWatcher`), session rotation (`GUARDIAN_SESSION_ROTATE_ON_USE`)
+- **Audit hash chain (v2.9.3)** — tamper-evident policy audit JSONL (`GUARDIAN_AUDIT_HASH_CHAIN`)
 - **Policy audit trail** — `POLICY_AUDIT_ENABLED` JSONL change log
 - **Compliance pack** — [docs/COMPLIANCE.md](docs/COMPLIANCE.md), [docs/PEN_TEST_SCOPE.md](docs/PEN_TEST_SCOPE.md)
 - **Helm chart** — Redis subchart, ServiceMonitor, ExternalSecrets, PDB, backup CronJob
@@ -412,12 +432,13 @@ See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an hone
 - **Graceful shutdown** — WAL checkpoint, connection flush
 
 ### Testing
-- **1005 tests** — `pnpm vitest run` (**149** files; unit, integration, E2E proxy + adversarial proxy + harness node suite, fleet, policy-merge, plugin-sdk, llm-cache, llm-config, cost-auditor, dpop-redis-lock, policy-engine-memory, pgbouncer-check, memory-monitor, instant-attack-learning, dashboard-rbac, secret-scanner coverage)
+- **~1054 tests** — `pnpm vitest run` (**165** files; unit, integration, E2E proxy + adversarial proxy + harness node suite, fleet, policy-merge, plugin-sdk, enterprise regressions)
+- **Integration suite** — `pnpm test:integration` (**54** tests) via [`vitest.integration.config.ts`](vitest.integration.config.ts); real MCP echo fixtures under [`tests/fixtures/`](tests/fixtures/) (HTTP, WebSocket, SSE, stdio) — **no mock upstream servers**
 - **Adversarial harness** — `./adversarial-harness/run-all.sh` or `node adversarial-harness/run-harness.mjs` → [`reports/adversarial-harness/`](reports/adversarial-harness/) — **154/154** corpus attacks blocked, **0** FP on **74** benign + edge fixtures, **84/85** evasion blocked (**adv-066** documented bypass), **26/26** live Node integration, **400/402** Python/TS parity
 - **Enterprise corpus** — **228** JSON fixtures on disk (151 attack + 55 benign + edge-cases; [`corpus/`](corpus/README.md)); `pnpm eval` via `PolicyEngine` + `default-policy.yaml` — **100%** attack recall on latest eval (see [`corpus-eval-report.json`](corpus-eval-report.json))
 - **Pen-test evidence** — [`docs/PEN_TEST_REPORT.md`](docs/PEN_TEST_REPORT.md), OWASP MCP/LLM mapping in [`security/ATTACK_MATRIX.md`](security/ATTACK_MATRIX.md)
 - **Adversarial scenarios** — 58+ inline regression tests ([`adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts)); **10** corpus attacks through live proxy ([`adversarial-proxy.e2e.test.ts`](tests/e2e/adversarial-proxy.e2e.test.ts)); full matrix in [`adversarial-harness/README.md`](adversarial-harness/README.md)
-- **CI** — `corpus-eval` + `benchmarks` jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); nightly [`.github/workflows/corpus-eval.yml`](.github/workflows/corpus-eval.yml) uploads `corpus-eval-report.json`
+- **CI** — `corpus-eval` + `benchmarks` + **`enterprise`** (Redis/Postgres preflight + integration) jobs in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); nightly [`.github/workflows/corpus-eval.yml`](.github/workflows/corpus-eval.yml) uploads `corpus-eval-report.json`
 - **Coverage gates** — 70% lines in CI
 
 ---
@@ -1168,6 +1189,8 @@ pnpm eval:attack-learning:charts   # refresh fig1–fig7 PNGs
 git clone https://github.com/rudraneel93/mcp-guardian.git
 cd mcp-guardian
 pnpm install && pnpm build && pnpm test
+pnpm test:integration      # 54 integration tests (echo HTTP/WS/SSE/stdio fixtures)
+pnpm enterprise:preflight  # staging/prod env checks
 ./scripts/verify-live-integration.sh
 pnpm run dogfood          # sandboxed multi-server scenario (CI)
 pnpm run live:tui-demo    # write shared ~/.mcp-guardian/history.db for TUI smoke test
@@ -1221,13 +1244,14 @@ pnpm benchmark:proxy-slo            # pipelined CI gate (default p95 < 150 ms)
 - **Proxy tiers** — set per-pod deployment SLOs at realistic queue depth (~**10** in-flight, not 1000 on one process).
 - **Scale horizontally** — shard clients across replicas; one stdio proxy serializes under burst load.
 - **Do not claim sub-150 ms at 1k concurrent** on the proxy path; that gate applies to pipelined/sequential CI (`benchmark:proxy-slo`), not concurrent burst.
-- **HTTP/SSE transport** — no in-repo HTTP MCP echo fixture yet; tiered stdio proxy benchmarks are the deployment reference until SSE session bootstrap lands.
+- **HTTP/SSE/WebSocket/streamable HTTP** — integration tests use real echo fixtures ([`tests/fixtures/mcp-http-echo-server.cjs`](tests/fixtures/mcp-http-echo-server.cjs), [`mcp-ws-echo-server.cjs`](tests/fixtures/mcp-ws-echo-server.cjs), [`mcp-sse-echo-server.cjs`](tests/fixtures/mcp-sse-echo-server.cjs)); stdio tiered proxy benchmarks remain the primary latency reference
 
 ### Test & evidence depth (v2.9.2)
 
 | Asset | Count / scope |
 |-------|----------------|
-| Vitest suite | **1005** tests (**149** files; `pnpm vitest run`) |
+| Vitest suite | **~1054** tests (**165** files; `pnpm vitest run`) |
+| **Integration** | **54/54** — `pnpm test:integration`; streamable HTTP relay, multi-tenant dashboard, real MCP stdio |
 | **Adversarial harness** | **154/154** corpus attacks · **0** FP (**74** benign + edge) · **84/85** evasion (**1** bypass: adv-066) · **26/26** Node live integration · **400/402** Python/TS parity — [reports/adversarial-harness/](reports/adversarial-harness/) |
 | v2.9.2 regressions | adversarial harness, dashboard-rbac, streaming inspector, attack-learning confidence gate, `RequestIdLock` stdio tests, allowlist policy test |
 | v2.8.1 regressions | `instant-attack-learning` |
@@ -1341,6 +1365,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 ---
 
 ## Roadmap
+
+### Shipped in v2.9.3
+- **Enterprise multi-tenant hardening** — JWT-bound tenant isolation, per-tenant semantic JSON, tenant-scoped audit/cost/security/health (Postgres migrations 004/005)
+- **Unified response security gate** — `gateToolResponseText()` on stdio, HTTP, SSE, WebSocket, streamable HTTP; `GUARDIAN_RESPONSE_DLP_MODE=redact|block`
+- **Enterprise auth** — OIDC introspection, Redis token revocation, mTLS hot-reload, session rotation on use
+- **Audit hash chain** — `GUARDIAN_AUDIT_HASH_CHAIN` for tamper-evident policy audit JSONL
+- **Streamable HTTP relay** — `GUARDIAN_STREAMABLE_HTTP_UPSTREAM_RELAY` with response gate
+- **Mock-free transport tests** — real MCP echo fixtures; SSE/WS/HTTP integration without `vi.fn` policy doubles
+- **Enterprise verify scripts** — `pnpm enterprise:preflight`, `enterprise:pilot`, `enterprise:cutover`, `enterprise:compliance-report`
+- **CI enterprise job** — Redis + Postgres service containers; integration + dashboard multi-tenant regression
 
 ### Shipped in v2.9.2
 - **Seamless analysis platform** — `pnpm onboard`, dashboard **Setup** / **Agent flow** / **Analysis** tabs, inline plain-English `report.json`, personalized `traffic-summary.json`, live **infrastructure visuals** (`/api/visuals/live`, `visuals-data.json`, Recharts + matplotlib gallery), `pnpm agent:proxy-traffic`, `scripts/start-dashboard-proxy.sh` stale-dist rebuild
