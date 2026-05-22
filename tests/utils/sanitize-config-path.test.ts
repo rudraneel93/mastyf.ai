@@ -30,14 +30,13 @@ describe('sanitizeConfigPath', () => {
 
   it('blocks symlink escape outside allowlist', () => {
     if (process.platform === 'win32') return;
-    const secret = path.join(tmpDir, 'secret.json');
-    fs.writeFileSync(secret, '{}');
-    const link = path.join(tmpDir, 'link.json');
-    fs.symlinkSync(secret, link);
     const outside = path.join(tmpDir, 'outside');
     fs.mkdirSync(outside);
     const evil = path.join(outside, 'evil.json');
-    fs.symlinkSync('/etc/passwd', evil);
+    // /sbin is not in unixAllowedPrefixes — /etc/ is intentionally allowed for system MCP configs
+    const target = process.platform === 'darwin' ? '/sbin/mount' : '/sbin/init';
+    if (!fs.existsSync(target)) return;
+    fs.symlinkSync(target, evil);
     expect(sanitizeConfigPath(evil)).toBeNull();
   });
 

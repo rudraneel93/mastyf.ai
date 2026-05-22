@@ -51,6 +51,27 @@ function init(id: number): string {
   );
 }
 
+async function waitForResponse(
+  responses: Map<string, unknown>,
+  id: string,
+  timeoutMs = 8000,
+): Promise<unknown> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (responses.has(id)) return responses.get(id);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`timeout waiting for response id=${id}`);
+}
+
+async function waitForEchoReady(
+  proxy: McpProxyServer,
+  responses: Map<string, unknown>,
+): Promise<void> {
+  proxy.handleClientInput(init(0));
+  await waitForResponse(responses, '0', 5000);
+}
+
 const fixturesReady = existsSync(ECHO) && existsSync(FS_FIXTURE);
 
 const describeFixtures = fixturesReady ? describe : describe.skip;
@@ -76,13 +97,13 @@ describeFixtures('integration: MCP fixtures matrix', () => {
       process.stdout.write = function (chunk: unknown, ...args: unknown[]): boolean {
         try {
           const msg = JSON.parse(String(chunk));
-          if (msg.id) responses.set(String(msg.id), msg);
+          if (msg.id !== undefined && msg.id !== null) responses.set(String(msg.id), msg);
         } catch {
           /* ignore */
         }
         return (origWrite as (...a: unknown[]) => boolean)(chunk, ...args);
       };
-      await new Promise((r) => setTimeout(r, 400));
+      await waitForEchoReady(proxy, responses);
     });
 
     afterAll(() => {
@@ -93,16 +114,17 @@ describeFixtures('integration: MCP fixtures matrix', () => {
 
     it('passes safe echo call', async () => {
       proxy.handleClientInput(call(10, 'echo', { message: 'hi' }));
-      await new Promise((r) => setTimeout(r, 500));
-      const msg = responses.get('10') as { result?: unknown; error?: unknown };
+      const msg = (await waitForResponse(responses, '10')) as {
+        result?: unknown;
+        error?: unknown;
+      };
       expect(msg?.error).toBeUndefined();
       expect(msg?.result).toBeDefined();
     });
 
     it('blocks SQL injection in args via proxy policy', async () => {
       proxy.handleClientInput(call(11, 'echo', { query: 'DELETE FROM users' }));
-      await new Promise((r) => setTimeout(r, 500));
-      const msg = responses.get('11') as { error?: { message?: string } };
+      const msg = (await waitForResponse(responses, '11')) as { error?: { message?: string } };
       expect(msg?.error?.message).toMatch(/blocked|policy/i);
     });
   });
@@ -127,14 +149,13 @@ describeFixtures('integration: MCP fixtures matrix', () => {
       process.stdout.write = function (chunk: unknown, ...args: unknown[]): boolean {
         try {
           const msg = JSON.parse(String(chunk));
-          if (msg.id) responses.set(String(msg.id), msg);
+          if (msg.id !== undefined && msg.id !== null) responses.set(String(msg.id), msg);
         } catch {
           /* ignore */
         }
         return (origWrite as (...a: unknown[]) => boolean)(chunk, ...args);
       };
-      proxy.handleClientInput(init(1));
-      await new Promise((r) => setTimeout(r, 600));
+      await waitForEchoReady(proxy, responses);
     });
 
     afterAll(() => {
@@ -145,8 +166,9 @@ describeFixtures('integration: MCP fixtures matrix', () => {
 
     it('reads file through proxied filesystem MCP', async () => {
       proxy.handleClientInput(call(2, 'read_file', { path: 'hello.txt' }));
-      await new Promise((r) => setTimeout(r, 800));
-      const msg = responses.get('2') as { result?: { content?: { text?: string }[] } };
+      const msg = (await waitForResponse(responses, '2', 10_000)) as {
+        result?: { content?: { text?: string }[] };
+      };
       const text = msg?.result?.content?.[0]?.text ?? '';
       expect(text).toContain('hello from filesystem fixture');
     });

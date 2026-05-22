@@ -35,6 +35,60 @@ jobs:
       - name: Run tests with coverage
         run: pnpm vitest run --coverage
 
+  enterprise:
+    name: Enterprise Preflight & Integration
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: guardian
+          POSTGRES_PASSWORD: guardian
+          POSTGRES_DB: guardian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready -U guardian
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+
+      - name: Enterprise preflight (Redis + Postgres)
+        run: pnpm enterprise:preflight
+        env:
+          REDIS_URL: redis://localhost:6379
+          DATABASE_URL: postgresql://guardian:guardian@localhost:5432/guardian
+          GUARDIAN_STRICT_MODE: 'true'
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Multi-tenant dashboard regression
+        run: pnpm exec vitest run tests/dashboard/dashboard-multi-tenant.test.ts
+
   dogfood:
     name: Dogfood scenario
     runs-on: ubuntu-latest

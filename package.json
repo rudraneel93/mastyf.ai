@@ -94,6 +94,8 @@
     "enterprise:evidence-pack": "node scripts/package-enterprise-evidence.mjs",
     "enterprise:compliance-report": "node scripts/generate-compliance-report.mjs",
     "enterprise:preflight": "sh scripts/verify-enterprise-preflight.sh",
+    "enterprise:pilot": "sh scripts/verify-multi-tenant-pilot.sh",
+    "enterprise:cutover": "sh scripts/verify-production-cutover.sh",
     "real-life:swarm": "node security-swarm/run-analysis.mjs",
     "verify:corpus": "bash scripts/verify-corpus-parity.sh",
     "dashboard:build": "npm run build --prefix deploy/dashboard-spa",

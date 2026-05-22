@@ -67,3 +67,22 @@ export async function startMcpWsEchoFixture(): Promise<EchoFixtureHandle> {
       }),
   };
 }
+
+export async function startMcpSseEchoFixture(): Promise<EchoFixtureHandle & { baseUrl: string }> {
+  const script = path.join(__dirname, 'mcp-sse-echo-server.cjs');
+  const child = spawn('node', [script, '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const port = await waitForReady(child);
+  const baseUrl = `http://127.0.0.1:${port}`;
+  return {
+    port,
+    baseUrl,
+    close: () =>
+      new Promise((resolve) => {
+        child.once('exit', () => resolve());
+        child.kill('SIGTERM');
+        setTimeout(() => {
+          if (!child.killed) child.kill('SIGKILL');
+        }, 2000);
+      }),
+  };
+}
