@@ -6,11 +6,12 @@
 import { readdirSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveSwarmDir } from '../../security-swarm/lib/swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
 const CONFIGS_DIR = join(REPO, 'guardian-configs');
-const OUT_PATH = join(REPO, 'reports', 'security-swarm', 'user-servers-session.json');
+const OUT_PATH = join(resolveSwarmDir(), 'user-servers-session.json');
 
 async function probeOne(server, configPath) {
   const started = Date.now();

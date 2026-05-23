@@ -62,6 +62,7 @@
     "test:policy-proxy-utils": "vitest run tests/policy/ tests/proxy/ tests/utils/ --reporter=dot",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:scale-postgres": "node scripts/test-scale-postgres.mjs",
+    "test:scale-proxy": "node scripts/test-scale-proxy-replicas.mjs",
     "typecheck": "turbo run typecheck",
     "dogfood": "node scripts/run-dogfood-scenario.cjs",
     "e2e:tui": "node scripts/run-e2e-tui.cjs",
@@ -99,6 +100,7 @@
     "enterprise:evidence-pack": "node scripts/package-enterprise-evidence.mjs",
     "enterprise:compliance-report": "node scripts/generate-compliance-report.mjs",
     "enterprise:preflight": "sh scripts/verify-enterprise-preflight.sh",
+    "enterprise:preflight:multi-region": "sh scripts/verify-multi-region-preflight.sh",
     "enterprise:pilot": "sh scripts/verify-multi-tenant-pilot.sh",
     "enterprise:cutover": "sh scripts/verify-production-cutover.sh",
     "real-life:swarm": "node security-swarm/run-analysis.mjs",
@@ -166,6 +168,7 @@
     "pg": "^8.20.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server-filesystem": "^2026.1.14",
     "@types/better-sqlite3": "^7.6.13",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",

@@ -41,7 +41,7 @@ env -u DASHBOARD_AUTH_DISABLED ./scripts/verify-enterprise-preflight.sh
 | Multi-tenant JWT | `GUARDIAN_MULTI_TENANT_ENABLED=true`, JWT `tenant_id` claim (`GUARDIAN_JWT_TENANT_CLAIM`) |
 | Postgres RLS | `GUARDIAN_PG_RLS_ENABLED=true` with `DB_TYPE=postgres` (enterprise Helm default) |
 | Immutable audit chain | `GUARDIAN_AUDIT_HASH_CHAIN=true` — [HIPAA_AUDIT_TRAIL.md](./HIPAA_AUDIT_TRAIL.md) |
-| Semantic LLM cap | `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN=10`, `GUARDIAN_LLM_CACHE_TTL_SEC=86400` |
+| Semantic LLM cap | `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN=10`, `GUARDIAN_SEMANTIC_LLM_MAX_USD_PER_MIN` (optional explicit USD/min; default = count × `GUARDIAN_SEMANTIC_ESTIMATED_COST_USD`), `GUARDIAN_LLM_CACHE_TTL_SEC=86400` |
 | DPoP lock-free | `GUARDIAN_DPOP_LOCK_FREE=true` (jittered SET NX; set `legacy` for lock-based path) |
 | DPoP | `GUARDIAN_REQUIRE_DPOP=true` + Redis for jti dedup |
 | Cost governance | Merge `policy-templates/enterprise-cost-governance.yaml`, `GUARDIAN_DAILY_BUDGET_USD` |
@@ -57,7 +57,7 @@ All MCP transports share `gateToolResponseText()` (DLP, chunked inspection, opti
 |----------|---------|---------|
 | `GUARDIAN_RESPONSE_DLP_MODE` | `block` | `block` \| `redact` \| `audit` — scrub-and-pass vs hard block |
 | `GUARDIAN_SKIP_RESPONSE_SCAN` | off | Skip response inspection for trusted upstream |
-| `GUARDIAN_SEMANTIC_SYNC_RESPONSE` | off | Sync heuristic gate on tool **responses** |
+| `GUARDIAN_SEMANTIC_SYNC_RESPONSE` | **on in production** (opt out with `false`) | Sync heuristic gate on tool **responses** — required for enterprise response security |
 | `GUARDIAN_SEMANTIC_SYNC_RESPONSE_LLM` | off | Add LLM pass (latency); needs API key |
 | `GUARDIAN_SEMANTIC_SYNC_TIMEOUT_MS` | `3000` | LLM timeout for sync response gate |
 | `GUARDIAN_LOCAL_SEMANTIC` | on | Heuristic scorer when LLM absent |

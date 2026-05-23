@@ -123,14 +123,29 @@ function decimalIpToDotted(decimal: number): string {
   ].join('.');
 }
 
+/** Parse IPv4-mapped IPv6 tail (::ffff:x.x.x.x or ::ffff:7f00:1 after URL normalization). */
+function ipv4FromMappedV6Tail(v4Part: string): string | null {
+  const tail = v4Part.toLowerCase();
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(tail)) return tail;
+  const hexPair = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(tail);
+  if (hexPair) {
+    const n = (parseInt(hexPair[1], 16) << 16) | parseInt(hexPair[2], 16);
+    return decimalIpToDotted(n);
+  }
+  if (/^[0-9a-f]{1,8}$/i.test(tail)) {
+    return decimalIpToDotted(parseInt(tail, 16));
+  }
+  return null;
+}
+
 function isPrivateOrLocalIpv6(host: string): boolean {
   const h = host.toLowerCase();
   if (h === '::1' || h === '::') return true;
   if (h.startsWith('fe80:')) return true; // link-local
   if (h.startsWith('fc') || h.startsWith('fd')) return true; // ULA
   if (h.startsWith('::ffff:')) {
-    const v4 = h.slice('::ffff:'.length);
-    if (/^[\da-f.]+$/i.test(v4)) return isPrivateOrLocalIpv4(v4);
+    const mapped = ipv4FromMappedV6Tail(h.slice('::ffff:'.length));
+    if (mapped && isPrivateOrLocalIpv4(mapped)) return true;
   }
   return false;
 }

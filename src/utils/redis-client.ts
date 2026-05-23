@@ -5,6 +5,8 @@ export interface RedisClientOptions {
   maxRetriesPerRequest?: number;
   lazyConnect?: boolean;
   connectTimeout?: number;
+  /** Override REDIS_URL for secondary clients (e.g. cross-region global rate limit). */
+  connectionString?: string;
 }
 
 /** True when any Redis HA env is set (single, Sentinel, or Cluster). */
@@ -123,7 +125,7 @@ export function createRedisClient(options?: RedisClientOptions): Redis | Cluster
     });
   }
 
-  let url = process.env['REDIS_URL'] || 'redis://localhost:6379';
+  let url = options?.connectionString || process.env['REDIS_URL'] || 'redis://localhost:6379';
   if (process.env['GUARDIAN_REDIS_TLS'] === 'true' && url.startsWith('redis://')) {
     url = 'rediss://' + url.slice('redis://'.length);
   }

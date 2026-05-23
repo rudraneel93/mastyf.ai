@@ -11,6 +11,7 @@ import { runMigrations } from '../database/migration-runner.js';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import type { AttackLearningState } from '../ai/instant-attack-learning.js';
+import { getGuardianRegion } from '../utils/region.js';
 
 export interface SyncConfig {
   instanceId: string;
@@ -39,6 +40,11 @@ export class AuditTrailSync {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
+  /** Region label stored in guardian_instances.metadata for dashboard region filter. */
+  private instanceMetadata(): Record<string, string> {
+    return { region: getGuardianRegion() };
+  }
+
   async initialize(): Promise<void> {
     const { Pool } = await loadPg();
     this.pgPool = new Pool({
@@ -53,16 +59,18 @@ export class AuditTrailSync {
     try {
       // Register this instance
       await client.query(
-        `INSERT INTO guardian_instances (instance_id, instance_name, hostname, version, started_at, last_heartbeat, status)
-         VALUES ($1, $2, $3, $4, NOW(), NOW(), 'active')
+        `INSERT INTO guardian_instances (instance_id, instance_name, hostname, version, started_at, last_heartbeat, status, metadata)
+         VALUES ($1, $2, $3, $4, NOW(), NOW(), 'active', $5::jsonb)
          ON CONFLICT (instance_id) DO UPDATE
-         SET last_heartbeat = NOW(), status = 'active', hostname = $3, version = $4`,
+         SET last_heartbeat = NOW(), status = 'active', hostname = $3, version = $4,
+             metadata = COALESCE(guardian_instances.metadata, '{}'::jsonb) || EXCLUDED.metadata`,
         [
           this.config.instanceId,
           this.config.instanceName,
           process.env['HOSTNAME'] || 'unknown',
           process.env.npm_package_version || '2.3.24',
-        ]
+          JSON.stringify(this.instanceMetadata()),
+        ],
       );
 
       Logger.info(`[AuditTrailSync] Initialized — instance: ${this.config.instanceId}, sync interval: ${this.config.syncIntervalMs}ms`);
@@ -111,37 +119,68 @@ export class AuditTrailSync {
       for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
         const servers = this.localDb.getDistinctServersForTenant(tenantId);
         for (const serverName of servers) {
-          const records = await this.localDb.getCallRecordsForServer(serverName, this.config.batchSize, tenantId);
-          if (records.length === 0) continue;
-
           const client = await this.pgPool.connect();
           try {
+            const cursorRes = await client.query(
+              `SELECT last_source_id FROM audit_sync_cursors
+               WHERE instance_id = $1 AND tenant_id = $2 AND server_name = $3`,
+              [this.config.instanceId, tenantId, serverName],
+            );
+            const afterId = Number(cursorRes.rows[0]?.last_source_id) || 0;
+
+            const records = await this.localDb.getCallRecordsAfterId(
+              serverName,
+              afterId,
+              this.config.batchSize,
+              tenantId,
+            );
+            if (records.length === 0) continue;
+
             await client.query('BEGIN');
+            let maxId = afterId;
             for (const record of records) {
-              // ProxyCallRecord lacks action/severity fields — call records are
-              // informational and default to 'pass'/'info'; policy decisions use
-              // recordPolicyDecision() which stores real action/severity values.
+              if (record.sourceId > maxId) maxId = record.sourceId;
+              const action = record.blocked ? 'block' : 'pass';
+              const severity = record.blocked ? 'warn' : 'info';
               await client.query(
                 `INSERT INTO unified_audit_trail
-               (instance_id, server_name, tool_name, action, request_tokens, response_tokens, total_tokens, duration_ms, severity, tenant_id)
-               VALUES ($1, $2, $3, 'pass', $4, $5, $6, $7, 'info', $8)
-               ON CONFLICT (id) DO NOTHING`,
+               (instance_id, server_name, tool_name, action, rule_name, reason,
+                request_tokens, response_tokens, total_tokens, duration_ms,
+                estimated_cost_usd, model, severity, tenant_id, timestamp, source_record_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+               ON CONFLICT DO NOTHING`,
                 [
                   this.config.instanceId,
                   record.serverName,
                   record.toolName,
+                  action,
+                  record.blockRule ?? null,
+                  record.blockReason ?? null,
                   record.requestTokens,
                   record.responseTokens,
                   record.totalTokens,
                   record.durationMs,
-                  record.tenantId || 'default',
+                  record.costUsd ?? 0,
+                  record.model ?? null,
+                  severity,
+                  record.tenantId || tenantId,
+                  record.timestamp || new Date().toISOString(),
+                  record.sourceId,
                 ],
               );
             }
+            await client.query(
+              `INSERT INTO audit_sync_cursors (instance_id, tenant_id, server_name, last_source_id, last_synced_at)
+               VALUES ($1, $2, $3, $4, NOW())
+               ON CONFLICT (instance_id, tenant_id, server_name)
+               DO UPDATE SET last_source_id = GREATEST(audit_sync_cursors.last_source_id, EXCLUDED.last_source_id),
+                             last_synced_at = NOW()`,
+              [this.config.instanceId, tenantId, serverName, maxId],
+            );
             await client.query('COMMIT');
-            if (records.length > 0) {
-              Logger.debug(`[AuditTrailSync] Synced ${records.length} call records for ${serverName} (tenant=${tenantId})`);
-            }
+            Logger.debug(
+              `[AuditTrailSync] Synced ${records.length} call records for ${serverName} (tenant=${tenantId}, afterId=${afterId})`,
+            );
           } catch (err) {
             await client.query('ROLLBACK');
             throw err;
@@ -199,16 +238,27 @@ export class AuditTrailSync {
       for (const tenantId of tenants.length > 0 ? tenants : ['default']) {
         const servers = this.localDb.getDistinctServersForTenant(tenantId);
         for (const serverName of servers) {
-          const records = await this.localDb.getCallRecordsForServer(serverName, this.config.batchSize, tenantId);
-          if (records.length === 0) continue;
-
-          // Aggregate cost data per server from call records
-          const totalTokens = records.reduce((s, r) => s + r.totalTokens, 0);
-          const inputTokens = records.reduce((s, r) => s + r.requestTokens, 0);
-          const outputTokens = records.reduce((s, r) => s + r.responseTokens, 0);
-
           const client = await this.pgPool.connect();
           try {
+            const cursorRes = await client.query(
+              `SELECT last_source_id FROM audit_sync_cursors
+               WHERE instance_id = $1 AND tenant_id = $2 AND server_name = $3`,
+              [this.config.instanceId, tenantId, serverName],
+            );
+            const afterId = Number(cursorRes.rows[0]?.last_source_id) || 0;
+            const records = await this.localDb.getCallRecordsAfterId(
+              serverName,
+              afterId,
+              this.config.batchSize,
+              tenantId,
+            );
+            if (records.length === 0) continue;
+
+            const totalTokens = records.reduce((s, r) => s + r.totalTokens, 0);
+            const inputTokens = records.reduce((s, r) => s + r.requestTokens, 0);
+            const outputTokens = records.reduce((s, r) => s + r.responseTokens, 0);
+            const costUsd = records.reduce((s, r) => s + (Number(r.costUsd) || 0), 0);
+
             await client.query(
               `INSERT INTO unified_cost_records
              (instance_id, server_name, tokens_used, input_tokens, output_tokens, cost_usd, tenant_id)
@@ -220,7 +270,7 @@ export class AuditTrailSync {
                 totalTokens,
                 inputTokens,
                 outputTokens,
-                0, // Cost computed by central cost auditor via PricingClient
+                costUsd,
                 tenantId,
               ],
             );
@@ -280,8 +330,11 @@ export class AuditTrailSync {
       const client = await this.pgPool.connect();
       try {
         await client.query(
-          'UPDATE guardian_instances SET last_heartbeat = NOW(), status = $2 WHERE instance_id = $1',
-          [this.config.instanceId, 'active']
+          `UPDATE guardian_instances
+           SET last_heartbeat = NOW(), status = $2,
+               metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
+           WHERE instance_id = $1`,
+          [this.config.instanceId, 'active', JSON.stringify(this.instanceMetadata())],
         );
       } finally {
         client.release();

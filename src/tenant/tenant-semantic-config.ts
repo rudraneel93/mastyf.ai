@@ -53,10 +53,18 @@ export function isLocalSemanticEnabledGlobal(): boolean {
   return process.env['GUARDIAN_DISABLE_SEMANTIC'] !== 'true';
 }
 
+/** Global sync-response gate — production defaults on unless explicitly disabled. */
+export function isSyncSemanticResponseEnabledGlobal(): boolean {
+  const explicit = process.env['GUARDIAN_SEMANTIC_SYNC_RESPONSE'];
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 export function isSyncSemanticResponseEnabledForTenant(tenantId?: string): boolean {
   const o = getTenantSemanticOverrides(tenantId);
   if (o?.syncResponse !== undefined) return o.syncResponse;
-  return process.env['GUARDIAN_SEMANTIC_SYNC_RESPONSE'] === 'true';
+  return isSyncSemanticResponseEnabledGlobal();
 }
 
 export function isSyncSemanticLlmEnabledForTenant(tenantId?: string): boolean {

@@ -20,6 +20,8 @@ import {
   type TrafficSummary,
 } from '@/lib/guardian-api';
 import { InfrastructureVisualsPanel } from './InfrastructureVisualsPanel';
+import { DashboardWindowProvider } from './dashboard/DashboardWindowContext';
+import { VisualsProvider } from './dashboard/VisualsProvider';
 import { PlainEnglishReportView } from './PlainEnglishReportView';
 
 type Props = {
@@ -131,7 +133,11 @@ export function SwarmResultsView({
         <PlainEnglishReportView report={plainReport} />
       ) : null}
 
-      <InfrastructureVisualsPanel refreshKey={refreshKey} pollMs={30_000} />
+      <DashboardWindowProvider>
+        <VisualsProvider refreshKey={refreshKey} pollMs={30_000}>
+          <InfrastructureVisualsPanel refreshKey={refreshKey} />
+        </VisualsProvider>
+      </DashboardWindowProvider>
 
       {!loading && !hasPlainReport && hasTechnical ? (
         <p className="hint">

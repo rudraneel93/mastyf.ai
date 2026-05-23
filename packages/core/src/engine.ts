@@ -6,6 +6,7 @@ import { runSchemaScan } from "./schema-scanner.js";
 import { runSemanticScan, type SemanticScanOptions } from "./semantic-scanner.js";
 import { tryAcquireSemanticSlot, releaseSemanticSlot, semanticQueueMax, semanticPerTenantMax } from "./semantic-queue.js";
 import { isCoreSemanticCircuitOpen } from "./semantic-circuit-breaker.js";
+import { isCoreLocalSemanticEnabled, runLocalSemanticFallback } from "./local-semantic-fallback.js";
 
 export interface ScanEngineOptions {
   /** TR39 confusables before offline regex (default: true). */
@@ -131,10 +132,16 @@ export async function scanTool(
 
   if (shouldRunSemantic) {
     if (isCoreSemanticCircuitOpen()) {
+      const t0 = performance.now();
+      if (isCoreLocalSemanticEnabled()) {
+        semanticIssues = runLocalSemanticFallback(tool).filter(
+          (i) => i.layer !== "semantic" || i.confidence >= confidenceThreshold,
+        );
+      }
       timings.semantic = {
-        ran: false,
-        durationMs: 0,
-        skipped: "semantic circuit breaker open",
+        ran: semanticIssues.length > 0,
+        durationMs: Math.round(performance.now() - t0),
+        skipped: "circuit open — local fallback",
       };
     } else if (!tryAcquireSemanticSlot(options.tenantId)) {
       const cap = options.tenantId

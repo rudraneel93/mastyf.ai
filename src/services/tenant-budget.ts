@@ -22,14 +22,9 @@ export function recordTenantDailySpend(tenantId: string | undefined, costUsd: nu
   spendByTenantDay.set(key, (spendByTenantDay.get(key) ?? 0) + costUsd);
 }
 
-const ESTIMATED_SEMANTIC_USD = parseFloat(
-  process.env.GUARDIAN_SEMANTIC_ESTIMATED_COST_USD || '0.003',
-);
-
 export function getEstimatedSemanticCostUsd(): number {
-  return Number.isFinite(ESTIMATED_SEMANTIC_USD) && ESTIMATED_SEMANTIC_USD > 0
-    ? ESTIMATED_SEMANTIC_USD
-    : 0.003;
+  const v = parseFloat(process.env.GUARDIAN_SEMANTIC_ESTIMATED_COST_USD || '0.003');
+  return Number.isFinite(v) && v > 0 ? v : 0.003;
 }
 
 /** Synchronous budget check before enqueueing LLM semantic work. */

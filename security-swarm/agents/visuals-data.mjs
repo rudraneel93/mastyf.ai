@@ -4,10 +4,11 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveSwarmDir } from '../lib/swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
-const OUT = join(REPO, 'reports', 'security-swarm', 'visuals-data.json');
+const OUT = join(resolveSwarmDir(), 'visuals-data.json');
 
 export async function writeVisualsDataBundle(opts = {}) {
   const { buildVisualsData } = await import('../../dist/utils/export-visuals-data.js');

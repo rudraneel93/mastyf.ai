@@ -6,12 +6,14 @@ import { buildExecutiveSummary, type ExecutiveSummary } from './dashboard-execut
 import { buildAuditHeatmap } from './audit-heatmap.js';
 import { loadAllRecordsInWindow } from './cost-timeseries.js';
 import { isStrictLiveDashboard } from './swarm-session.js';
+import { parseWindowDays } from './time-buckets.js';
 
 export type InsightScope = 'overview' | 'cost' | 'security' | 'audit' | 'ai';
 
 export type DashboardInsightsPayload = {
   scope: InsightScope;
   generatedAt: string;
+  windowDays?: number;
   source: 'measured' | 'llm' | 'deterministic';
   provider?: string;
   model?: string;
@@ -137,19 +139,21 @@ export async function buildDashboardInsights(
   tenantId: string | undefined,
   scope: InsightScope,
   opts?: {
+    windowDays?: number;
     securityScore?: number | null;
     activeThreats?: number;
     auditBlocked?: number;
     auditTotal?: number;
   },
 ): Promise<DashboardInsightsPayload> {
+  const windowDays = parseWindowDays(opts?.windowDays ?? 7);
   const securityScore = opts?.securityScore ?? null;
   const activeThreats = opts?.activeThreats ?? 0;
   const auditBlocked = opts?.auditBlocked ?? 0;
   const auditTotal = opts?.auditTotal ?? 0;
 
-  const summary = await buildExecutiveSummary(db, tenantId);
-  const records = await loadAllRecordsInWindow(db, tenantId, 7);
+  const summary = await buildExecutiveSummary(db, tenantId, windowDays);
+  const records = await loadAllRecordsInWindow(db, tenantId, windowDays);
   const heatmap = buildAuditHeatmap(records, 5);
   const heatmapTop = heatmap[0];
 
@@ -166,6 +170,7 @@ export async function buildDashboardInsights(
   const emptyPayload: DashboardInsightsPayload = {
     scope,
     generatedAt: new Date().toISOString(),
+    windowDays,
     source: 'measured',
     bullets: [],
   };
@@ -177,6 +182,7 @@ export async function buildDashboardInsights(
     return {
       scope,
       generatedAt: new Date().toISOString(),
+      windowDays,
       source: 'measured',
       bullets,
     };
@@ -186,6 +192,7 @@ export async function buildDashboardInsights(
   return {
     scope,
     generatedAt: new Date().toISOString(),
+    windowDays,
     source: 'deterministic',
     bullets: bullets.length ? bullets : ['No measured proxy traffic yet.'],
   };

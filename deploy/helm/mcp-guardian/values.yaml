@@ -88,7 +88,7 @@ externalSecrets:
   path: mcp-guardian/prod
 
 networkPolicy:
-  enabled: false
+  enabled: true
   allowedNamespace: default
 
 # Shared HTTP/SSE ingress (no stdio children). Requires multiTenant.enabled.

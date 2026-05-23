@@ -2,8 +2,9 @@
  * Dashboard-triggered security swarm analysis (detached background job, per-tenant dirs).
  */
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import {
@@ -297,24 +298,77 @@ export function startSwarmAnalysis(opts: {
   const args = ['security-swarm/run-analysis.mjs', '--quiet'];
   if (opts.full) args.push('--nightly');
 
+  const startedAt = new Date().toISOString();
+  const jobId = randomUUID();
+  mkdirSync(swarmOut, { recursive: true });
+  writeFileSync(
+    join(swarmOut, 'job.json'),
+    JSON.stringify(
+      {
+        jobId,
+        state: 'running',
+        phase: 'preflight',
+        phaseLabel: 'Preflight checks',
+        progressPct: 0,
+        startedAt,
+        finishedAt: null,
+        exitCode: null,
+        error: null,
+        analysisPath: join(swarmOut, 'analysis.txt'),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const logPath = join(swarmOut, 'job.log');
   const child = spawn(process.execPath, args, {
     cwd: REPO_ROOT,
     detached: true,
-    stdio: 'ignore',
+    stdio: ['ignore', 'ignore', 'ignore'],
     env: {
       ...process.env,
       GUARDIAN_SWARM_DIR: swarmOut,
       GUARDIAN_TENANT_ID: tenantId,
+      // Required: gate-pro.mjs checks this; GUARDIAN_DEV_UNLOCK_ALL alone is not enough
+      GUARDIAN_CI_BYPASS_LICENSE:
+        process.env['GUARDIAN_CI_BYPASS_LICENSE'] ||
+        (process.env['GUARDIAN_DEV_UNLOCK_ALL'] === 'true' ? 'true' : undefined),
+      // Skip --skip-continuous always when launched from dashboard
+      GUARDIAN_SWARM_SKIP_CONTINUOUS: 'true',
     },
   });
   child.unref();
 
+  // Watch for immediate exit — if the license gate or preflight fails
+  // before run-analysis.mjs gets to write the job file, patch it ourselves
+  child.once('exit', (code) => {
+    if (code === 0) return; // normal exit — run-analysis.mjs will have written job.json
+    const existingJob = loadJobFile(tenantId);
+    // Only patch if the job file still shows the state we wrote (not updated by the child)
+    if (existingJob?.jobId === jobId && existingJob?.state === 'running') {
+      writeFileSync(
+        join(swarmOut, 'job.json'),
+        JSON.stringify(
+          {
+            ...existingJob,
+            state: 'failed',
+            finishedAt: new Date().toISOString(),
+            exitCode: code,
+            error: `Analysis process exited ${code} before starting — check gate-pro.mjs / pnpm build`,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  });
+
   startSwarmJobWatcher(tenantId);
   setTimeout(() => tickSwarmJobWatcher(tenantId), 300);
-  const startedAt = new Date().toISOString();
   return {
     ok: true,
-    jobId: String(loadJobFile(tenantId)?.jobId ?? ''),
+    jobId,
     startedAt,
     tenantId,
   };

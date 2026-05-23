@@ -4,6 +4,15 @@
 import type { IDatabase } from '../database/database-interface.js';
 import type { ProxyCallRecord } from '../types.js';
 import { getAllActiveServerNames } from './db-aggregate.js';
+import { buildChartMeta, type ChartMetaEnvelope } from './chart-meta.js';
+import {
+  bucketGranularityForWindow,
+  computeComparison,
+  fillTimeSeries,
+  generateTimeBuckets,
+  parseWindowDays,
+  windowRangeMs,
+} from './time-buckets.js';
 
 export type CostGranularity = 'hour' | 'day';
 
@@ -19,6 +28,11 @@ export type CostTimeseriesResult = {
   granularity: CostGranularity;
   series: CostTimeseriesPoint[];
   totalsByServer: Array<{ server: string; costUsd: number; calls: number }>;
+  pivoted: Array<{ bucket: string; total: number; [server: string]: string | number }>;
+  meta: ChartMetaEnvelope;
+  comparison?: {
+    totalCostUsd: { deltaPct: number | null; deltaAbs: number; direction: 'up' | 'down' | 'flat' };
+  };
 };
 
 function bucketKey(ts: number, granularity: CostGranularity): string {
@@ -29,62 +43,111 @@ function bucketKey(ts: number, granularity: CostGranularity): string {
   return d.toISOString().slice(0, 10);
 }
 
+const TOP_SERVERS = 5;
+
 export async function buildCostTimeseries(
   db: IDatabase,
   tenantId: string | undefined,
-  windowDays: number,
-  granularity: CostGranularity,
+  windowDaysInput: number,
+  granularityInput?: CostGranularity,
 ): Promise<CostTimeseriesResult> {
-  const cutoff = Date.now() - windowDays * 86400000;
+  const windowDays = parseWindowDays(windowDaysInput);
+  const granularity = granularityInput ?? bucketGranularityForWindow(windowDays);
+  const { startMs, endMs, priorStartMs, priorEndMs } = windowRangeMs(windowDays);
   const srvs = await getAllActiveServerNames(db, tenantId);
   const byBucket = new Map<string, CostTimeseriesPoint>();
   const byServer = new Map<string, { costUsd: number; calls: number }>();
+  let priorCost = 0;
+  let recordCount = 0;
 
   for (const srv of srvs) {
     const recs = await db.getCallRecordsForServer(srv, undefined, tenantId);
     for (const r of recs) {
       const ts = Date.parse(String(r.timestamp || ''));
-      if (!Number.isFinite(ts) || ts < cutoff) continue;
+      if (!Number.isFinite(ts)) continue;
+      const cost = Number(r.costUsd) || 0;
+      if (ts >= priorStartMs && ts < priorEndMs) {
+        priorCost += cost;
+      }
+      if (ts < startMs || ts > endMs) continue;
+      recordCount++;
       const bucket = bucketKey(ts, granularity);
       const key = `${bucket}|${srv}`;
       const cur = byBucket.get(key) || { bucket, server: srv, costUsd: 0, calls: 0 };
       cur.calls++;
-      cur.costUsd += Number(r.costUsd) || 0;
+      cur.costUsd += cost;
       byBucket.set(key, cur);
 
       const srvCur = byServer.get(srv) || { costUsd: 0, calls: 0 };
       srvCur.calls++;
-      srvCur.costUsd += Number(r.costUsd) || 0;
+      srvCur.costUsd += cost;
       byServer.set(srv, srvCur);
     }
   }
 
-  const series = [...byBucket.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
   const totalsByServer = [...byServer.entries()]
     .map(([server, v]) => ({ server, ...v }))
     .sort((a, b) => b.costUsd - a.costUsd);
 
-  return { windowDays, granularity, series, totalsByServer };
+  const topServerNames = new Set(totalsByServer.slice(0, TOP_SERVERS).map((s) => s.server));
+
+  const buckets = generateTimeBuckets(startMs, endMs, granularity);
+  const bucketTotals = new Map<string, number>();
+  for (const p of byBucket.values()) {
+    bucketTotals.set(p.bucket, (bucketTotals.get(p.bucket) || 0) + p.costUsd);
+  }
+  const sparseCheck = fillTimeSeries(
+    [...bucketTotals.entries()].map(([bucket, total]) => ({ bucket, total })),
+    'bucket',
+    buckets,
+    ['total'],
+  );
+
+  const series = [...byBucket.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
+  const pivoted = pivotCostTimeseries(series, topServerNames, buckets);
+  const currentTotal = totalsByServer.reduce((s, r) => s + r.costUsd, 0);
+
+  const meta = buildChartMeta({
+    windowDays,
+    recordCount,
+    sparse: sparseCheck.sparse,
+    dataSources: ['history.db'],
+    emptyReason: recordCount === 0 ? 'No priced calls in selected window' : undefined,
+  });
+
+  return {
+    windowDays,
+    granularity,
+    series,
+    totalsByServer,
+    pivoted,
+    meta,
+    comparison: {
+      totalCostUsd: computeComparison(currentTotal, priorCost),
+    },
+  };
 }
 
-/** Pivot series into stacked chart rows keyed by bucket. */
+/** Pivot series into stacked chart rows keyed by bucket with top-N + Other. */
 export function pivotCostTimeseries(
   series: CostTimeseriesPoint[],
+  topServers?: Set<string>,
+  buckets?: string[],
 ): Array<{ bucket: string; total: number; [server: string]: string | number }> {
-  const buckets = new Map<string, Record<string, number>>();
+  const bucketMap = new Map<string, Record<string, number>>();
   for (const p of series) {
-    const row = buckets.get(p.bucket) || { total: 0 };
-    row[p.server] = (row[p.server] || 0) + p.costUsd;
+    const serverKey = topServers && !topServers.has(p.server) ? 'Other' : p.server;
+    const row = bucketMap.get(p.bucket) || { total: 0 };
+    row[serverKey] = (row[serverKey] || 0) + p.costUsd;
     row.total += p.costUsd;
-    buckets.set(p.bucket, row);
+    bucketMap.set(p.bucket, row);
   }
-  return [...buckets.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([bucket, vals]) => ({ bucket: bucket.slice(5, 16), ...vals })) as Array<{
-      bucket: string;
-      total: number;
-      [server: string]: string | number;
-    }>;
+
+  const orderedBuckets = buckets ?? [...bucketMap.keys()].sort();
+  return orderedBuckets.map((bucket) => {
+    const vals = bucketMap.get(bucket) ?? { total: 0 };
+    return { bucket, ...vals } as { bucket: string; total: number; [server: string]: string | number };
+  });
 }
 
 export async function loadAllRecordsInWindow(
@@ -92,14 +155,14 @@ export async function loadAllRecordsInWindow(
   tenantId: string | undefined,
   windowDays: number,
 ): Promise<ProxyCallRecord[]> {
-  const cutoff = Date.now() - windowDays * 86400000;
+  const { startMs, endMs } = windowRangeMs(parseWindowDays(windowDays));
   const srvs = await getAllActiveServerNames(db, tenantId);
   const all: ProxyCallRecord[] = [];
   for (const srv of srvs) {
     const recs = await db.getCallRecordsForServer(srv, undefined, tenantId);
     for (const r of recs) {
       const ts = Date.parse(String(r.timestamp || ''));
-      if (Number.isFinite(ts) && ts >= cutoff) all.push(r);
+      if (Number.isFinite(ts) && ts >= startMs && ts <= endMs) all.push(r);
     }
   }
   return all;

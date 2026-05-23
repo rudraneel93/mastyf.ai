@@ -27,9 +27,22 @@ describe('sync semantic response gate', () => {
     clearLocalSemanticCacheForTests();
   });
 
-  it('is disabled by default', () => {
+  it('is disabled in non-production when unset', () => {
+    const prevNode = process.env.NODE_ENV;
     delete process.env['GUARDIAN_SEMANTIC_SYNC_RESPONSE'];
+    delete process.env.NODE_ENV;
     expect(isSyncSemanticResponseEnabled()).toBe(false);
+    if (prevNode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNode;
+  });
+
+  it('defaults on in production when unset', () => {
+    const prevNode = process.env.NODE_ENV;
+    delete process.env['GUARDIAN_SEMANTIC_SYNC_RESPONSE'];
+    process.env.NODE_ENV = 'production';
+    expect(isSyncSemanticResponseEnabled()).toBe(true);
+    if (prevNode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNode;
   });
 
   it('blocks high-risk response text when enabled with local semantic', async () => {

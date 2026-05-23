@@ -39,6 +39,31 @@ Uses Redis `SET key NX PX` so only one replica “owns” a window boundary when
 
 **Not supported:** active-active writes to one SQLite path across regions, or automatic cross-region Guardian control plane.
 
+## Active-active (opt-in, enterprise)
+
+When both regions serve traffic with shared Postgres unified tables:
+
+```bash
+export GUARDIAN_MULTI_REGION_MODE=active-active
+export GUARDIAN_REGION=us-east-1   # per replica
+export GUARDIAN_DPOP_REDIS_URL=rediss://global-redis.example.com:6379
+export GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL=rediss://global-redis.example.com:6379
+export GUARDIAN_GLOBAL_RATE_LIMIT_MAX=10000
+```
+
+| Component | Behavior |
+|-----------|----------|
+| **Rate limits** | Per-region Redis counters (`mcp_guardian:ratelimit:{region}:…`); optional global cap is best-effort |
+| **DPoP jti** | Shared `GUARDIAN_DPOP_REDIS_URL` when set; else region-local dedup only |
+| **Dashboard** | `?region=` filter on chart APIs; region selector in UI |
+| **Instance registry** | `AuditTrailSync` writes `guardian_instances.metadata.region` |
+
+Preflight: `pnpm enterprise:preflight:multi-region` (Redis RTT, PG connectivity, region labels).
+
+Standby Helm overlay: `deploy/helm/mcp-guardian/values-enterprise-standby.yaml`
+
+See [ENTERPRISE_TOPOLOGY.md](ENTERPRISE_TOPOLOGY.md).
+
 ## Recommended topology
 
 1. **Primary region** — proxy fleet + Postgres + Redis + dashboard (`DASHBOARD_ENABLED=true`).

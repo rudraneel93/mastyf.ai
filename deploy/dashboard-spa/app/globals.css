@@ -5,6 +5,19 @@
   --accent: #38bdf8;
   --danger: #f87171;
   --muted: #94a3b8;
+  --chart-grid: #334155;
+  --chart-axis: #64748b;
+  --chart-tooltip-bg: #1e293b;
+  --chart-tooltip-border: #475569;
+  --chart-allow: #22c55e;
+  --chart-block: #f87171;
+  --chart-warn: #fbbf24;
+  --chart-cost: #38bdf8;
+  --chart-neutral: #64748b;
+  --chart-accent: #38bdf8;
+  --chart-purple: #a78bfa;
+  --chart-teal: #2dd4bf;
+  --chart-orange: #fb923c;
 }
 
 * {
@@ -1408,4 +1421,218 @@ a.tab.linkish {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem;
+}
+
+/* Chart kit */
+.chart-skeleton {
+  display: flex;
+  align-items: flex-end;
+  padding: 1rem 0;
+}
+
+.chart-skeleton-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-skeleton-bar {
+  flex: 1;
+  background: linear-gradient(90deg, #334155 0%, #475569 50%, #334155 100%);
+  background-size: 200% 100%;
+  border-radius: 4px 4px 0 0;
+  animation: chart-shimmer 1.4s ease-in-out infinite;
+  min-height: 2rem;
+}
+
+@keyframes chart-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-skeleton-bar {
+    animation: none;
+    background: #334155;
+  }
+}
+
+.chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+  text-align: center;
+  padding: 1rem;
+}
+
+.chart-empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-empty-message {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 28rem;
+}
+
+.chart-freshness-badge {
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.chart-tooltip {
+  background: var(--chart-tooltip-bg);
+  border: 1px solid var(--chart-tooltip-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.chart-tooltip-label {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.chart-tooltip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.15rem 0;
+}
+
+.chart-tooltip-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.chart-tooltip-name {
+  flex: 1;
+  color: var(--muted);
+}
+
+.chart-tooltip-value {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  justify-content: center;
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.chart-legend-swatch {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 2px;
+}
+
+.chart-card-foot {
+  margin-top: 0.35rem;
+}
+
+.kpi-card-delta-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+}
+
+.kpi-card-delta-up {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.kpi-card-delta-down {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.kpi-card-delta-flat {
+  background: rgba(100, 116, 139, 0.2);
+  color: var(--muted);
+}
+
+.kpi-card-spark {
+  margin-top: 0.5rem;
+  height: 36px;
+}
+
+.dashboard-window-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-window-toolbar label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.dashboard-window-toolbar select {
+  margin-left: 0.35rem;
+}
+
+.audit-activity-heatmap {
+  display: grid;
+  grid-template-columns: auto repeat(24, 1fr);
+  gap: 2px;
+  font-size: 0.65rem;
+  overflow-x: auto;
+}
+
+.audit-heatmap-day-label {
+  color: var(--muted);
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  white-space: nowrap;
+}
+
+.audit-heatmap-hour-label {
+  text-align: center;
+  color: var(--muted);
+  padding: 0.15rem;
+}
+
+.audit-heatmap-cell {
+  aspect-ratio: 1;
+  min-width: 1.1rem;
+  border-radius: 2px;
+  background: #1e293b;
+  cursor: default;
+}
+
+.audit-heatmap-cell[data-count]:not([data-count="0"]) {
+  cursor: help;
 }

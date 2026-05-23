@@ -16,8 +16,8 @@ import type { ThreatDiscoveryStatus } from '@/lib/guardian-api';
 import { ExplainableStatCard } from './ExplainableStatCard';
 import { ThreatDiscoveryRunControls } from './ThreatDiscoveryRunControls';
 import { THREAT_DISCOVERY_EXPLAINERS } from '@/lib/threat-discovery-copy';
-
-const COLORS = ['#38bdf8', '#16a34a', '#f87171', '#ea580c', '#8b5cf6', '#64748b'];
+import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_SERIES } from '@/lib/chartTheme';
+import { ChartTooltip, ChartLegend } from './dashboard/chart-kit';
 
 type Props = {
   status: ThreatDiscoveryStatus | null;
@@ -144,16 +144,25 @@ export function ThreatDiscoveryOverview({
           {sourceChart.length === 0 ? (
             <p className="muted">No candidates or auto writes yet.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie data={sourceChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                  {sourceChart.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={sourceChart} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={70} label={false}>
+                    {sourceChart.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              <ChartLegend
+                items={sourceChart.map((s, i) => ({
+                  key: s.name,
+                  label: s.name,
+                  color: CHART_COLORS[i % CHART_COLORS.length],
+                }))}
+              />
+            </>
           )}
         </div>
         <div className="infra-chart-card">
@@ -163,11 +172,11 @@ export function ThreatDiscoveryOverview({
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={reviewChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="value" fill="#38bdf8" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="name" {...CHART_AXIS} />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="value" fill={CHART_SERIES.accent} name="Count" />
               </BarChart>
             </ResponsiveContainer>
           )}

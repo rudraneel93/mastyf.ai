@@ -28,10 +28,29 @@ describe('response DLP enterprise', () => {
     expect(shouldBlockResponseDlp(r)).toBe(false);
   });
 
+  it('redact mode preserves line structure for labeled secrets', () => {
+    process.env.GUARDIAN_RESPONSE_DLP_MODE = 'redact';
+    const r = evaluateResponseDlp('t', 's', 'Database password: supersecret123');
+    expect(r.redactedBody).toContain('Database password: [REDACTED]');
+    expect(r.redactedBody).not.toContain('supersecret123');
+  });
+
   it('audit mode never blocks', () => {
     process.env.GUARDIAN_RESPONSE_DLP_MODE = 'audit';
     const r = evaluateResponseDlp('t', 's', 'AKIAIOSFODNN7EXAMPLE');
     expect(getResponseDlpMode()).toBe('audit');
     expect(shouldBlockResponseDlp(r)).toBe(false);
+  });
+
+  it('detects HIPAA PHI markers (ICD-10, NDC, diagnosis)', () => {
+    const r = evaluateResponseDlp(
+      't',
+      's',
+      'Patient chart: ICD-10 E11.9, NDC 12345-678-90, diagnosis: Type 2 diabetes mellitus',
+    );
+    const ids = r.findings.map((f) => f.ruleId);
+    expect(ids.some((id) => id.startsWith('pii-icd10') || id === 'content-phi-marker')).toBe(true);
+    expect(ids.some((id) => id.startsWith('pii-ndc') || id === 'content-phi-marker')).toBe(true);
+    expect(ids.some((id) => id === 'pii-diagnosis' || id === 'content-phi-marker')).toBe(true);
   });
 });

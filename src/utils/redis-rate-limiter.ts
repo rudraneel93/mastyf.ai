@@ -12,6 +12,15 @@ export { tenantRateLimitKey };
  * Enable with REDIS_URL, REDIS_SENTINELS, or REDIS_CLUSTER_NODES (see docs/REDIS_HA.md).
  */
 let sharedLimiter: RedisRateLimiter | null = null;
+let globalLimiter: RedisRateLimiter | null = null;
+
+function isActiveActiveMode(): boolean {
+  return (process.env['GUARDIAN_MULTI_REGION_MODE'] || '').toLowerCase() === 'active-active';
+}
+
+function globalRateLimitRedisUrl(): string | null {
+  return process.env['GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL']?.trim() || null;
+}
 
 export function getSharedRedisRateLimiter(): RedisRateLimiter {
   if (!sharedLimiter) {
@@ -24,7 +33,11 @@ export function resetRedisRateLimiterForTests(): void {
   if (sharedLimiter) {
     void sharedLimiter.close();
   }
+  if (globalLimiter) {
+    void globalLimiter.close();
+  }
   sharedLimiter = null;
+  globalLimiter = null;
 }
 
 export class RedisRateLimiter {
@@ -33,16 +46,23 @@ export class RedisRateLimiter {
   private lockPrefix: string;
   private region: string;
   private local: Map<string, { count: number; resetAt: number }> = new Map();
+  private globalScope: boolean;
 
-  constructor() {
-    if (!isRedisConfigured()) {
+  constructor(opts?: { redisUrl?: string; globalScope?: boolean }) {
+    if (!isRedisConfigured() && !opts?.redisUrl) {
       throw new Error('RedisRateLimiter requires REDIS_URL, REDIS_SENTINELS, or REDIS_CLUSTER_NODES');
     }
     this.region = getGuardianRegion();
-    this.prefix = `mcp_guardian:ratelimit:${this.region}:`;
-    this.lockPrefix = `mcp_guardian:ratelimit_lock:${this.region}:`;
-    this.redis = createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });
-    Logger.info(`[redis-rate-limiter] Connected (${getRedisConnectionLabel()}, region=${this.region})`);
+    this.globalScope = opts?.globalScope === true;
+    const scopeLabel = this.globalScope ? 'global' : this.region;
+    this.prefix = `mcp_guardian:ratelimit:${scopeLabel}:`;
+    this.lockPrefix = `mcp_guardian:ratelimit_lock:${scopeLabel}:`;
+    this.redis = opts?.redisUrl
+      ? createRedisClient({ connectionString: opts.redisUrl, maxRetriesPerRequest: 2, lazyConnect: false })
+      : createRedisClient({ maxRetriesPerRequest: 2, lazyConnect: false });
+    Logger.info(
+      `[redis-rate-limiter] Connected (${getRedisConnectionLabel()}, scope=${scopeLabel})`,
+    );
   }
 
   getRegion(): string {
@@ -75,9 +95,50 @@ export class RedisRateLimiter {
     maxRequests: number,
     windowMs: number = 60000,
     tenantId: string = DEFAULT_TENANT_ID,
+    incrementBy: number = 1,
+  ): Promise<{ allowed: boolean; count: number }> {
+    const localResult = await this.checkAndIncrementLocal(
+      key,
+      maxRequests,
+      windowMs,
+      tenantId,
+      incrementBy,
+    );
+
+    if (
+      isActiveActiveMode()
+      && !this.globalScope
+      && globalRateLimitRedisUrl()
+      && process.env['GUARDIAN_GLOBAL_RATE_LIMIT_MAX']
+    ) {
+      const globalMax = parseInt(process.env['GUARDIAN_GLOBAL_RATE_LIMIT_MAX'] || '0', 10);
+      if (globalMax > 0) {
+        const globalLimiterInstance = getGlobalRedisRateLimiter();
+        const globalResult = await globalLimiterInstance.checkAndIncrementLocal(
+          key,
+          globalMax,
+          windowMs,
+          tenantId,
+        );
+        if (!globalResult.allowed) {
+          return globalResult;
+        }
+      }
+    }
+
+    return localResult;
+  }
+
+  private async checkAndIncrementLocal(
+    key: string,
+    maxRequests: number,
+    windowMs: number = 60000,
+    tenantId: string = DEFAULT_TENANT_ID,
+    incrementBy: number = 1,
   ): Promise<{ allowed: boolean; count: number }> {
     const scopedKey = tenantRateLimitKey(tenantId, key);
     const redisKey = `${this.prefix}${scopedKey}`;
+    const delta = Math.max(1, Math.floor(incrementBy));
 
     try {
       const hasLock = await this.acquireWindowLock(scopedKey, windowMs);
@@ -85,7 +146,9 @@ export class RedisRateLimiter {
         return { allowed: false, count: maxRequests + 1 };
       }
 
-      const count = await this.redis.incr(redisKey);
+      const count = delta === 1
+        ? await this.redis.incr(redisKey)
+        : await this.redis.incrby(redisKey, delta);
       if (count === 1) {
         await this.redis.pexpire(redisKey, windowMs);
       }
@@ -94,9 +157,9 @@ export class RedisRateLimiter {
       let localCounter = this.local.get(scopedKey);
       const windowJitterMs = Math.floor(Math.random() * Math.min(windowMs * 0.1, 500));
       if (!localCounter || now > localCounter.resetAt) {
-        localCounter = { count: 1, resetAt: now + windowMs + windowJitterMs };
+        localCounter = { count: delta, resetAt: now + windowMs + windowJitterMs };
       } else {
-        localCounter.count++;
+        localCounter.count += delta;
       }
       this.local.set(scopedKey, localCounter);
 
@@ -113,9 +176,9 @@ export class RedisRateLimiter {
       let localCounter = this.local.get(scopedKey);
       const windowJitterMs = Math.floor(Math.random() * Math.min(windowMs * 0.1, 500));
       if (!localCounter || now > localCounter.resetAt) {
-        localCounter = { count: 1, resetAt: now + windowMs + windowJitterMs };
+        localCounter = { count: delta, resetAt: now + windowMs + windowJitterMs };
       } else {
-        localCounter.count++;
+        localCounter.count += delta;
       }
       this.local.set(scopedKey, localCounter);
       return { allowed: localCounter.count <= maxRequests, count: localCounter.count };
@@ -125,4 +188,15 @@ export class RedisRateLimiter {
   async close(): Promise<void> {
     await this.redis.quit();
   }
+}
+
+export function getGlobalRedisRateLimiter(): RedisRateLimiter {
+  if (!globalLimiter) {
+    const url = globalRateLimitRedisUrl();
+    if (!url) {
+      throw new Error('GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL required for global rate limiter');
+    }
+    globalLimiter = new RedisRateLimiter({ redisUrl: url, globalScope: true });
+  }
+  return globalLimiter;
 }

@@ -46,6 +46,8 @@ config:
     GUARDIAN_PRO_CHECKOUT_URL: "https://mcp-guardian.lemonsqueezy.com/checkout/buy/f725abfe-93c0-4bd7-8add-d15af13958fb"
     GUARDIAN_AUDIT_HASH_CHAIN: "true"
     GUARDIAN_AUDIT_HASH_CHAIN_SIEM: "true"
+    GUARDIAN_AUDIT_SYNC_ENABLED: "true"
+    GUARDIAN_DASHBOARD_DATA_SOURCE: "auto"
     GUARDIAN_DPOP_LOCK_FREE: "true"
     OLLAMA_ENABLED: "true"
 database:

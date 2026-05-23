@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Line,
   LineChart,
   Pie,
@@ -16,59 +15,47 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchVisualsLive, type VisualsData } from '@/lib/guardian-api';
+import {
+  CHART_AXIS,
+  CHART_COLORS,
+  CHART_GRID,
+  CHART_SERIES,
+  formatAxisTime,
+  topNBuckets,
+} from '@/lib/chartTheme';
+import { ChartCard } from './dashboard/ChartCard';
+import { ChartTooltip, ChartLegend } from './dashboard/chart-kit';
+import { useVisuals } from './dashboard/VisualsProvider';
+import { useDashboardWindow } from './dashboard/DashboardWindowContext';
 
 type TabId = 'traffic' | 'learning' | 'semantic' | 'regression';
 
-const COLORS = ['#2563eb', '#16a34a', '#dc2626', '#ea580c', '#64748b', '#8b5cf6'];
-
 type Props = {
   refreshKey?: number;
-  pollMs?: number;
 };
 
-export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: Props) {
-  const [data, setData] = useState<VisualsData | null>(null);
+export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
+  const { windowDays } = useDashboardWindow();
+  const { visuals: data, loading, error, refresh } = useVisuals();
   const [tab, setTab] = useState<TabId>('traffic');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    const isInitial = data === null;
-    if (isInitial) setLoading(true);
-    setError('');
-    try {
-      const result = await fetchVisualsLive();
-      if (!result.ok) {
-        setData(null);
-        setError(result.message);
-        return;
-      }
-      setData(result.data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load visuals');
-    } finally {
-      if (isInitial) setLoading(false);
-    }
-  }, [data]);
 
   useEffect(() => {
-    void load();
-  }, [load, refreshKey]);
+    void refresh();
+  }, [refresh, refreshKey]);
 
-  useEffect(() => {
-    if (pollMs <= 0) return;
-    const id = window.setInterval(() => void load(), pollMs);
-    return () => window.clearInterval(id);
-  }, [load, pollMs]);
+  const granularity = windowDays <= 7 ? 'hour' : 'day';
 
-  const hourly = (data?.traffic?.hourly ?? []).map((h) => ({
-    label: h.hourStart.slice(5, 16).replace('T', ' '),
-    passed: h.passed,
-    blocked: h.blocked,
-    calls: h.calls,
-    p50: h.latencyP50Ms ?? 0,
-  }));
+  const hourly = useMemo(
+    () =>
+      (data?.traffic?.hourly ?? []).map((h) => ({
+        label: formatAxisTime(h.hourStart, granularity),
+        passed: h.passed,
+        blocked: h.blocked,
+        calls: h.calls,
+        p50: h.latencyP50Ms ?? 0,
+      })),
+    [data?.traffic?.hourly, granularity],
+  );
 
   const learningSeries = (data?.instantLearning?.blocksPerMinute ?? []).map((p, i) => ({
     min: Math.round(p.t / 60_000),
@@ -79,9 +66,23 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
   const tools = data?.traffic?.topTools?.slice(0, 8) ?? [];
   const rules = data?.traffic?.topBlockRules?.slice(0, 8) ?? [];
   const servers = data?.traffic?.byServer?.slice(0, 8) ?? [];
-  const labelMix = data?.semantic?.labelMix ?? [];
+  const labelMix = useMemo(() => {
+    const raw = (data?.semantic?.labelMix ?? []).map((l) => ({ name: l.label, value: l.count }));
+    return topNBuckets(raw, 6);
+  }, [data?.semantic?.labelMix]);
   const confBuckets = data?.semantic?.confidenceBuckets ?? [];
   const userServers = data?.regression?.userServers ?? [];
+
+  const trafficMeta = data?.meta
+    ? {
+        window: data.meta.window,
+        windowDays: data.windowDays,
+        generatedAt: data.meta.generatedAt ?? data.generatedAt,
+        recordCount: data.meta.recordCount,
+        sparse: data.meta.sparse,
+        dataSources: ['history.db'],
+      }
+    : undefined;
 
   return (
     <section className="infra-visuals-panel" aria-label="Infrastructure visuals">
@@ -94,7 +95,6 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
             : ''}
           {data?.meta?.swarmSessionLive ? ' · regression from session swarm' : ''}
           {data?.instantLearning?.source ? ` · learning: ${data.instantLearning.source}` : ''}
-          {data?.generatedAt ? ` · ${new Date(data.generatedAt).toLocaleString()}` : ''}
         </p>
         {!data?.meta?.swarmSessionLive && data?.meta?.emptyReasons?.regression ? (
           <p className="hint live-data-banner">{data.meta.emptyReasons.regression}</p>
@@ -112,7 +112,7 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
             {t === 'traffic' ? 'Traffic' : t === 'learning' ? 'AI learning' : t === 'semantic' ? 'Semantic' : 'Servers'}
           </button>
         ))}
-        <button type="button" className="secondary" disabled={loading} onClick={() => void load()}>
+        <button type="button" className="secondary" disabled={loading} onClick={() => void refresh()}>
           Refresh
         </button>
       </nav>
@@ -122,52 +122,57 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
 
       {tab === 'traffic' ? (
         <div className="infra-charts-grid">
-          <ChartCard title="Calls over time (hourly)" empty={!hourly.length}>
+          <ChartCard
+            title="Calls over time"
+            loading={loading}
+            empty={!hourly.some((h) => h.calls > 0)}
+            meta={trafficMeta}
+            sparse={trafficMeta?.sparse}
+          >
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={hourly}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis dataKey="label" tick={{ fontSize: 9 }} interval="preserveStartEnd" />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="passed" stackId="a" fill="#16a34a" name="Passed" />
-                <Bar dataKey="blocked" stackId="a" fill="#dc2626" name="Blocked" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="label" {...CHART_AXIS} interval="preserveStartEnd" />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="passed" stackId="a" fill={CHART_SERIES.allow} name="Passed" />
+                <Bar dataKey="blocked" stackId="a" fill={CHART_SERIES.block} name="Blocked" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Latency p50 by server (ms)" empty={!servers.length}>
+          <ChartCard title="Latency p50 by server (ms)" empty={!servers.length} meta={trafficMeta}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={servers} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="serverName" width={90} tick={{ fontSize: 9 }} />
-                <Tooltip />
-                <Bar dataKey="latencyP50Ms" fill="#2563eb" name="p50 ms" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis type="number" {...CHART_AXIS} />
+                <YAxis type="category" dataKey="serverName" width={90} {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="latencyP50Ms" fill={CHART_SERIES.accent} name="p50 ms" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Top tools" empty={!tools.length}>
+          <ChartCard title="Top tools" empty={!tools.length} meta={trafficMeta}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={tools}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis dataKey="tool" tick={{ fontSize: 9 }} interval={0} angle={-25} textAnchor="end" height={60} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#2563eb" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="tool" {...CHART_AXIS} interval={0} angle={-25} textAnchor="end" height={60} />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="count" fill={CHART_SERIES.accent} name="Calls" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
-          <ChartCard title="Block rules" empty={!rules.length}>
+          <ChartCard title="Block rules" empty={!rules.length} meta={trafficMeta}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={rules} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="plainEnglish" width={120} tick={{ fontSize: 8 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#dc2626" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis type="number" {...CHART_AXIS} />
+                <YAxis type="category" dataKey="plainEnglish" width={120} {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="count" fill={CHART_SERIES.block} name="Blocks" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -182,11 +187,11 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
           >
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={learningSeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis dataKey="min" name="min" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Line type="monotone" dataKey="blocks" stroke="#2563eb" strokeWidth={2} dot />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="min" {...CHART_AXIS} />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Line type="monotone" dataKey="blocks" stroke={CHART_SERIES.accent} strokeWidth={2} dot={false} name="Blocks" />
               </LineChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -200,11 +205,11 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
                 }))}
                 layout="vertical"
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis type="number" />
-                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 8 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#2563eb" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis type="number" {...CHART_AXIS} />
+                <YAxis type="category" dataKey="name" width={100} {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="count" fill={CHART_SERIES.purple} name="Count" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -225,26 +230,33 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
           <ChartCard title="Confidence buckets" empty={!confBuckets.length}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={confBuckets}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis dataKey="bucket" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#8b5cf6" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="bucket" {...CHART_AXIS} />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="count" fill={CHART_SERIES.purple} name="Count" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
 
           <ChartCard title="Label mix" empty={!labelMix.length}>
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={labelMix} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={80} label>
+                <Pie data={labelMix} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={70} label={false}>
                   {labelMix.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip content={<ChartTooltip />} />
               </PieChart>
             </ResponsiveContainer>
+            <ChartLegend
+              items={labelMix.map((l, i) => ({
+                key: l.name,
+                label: l.name,
+                color: CHART_COLORS[i % CHART_COLORS.length],
+              }))}
+            />
           </ChartCard>
         </div>
       ) : null}
@@ -254,11 +266,11 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
           <ChartCard title="Your server probes" empty={!userServers.length}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={userServers}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#33415533" />
-                <XAxis dataKey="serverName" tick={{ fontSize: 9 }} />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip />
-                <Bar dataKey="toolCount" fill="#16a34a" name="Tools" />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="serverName" {...CHART_AXIS} />
+                <YAxis {...CHART_AXIS} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="toolCount" fill={CHART_SERIES.allow} name="Tools" />
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -266,22 +278,5 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
         </div>
       ) : null}
     </section>
-  );
-}
-
-function ChartCard({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <div className="infra-chart-card">
-      <h5>{title}</h5>
-      {empty ? <p className="hint">No data in this window yet.</p> : children}
-    </div>
   );
 }

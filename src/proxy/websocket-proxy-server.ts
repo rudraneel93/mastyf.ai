@@ -29,6 +29,7 @@ import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
 import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tls-config.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
+import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 
 export interface WebSocketProxyOptions {
   listenPort: number;
@@ -110,8 +111,24 @@ export class WebSocketProxyServer {
       undefined,
       webSocketClientOptions(this.opts.upstreamWsUrl),
     );
+    const upstreamTimeoutMs = getUpstreamTimeoutMs();
+    let connectSettled = false;
+    const connectTimer = setTimeout(() => {
+      if (connectSettled) return;
+      connectSettled = true;
+      try {
+        upstream.terminate();
+      } catch {
+        /* ignore */
+      }
+      if (clientWs.readyState === WebSocket.OPEN) {
+        clientWs.close(1011, sanitizeProxyClientError('upstream connect timeout'));
+      }
+    }, upstreamTimeoutMs);
 
     upstream.on('open', () => {
+      connectSettled = true;
+      clearTimeout(connectTimer);
       clientWs.on('message', (data) => {
         void this.interceptMessage(data, clientWs, upstream, req);
       });
@@ -121,13 +138,21 @@ export class WebSocketProxyServer {
     });
 
     upstream.on('error', (err) => {
+      connectSettled = true;
+      clearTimeout(connectTimer);
       Logger.warn(`[ws-proxy:${this.opts.serverName}] upstream error: ${err.message}`);
       clientWs.close(1011, sanitizeProxyClientError('upstream error'));
     });
 
-    clientWs.on('close', () => upstream.close());
+    clientWs.on('close', () => {
+      clearTimeout(connectTimer);
+      upstream.close();
+    });
     upstream.on('close', () => clientWs.close());
-    clientWs.on('error', () => upstream.close());
+    clientWs.on('error', () => {
+      clearTimeout(connectTimer);
+      upstream.close();
+    });
   }
 
   private async interceptUpstreamMessage(data: WebSocket.RawData, clientWs: WebSocket): Promise<void> {

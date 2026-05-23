@@ -15,10 +15,15 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { synthesizeReport } from './agents/report-synthesize.mjs';
+import { resolveSwarmDir } from './lib/swarm-dir.mjs';
+import { archiveSwarmArtifacts } from './lib/archive-artifacts.mjs';
+import { applySwarmRetention } from './lib/retention-policy.mjs';
+import { sendSwarmFailureAlert } from './lib/swarm-alert.mjs';
+import { runParallelSwarmSteps } from './lib/parallel-steps.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..');
-const OUT_DIR = join(REPO, 'reports', 'security-swarm');
+const OUT_DIR = resolveSwarmDir();
 const VENV_PY = join(REPO, 'adversarial-harness', '.venv', 'bin', 'python3');
 
 const FAST = process.argv.includes('--fast');
@@ -185,6 +190,12 @@ function printFinalSummary(latest) {
 }
 
 mkdirSync(OUT_DIR, { recursive: true });
+if (process.env.SWARM_DISABLE_ARCHIVE !== 'true') {
+  const archived = archiveSwarmArtifacts(OUT_DIR);
+  if (archived.archived > 0) {
+    console.log(paint(`  archived ${archived.archived} artifacts → ${archived.destDir}`, c.dim));
+  }
+}
 
 const stepPlan = FAST
   ? ['scout', 'build', 'vitest', 'corpus', 'venv', 'node-tests', 'parity']
@@ -207,13 +218,39 @@ run('pnpm', ['build:guardian'], { label: 'pnpm-build', totalSteps });
 const vitestArgs = LIVE
   ? ['vitest', 'run', 'tests/policy/', 'tests/proxy/', 'tests/utils/', '--reporter=verbose']
   : ['test:policy-proxy-utils'];
-run('pnpm', vitestArgs, { label: 'vitest-policy-proxy-utils', totalSteps });
 
-run('pnpm', ['exec', 'tsx', 'corpus/run-eval.ts'], {
-  label: 'corpus-eval',
-  totalSteps,
-  env: { GUARDIAN_DISABLE_SEMANTIC: 'true' },
-});
+if (FAST && process.env.SWARM_PARALLEL_STEPS !== 'false') {
+  const parallel = await runParallelSwarmSteps(
+    [
+      { cmd: 'pnpm', args: vitestArgs, label: 'vitest-policy-proxy-utils' },
+      {
+        cmd: 'pnpm',
+        args: ['exec', 'tsx', 'corpus/run-eval.ts'],
+        label: 'corpus-eval',
+        env: { GUARDIAN_DISABLE_SEMANTIC: 'true' },
+      },
+    ],
+    { cwd: REPO, live: LIVE },
+  );
+  for (const step of parallel) {
+    steps.push(step);
+    console.log(
+      step.ok
+        ? paint(`✓ ${step.label} — PASS (${step.elapsedSec}s)`, c.green)
+        : paint(`✗ ${step.label} — FAIL (${step.elapsedSec}s)`, c.red),
+    );
+    if (!step.ok) consecutiveFailures++;
+    else consecutiveFailures = 0;
+  }
+} else {
+  run('pnpm', vitestArgs, { label: 'vitest-policy-proxy-utils', totalSteps });
+
+  run('pnpm', ['exec', 'tsx', 'corpus/run-eval.ts'], {
+    label: 'corpus-eval',
+    totalSteps,
+    env: { GUARDIAN_DISABLE_SEMANTIC: 'true' },
+  });
+}
 
 if (!FAST) {
   run('node', ['adversarial-harness/run-harness.mjs'], {
@@ -279,4 +316,22 @@ if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
 }
 
 printFinalSummary(latest);
+
+const retention = await applySwarmRetention(OUT_DIR);
+if (retention.pruned > 0 || retention.compressed > 0) {
+  console.log(
+    paint(
+      `  retention: pruned=${retention.pruned} compressed=${retention.compressed} (${retention.retentionDays}d)`,
+      c.dim,
+    ),
+  );
+}
+
+if (!latest.overall) {
+  const alert = await sendSwarmFailureAlert({ outDir: OUT_DIR, latest, steps });
+  if (alert.sent) {
+    console.log(paint('  swarm failure alert dispatched', c.yellow));
+  }
+}
+
 process.exit(latest.overall ? 0 : 1);

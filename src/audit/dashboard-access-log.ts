@@ -32,7 +32,14 @@ export interface SessionRotateEntry {
 }
 
 function appendJsonl(path: string, record: unknown): void {
-  appendFileSync(path, `${JSON.stringify(record)}\n`, { flag: 'a' });
+  try {
+    appendFileSync(path, `${JSON.stringify(record)}\n`, { flag: 'a' });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    void import('../utils/logger.js').then(({ Logger }) => {
+      Logger.debug(`[audit] append skipped (${path}): ${msg}`);
+    });
+  }
 }
 
 export function appendDashboardAccessLog(

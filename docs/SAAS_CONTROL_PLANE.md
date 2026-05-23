@@ -96,8 +96,10 @@ Bearer token: `Authorization: Bearer gcp_...`
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/org` | Organization metadata |
-| GET | `/api/v1/policy` | Policy YAML (`text/yaml`) |
+| GET | `/api/v1/policy` | Policy YAML (`text/yaml`, `X-Policy-Version` header) |
 | PUT | `/api/v1/policy` | Update policy (JSON `{ "yaml": "..." }` or raw YAML) |
+| POST | `/api/v1/policy/publish` | Publish policy version (same as PUT, explicit publish) |
+| POST | `/api/v1/instances/heartbeat` | Register/update self-hosted instance heartbeat |
 | POST | `/api/v1/keys/rotate` | Rotate API key (returns new key once) |
 | POST | `/api/v1/license/exchange` | Exchange one-time launch token for session JWT (SSO) |
 | POST | `/api/dashboard/launch` | Cloud UI: create launch redirect URL |

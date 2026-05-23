@@ -33,7 +33,10 @@ Honest assessment of MCP Guardian for production vs pilot deployments (2026-05-1
 | Regex eval wall-clock budget | Ready | `GUARDIAN_REGEX_EVAL_TIMEOUT_MS` (default 50ms) |
 | Unified upstream timeout | Ready | `GUARDIAN_UPSTREAM_TIMEOUT_MS` on HTTP/SSE/WS/streamable |
 | Attack block + cost Prometheus metrics | Ready | `mcp_guardian_attacks_blocked_total`, `mcp_guardian_cost_spent_usd` |
-| HIPAA / PCI policy templates | Ready | `policy-templates/hipaa-compliance.yaml`, `pci-dss-masking.yaml` |
+| HIPAA / PCI / GxP policy templates | Ready | `hipaa-compliance.yaml`, `pci-dss-masking.yaml`, `gxp-compliance.yaml` |
+| Cost optimization recommendations | Ready | `GET /api/cost/recommendations` (v2.10.1+) |
+| Postgres scale CI pilot | Ready | `pnpm test:scale-postgres` in enterprise CI job |
+| CodeQL SAST | Ready | `.github/workflows/codeql.yml` |
 | Postgres RLS (tenant isolation) | Ready | `006` + `008-tenant-rls-extended.sql`, `postgres-tenant-session.ts`; on in enterprise Helm |
 | SIEM exporter DLQ + retry | Ready | `~/.mcp-guardian/exporter-dlq/`; `GUARDIAN_EXPORTER_MAX_RETRIES` |
 | Field encryption per-deployment salt | Ready | `genc2:` format; `GUARDIAN_DB_ENCRYPTION_SALT` optional |

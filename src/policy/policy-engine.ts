@@ -23,7 +23,7 @@ import {
   type PolicyEngineDeps,
   type SyncEvaluateContext,
 } from './strategies/index.js';
-import { compilePolicyRegex, safeRegexTest } from './regex-compile.js';
+import { compilePolicyRegex, safeRegexTest, UnsafePolicyRegexError } from './regex-compile.js';
 import { MAX_REGEX_INPUT_CHARS } from '../utils/eval-bounds.js';
 import {
   evaluateResponseDlp,
@@ -82,7 +82,8 @@ export class PolicyEngine {
             ...(this.compiledPatterns.get(rule.name) || []),
             { compiled, rule },
           ]);
-        } catch {
+        } catch (err) {
+          if (err instanceof UnsafePolicyRegexError) throw err;
           Logger.warn(`Policy: invalid regex in rule '${rule.name}' patterns — skipping pre-compilation`);
         }
       }
@@ -95,7 +96,8 @@ export class PolicyEngine {
               ...(this.compiledArgPatterns.get(rule.name) || []),
               { field: ap.field, compiled, rule },
             ]);
-          } catch {
+          } catch (err) {
+            if (err instanceof UnsafePolicyRegexError) throw err;
             Logger.warn(`Policy: invalid regex in rule '${rule.name}' argPatterns — skipping pre-compilation`);
           }
         }

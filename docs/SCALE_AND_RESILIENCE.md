@@ -23,9 +23,17 @@ Validated by a **100-replica chaos test** (May 2026): synthetic `tools/call` loa
 
 ## Cross-region
 
-**Multi-region active-active is not supported yet.**
+**Default:** Multi-region **active-passive** — single-region Redis; cross-region RTT **>80ms** breaks distributed lock semantics.
 
-Redis-backed rate limits and session locks assume **<80ms** RTT to Redis. Chaos testing showed **>80ms** cross-region lag breaks lock semantics (split counters, stale sessions). Deploy **single-region** Redis (Sentinel or managed) with pod anti-affinity across AZs in that region only.
+**Opt-in active-active** (`GUARDIAN_MULTI_REGION_MODE=active-active`):
+
+- Per-region rate-limit counters + optional global cap (`GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL`)
+- Shared DPoP jti store via `GUARDIAN_DPOP_REDIS_URL` (fallback: region-local dedup only)
+- Federated dashboard reads from shared Postgres `unified_audit_trail` with region filter
+
+Preflight before enabling: `pnpm enterprise:preflight:multi-region`
+
+Redis-backed rate limits assume **<80ms** RTT to the **local** region Redis. Cross-region global caps are best-effort only.
 
 ## Recommendations
 
@@ -54,6 +62,9 @@ Redis-backed rate limits and session locks assume **<80ms** RTT to Redis. Chaos 
 | `GUARDIAN_REQUIRE_PGBOUNCER` | `false` | Exit if `DATABASE_URL` is not pooler-shaped (`pgbouncer` host or port `6432`) |
 | `REPLICA_COUNT` | `1` | Set by Helm; used with K8s/Redis hints for pooler warnings |
 | `GUARDIAN_STRICT_MODE` | `false` | With `REPLICA_COUNT` > 50 and direct `:5432`, fail startup (PgBouncer required) |
+| `GUARDIAN_MULTI_REGION_MODE` | `active-passive` | Set `active-active` for per-region rate limits + optional global cap |
+| `GUARDIAN_DPOP_REDIS_URL` | — | Cross-region shared Redis for DPoP jti dedup |
+| `GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL` | — | Optional org-wide rate cap Redis (best-effort) |
 
 ## Helm
 

@@ -55,6 +55,9 @@ export interface SecretFinding {
   context?: string;
   /** Detection method: 'regex' or 'entropy' */
   method?: 'regex' | 'entropy';
+  /** Match span in scanned text (for DLP redaction). */
+  start?: number;
+  end?: number;
 }
 
 export interface CostReport {

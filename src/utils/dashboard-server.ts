@@ -48,7 +48,15 @@ import { computeBurnRatePerHour, computeProjectedMonthly } from './cost-metrics.
 import { buildCostTimeseries, loadAllRecordsInWindow } from './cost-timeseries.js';
 import { buildExecutiveSummary } from './dashboard-executive-summary.js';
 import { buildDashboardInsights, type InsightScope } from './dashboard-insights.js';
-import { buildAuditHeatmap } from './audit-heatmap.js';
+import { buildAuditHeatmapBundle } from './audit-heatmap.js';
+import { parseWindowDays } from './time-buckets.js';
+import { buildDashboardFleetResponse } from './dashboard-fleet-api.js';
+import {
+  listFederatedRegions,
+  resolveFederatedChartDb,
+  type FederatedQueryContext,
+} from './federated-data-source.js';
+import { initUnifiedDataReaderPool } from './unified-data-reader.js';
 import {
   isLegacyArtifactsAllowed,
   isSwarmArtifactVisibleForSession,
@@ -257,6 +265,31 @@ export function setDashboardDataSource(historyDb: any): void {
   }
 }
 
+function parseRegionParam(q: URLSearchParams): string | undefined {
+  const region = q.get('region')?.trim();
+  return region || undefined;
+}
+
+async function resolveChartContext(
+  tenantId: string | undefined,
+  windowDays: number,
+  region?: string,
+): Promise<FederatedQueryContext> {
+  return resolveFederatedChartDb(runtimeHistoryDb, tenantId, windowDays, region);
+}
+
+function mergeFedMeta(
+  meta: Record<string, unknown> | undefined,
+  fed: FederatedQueryContext,
+): Record<string, unknown> {
+  return {
+    ...(meta || {}),
+    dataSources: fed.dataSources,
+    federatedMode: fed.mode,
+    ...(fed.region ? { region: fed.region } : {}),
+  };
+}
+
 export async function startDashboardServer(
   port: number = 4000,
   policyWatcher?: PolicyWatcher,
@@ -294,6 +327,13 @@ export async function startDashboardServer(
       '[license] DASHBOARD_ENABLED requires MCP Guardian Pro — set GUARDIAN_LICENSE_KEY and GUARDIAN_CONTROL_PLANE_URL (see docs/PRO_SETUP.md)',
     );
     dashboardEnabled = false;
+  }
+
+  if (dashboardEnabled && process.env['DATABASE_URL']) {
+    await initUnifiedDataReaderPool().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      Logger.warn(`[dashboard] Unified data reader pool init failed: ${msg}`);
+    });
   }
 
   if (!dashboardEnabled && !wsEnabled) {
@@ -974,7 +1014,8 @@ export async function startDashboardServer(
         const u = new URL(req.url || url, 'http://localhost');
         const startTime = u.searchParams.get('startTime') || undefined;
         const endTime = u.searchParams.get('endTime') || undefined;
-        const limit = parseInt(u.searchParams.get('limit') || '200', 10);
+        const limitRaw = parseInt(u.searchParams.get('limit') || '200', 10);
+        const limit = Math.min(Number.isFinite(limitRaw) ? limitRaw : 200, 1000);
         const kind = u.searchParams.get('kind') || 'policy';
         const { readTenantAuditJsonl } = await import('../audit/dashboard-access-log.js');
         const fileName =
@@ -989,7 +1030,7 @@ export async function startDashboardServer(
           entries: readTenantAuditJsonl(requestTenantId, fileName, {
             startTime,
             endTime,
-            limit: Number.isFinite(limit) ? limit : 200,
+            limit,
           }),
         });
         return;
@@ -1204,7 +1245,11 @@ export async function startDashboardServer(
       if (url === '/api/aggregate/metrics' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({
               totalInstances: 0, activeInstances: 0, totalRequests: 0,
@@ -1213,17 +1258,24 @@ export async function startDashboardServer(
             }, 'No history database — start proxy with MCP_GUARDIAN_DB_PATH'));
             return;
           }
-          const srvs = await getAllActiveServerNames(db, requestTenantId);
-          const records = await loadAllCallRecords(db, srvs, requestTenantId);
+          const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
           const sum = summarizeRecords(records);
           const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
           const passRate = sum.total > 0 ? Math.round((sum.passed / sum.total) * 100) : null;
+          const burnRatePerHour = computeBurnRatePerHour(sum.costUsd, records);
           writeJson(res, 200, available({
             totalInstances: 1, activeInstances: 1, totalRequests: sum.total,
             blockedRequests: sum.blocked, passedRequests: sum.passed, totalCost: sum.costUsd,
-            avgLatencyMs: avgLatency, activeServers: srvs.length, passRate,
-            burnRatePerHour: sum.total > 0 ? (sum.costUsd / sum.total) * 100 : null,
+            avgLatencyMs: avgLatency, activeServers: new Set(records.map((r) => r.serverName)).size || 0,
+            passRate,
+            burnRatePerHour: sum.total > 0 ? burnRatePerHour : null,
             lastUpdated: new Date().toISOString(),
+            meta: mergeFedMeta({
+              window: `${windowDays}d`,
+              windowDays,
+              generatedAt: new Date().toISOString(),
+              recordCount: records.length,
+            }, fed),
           }));
         } catch {
           writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed to read metrics'));
@@ -1234,17 +1286,19 @@ export async function startDashboardServer(
       if (url === '/api/aggregate/audit' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
+          const q = new URL(req.url || url, 'http://localhost').searchParams;
+          const limit = Math.min(200, Math.max(1, parseInt(q.get('limit') || '50', 10) || 50));
+          const actionFilter = q.get('action') || '';
+          const serverFilter = q.get('server') || '';
+          const region = parseRegionParam(q);
+          const fed = await resolveChartContext(requestTenantId, 90, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({
               events: [], total: 0, blocked: 0, passed: 0, flagged: 0,
             }, 'No history database connected'));
             return;
           }
-          const q = new URL(req.url || url, 'http://localhost').searchParams;
-          const limit = Math.min(200, Math.max(1, parseInt(q.get('limit') || '50', 10) || 50));
-          const actionFilter = q.get('action') || '';
-          const serverFilter = q.get('server') || '';
 
           const srvs = await getAllActiveServerNames(db, requestTenantId);
           let records = await loadAllCallRecords(db, srvs, requestTenantId);
@@ -1300,6 +1354,7 @@ export async function startDashboardServer(
             passed: records.length - blocked,
             flagged,
             semanticAudit,
+            meta: mergeFedMeta({ recordCount: records.length }, fed),
           }));
         } catch {
           writeJson(res, 200, unavailable({
@@ -1355,7 +1410,11 @@ export async function startDashboardServer(
       if (url === '/api/cost' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({
               serverReports: [], totalCost: null, projectedMonthly: null, budgetAlerts: [],
@@ -1365,17 +1424,22 @@ export async function startDashboardServer(
           const srvs = await getAllActiveServerNames(db, requestTenantId);
           const reps: any[] = [];
           let totalCost = 0;
-          const allRecords = await loadAllCallRecords(db, srvs, requestTenantId);
+          const cutoff = Date.now() - windowDays * 86400000;
+          const windowRecords = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
             const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
-            const sum = summarizeRecords(recs);
-            reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(recs), unpriced: sum.unpricedCalls });
+            const windowRecs = recs.filter((r: { timestamp?: string }) => {
+              const ts = Date.parse(String(r.timestamp || ''));
+              return Number.isFinite(ts) && ts >= cutoff;
+            });
+            const sum = summarizeRecords(windowRecs);
+            reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(windowRecs), unpriced: sum.unpricedCalls });
             totalCost += sum.costUsd;
           }
-          const burnRatePerHour = computeBurnRatePerHour(totalCost, allRecords);
-          const projectedMonthly = computeProjectedMonthly(totalCost, allRecords);
+          const burnRatePerHour = computeBurnRatePerHour(totalCost, windowRecords);
+          const projectedMonthly = computeProjectedMonthly(totalCost, windowRecords);
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
@@ -1392,6 +1456,13 @@ export async function startDashboardServer(
             budgetUsd,
             budgetAlerts,
             pricingModel,
+            windowDays,
+            meta: mergeFedMeta({
+              window: `${windowDays}d`,
+              windowDays,
+              generatedAt: new Date().toISOString(),
+              recordCount: windowRecords.length,
+            }, fed),
           }));
         } catch {
           writeJson(res, 200, unavailable({ serverReports: [], totalCost: null, projectedMonthly: null }, 'Failed to read cost data'));
@@ -1446,18 +1517,40 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url === '/api/cost/timeseries' && method === 'GET') {
+      if (url === '/api/cost/recommendations' && method === 'GET') {
         setCors();
         try {
           const db = runtimeHistoryDb;
           if (!db) {
-            writeJson(res, 200, unavailable({ series: [], windowDays: 7 }, 'No history database'));
+            writeJson(res, 200, unavailable({ recommendations: [], windowDays: 7 }, 'No history database'));
             return;
           }
           const u = new URL(req.url || url, 'http://localhost');
-          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '30', 10)));
+          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '7', 10)));
+          const { buildCostRecommendations } = await import('./dashboard-cost-recommendations.js');
+          const recommendations = await buildCostRecommendations(db, requestTenantId, windowDays);
+          writeJson(res, 200, available({ tenantId: requestTenantId, windowDays, recommendations }));
+        } catch {
+          writeJson(res, 200, unavailable({ recommendations: [] }, 'Failed cost recommendations'));
+        }
+        return;
+      }
+
+      if (url === '/api/cost/timeseries' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
+          if (!db) {
+            writeJson(res, 200, unavailable({ series: [], windowDays: 7 }, 'No history database'));
+            return;
+          }
           const gran = u.searchParams.get('granularity') === 'hour' ? 'hour' : 'day';
           const result = await buildCostTimeseries(db, requestTenantId, windowDays, gran);
+          result.meta.dataSources = fed.dataSources;
           writeJson(res, 200, available(result));
         } catch {
           writeJson(res, 200, unavailable({ series: [] }, 'Failed cost timeseries'));
@@ -1468,12 +1561,17 @@ export async function startDashboardServer(
       if (url === '/api/dashboard/executive-summary' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({ totalRequests: 0 }, 'No history database'));
             return;
           }
-          const summary = await buildExecutiveSummary(db, requestTenantId);
+          const summary = await buildExecutiveSummary(db, requestTenantId, windowDays);
+          summary.meta.dataSources = fed.dataSources;
           writeJson(res, 200, available(summary));
         } catch {
           writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed executive summary'));
@@ -1484,12 +1582,15 @@ export async function startDashboardServer(
       if (url.startsWith('/api/dashboard/insights') && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
           const u = new URL(req.url || url, 'http://localhost');
           const scopeRaw = u.searchParams.get('scope') || 'overview';
           const scope = (['overview', 'cost', 'security', 'audit', 'ai'].includes(scopeRaw)
             ? scopeRaw
             : 'overview') as InsightScope;
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({
               scope,
@@ -1499,7 +1600,7 @@ export async function startDashboardServer(
             }, 'No history database'));
             return;
           }
-          const insights = await buildDashboardInsights(db, requestTenantId, scope);
+          const insights = await buildDashboardInsights(db, requestTenantId, scope, { windowDays });
           writeJson(res, 200, available(insights));
         } catch {
           writeJson(res, 200, unavailable({ bullets: [] }, 'Failed dashboard insights'));
@@ -1510,18 +1611,31 @@ export async function startDashboardServer(
       if (url === '/api/audit/heatmap' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
           if (!db) {
             writeJson(res, 200, unavailable({ cells: [] }, 'No history database'));
             return;
           }
-          const u = new URL(req.url || url, 'http://localhost');
-          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '7', 10)));
           const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
-          const cells = buildAuditHeatmap(records);
-          writeJson(res, 200, available({ windowDays, cells }));
+          const bundle = buildAuditHeatmapBundle(records, windowDays);
+          writeJson(res, 200, available({ ...bundle, meta: mergeFedMeta(bundle.meta as Record<string, unknown>, fed) }));
         } catch {
           writeJson(res, 200, unavailable({ cells: [] }, 'Failed audit heatmap'));
+        }
+        return;
+      }
+
+      if (url === '/api/dashboard/regions' && method === 'GET') {
+        setCors();
+        try {
+          const regions = await listFederatedRegions();
+          writeJson(res, 200, available({ regions }));
+        } catch {
+          writeJson(res, 200, unavailable({ regions: [] }, 'Failed to list regions'));
         }
         return;
       }
@@ -1576,16 +1690,12 @@ export async function startDashboardServer(
       if (url === '/api/instances' && method === 'GET') {
         setCors();
         try {
-          const db = runtimeHistoryDb;
-          let sum = { total: 0, blocked: 0, costUsd: 0, totalLatency: 0 };
-          if (db) {
-            const srvs = await getAllActiveServerNames(db, requestTenantId);
-            const records = await loadAllCallRecords(db, srvs, requestTenantId);
-            sum = summarizeRecords(records);
-          }
-          const avgLatency = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
-          writeJson(res, 200, [{ instanceId: process.env['GUARDIAN_INSTANCE_ID'] || `guardian-${process.pid}`, instanceName: process.env['HOSTNAME'] || 'localhost', status: 'active', hostname: process.env['HOSTNAME'] || 'unknown', version: process.env.npm_package_version || '2.3.24', lastHeartbeat: new Date().toISOString(), totalRequests: sum.total, blockedRequests: sum.blocked, totalCostUsd: sum.costUsd, avgLatencyMs: avgLatency }]);
-        } catch { writeJson(res, 200, []); } return;
+          const fleet = await buildDashboardFleetResponse(runtimeHistoryDb, requestTenantId);
+          writeJson(res, 200, available(fleet));
+        } catch {
+          writeJson(res, 200, unavailable({ instances: [], source: 'none', totalInstances: 0, activeInstances: 0 }, 'Failed to read fleet instances'));
+        }
+        return;
       }
 
       if (url === '/api/policy/suggestions/accept' && method === 'POST') {
@@ -1881,11 +1991,19 @@ export async function startDashboardServer(
       if (url === '/api/visuals/live' && method === 'GET') {
         setCors();
         try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
           const { writeVisualsData } = await import('./export-visuals-data.js');
           const data = await writeVisualsData({
             tenantId: requestTenantId,
-            historyDb: runtimeHistoryDb ?? undefined,
+            historyDb: fed.db ?? runtimeHistoryDb ?? undefined,
+            windowDays,
           }) as unknown as Record<string, unknown>;
+          if (data.meta && typeof data.meta === 'object') {
+            (data.meta as Record<string, unknown>).dataSources = fed.dataSources;
+          }
           writeJson(res, 200, available(data));
         } catch (err: unknown) {
           writeJson(res, 500, {

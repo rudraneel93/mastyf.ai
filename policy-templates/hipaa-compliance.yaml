@@ -12,6 +12,9 @@ policy:
         - '(?i)medical\\s+record'
         - '(?i)patient\\s+(?:ssn|dob|mrn|id)'
         - '(?i)\\b(?:diagnosis|prescription|hipaa)\\b'
+        - '(?i)\\b(?:icd(?:-10)?|ndc)\\s*[:#]?\\s*\\S+'
+        - '(?i)\\b[A-TV-Z][0-9][0-9AB]\\.[0-9A-TV-Z]{1,4}\\b'
+        - '(?i)\\b\\d{4,5}-\\d{3,4}-\\d{1,2}\\b'
       action: block
       reason: HIPAA Protected Health Information pattern
     - id: HIPAA-AUDIT-EMPHASIS

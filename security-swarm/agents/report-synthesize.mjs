@@ -7,10 +7,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import { bypassFingerprint, diffBypasses } from '../lib/bypass-fingerprint.mjs';
+import { resolveSwarmDir } from '../lib/swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
-const OUT_DIR = join(REPO, 'reports', 'security-swarm');
+const OUT_DIR = resolveSwarmDir();
 
 function load(path) {
   if (!existsSync(path)) return null;

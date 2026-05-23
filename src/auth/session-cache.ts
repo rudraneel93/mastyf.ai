@@ -146,6 +146,9 @@ export class SessionCache {
       expiresAt: now + this.sessionTtlMs,
     };
     this.sessions.set(this.scopedSessionKey(tenantId, newToken), rotated);
+    void import('../audit/dashboard-access-log.js').then(({ appendSessionRotateAudit }) =>
+      appendSessionRotateAudit({ tenantId, oldToken: token, newToken }),
+    );
     return { identity: entry.identity, rotatedToken: newToken };
   }
 

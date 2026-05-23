@@ -4,6 +4,20 @@ import { createRedisClient, getRedisConnectionLabel, isRedisConfigured } from '.
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { claimDpopJtiQuorum, getDpopQuorumClients, retryDelayWithJitter } from './dpop-quorum.js';
 
+/** Cross-region shared Redis for DPoP jti dedup (falls back to REDIS_URL). */
+export function resolveDpopRedisUrl(): string | null {
+  const crossRegion = process.env['GUARDIAN_DPOP_REDIS_URL']?.trim();
+  if (crossRegion) return crossRegion;
+  if (isRedisConfigured()) {
+    return process.env['REDIS_URL']?.trim() || null;
+  }
+  return null;
+}
+
+export function isDpopRedisConfigured(): boolean {
+  return Boolean(resolveDpopRedisUrl() || isRedisConfigured());
+}
+
 /** Pluggable DPoP jti replay store (in-memory single instance or Redis HA). */
 export interface DPoPNonceStore {
   /** Returns true if this jti is the first use; false if replay. */
@@ -115,11 +129,19 @@ export class RedisDPoPNonceStore implements DPoPNonceStore {
   constructor(
     private readonly ttlSeconds: number,
     redis?: Redis | Cluster,
+    connectionString?: string,
   ) {
-    this.redis = redis ?? createRedisClient({ maxRetriesPerRequest: 3, lazyConnect: false });
+    this.redis = redis ?? createRedisClient({
+      connectionString: connectionString || resolveDpopRedisUrl() || undefined,
+      maxRetriesPerRequest: 3,
+      lazyConnect: false,
+    });
     this.quorumMode = Boolean(process.env['GUARDIAN_DPOP_QUORUM_REDIS']?.trim());
+    const label = connectionString || process.env['GUARDIAN_DPOP_REDIS_URL']
+      ? 'cross-region'
+      : getRedisConnectionLabel();
     Logger.info(
-      `[dpop] Redis nonce store (${getRedisConnectionLabel()}${this.quorumMode ? ', quorum' : ''})`,
+      `[dpop] Redis nonce store (${label}${this.quorumMode ? ', quorum' : ''})`,
     );
   }
 
@@ -142,12 +164,13 @@ export class RedisDPoPNonceStore implements DPoPNonceStore {
 }
 
 export function createDPoPNonceStore(ttlMs: number): DPoPNonceStore {
-  if (isRedisConfigured()) {
-    return new RedisDPoPNonceStore(Math.ceil(ttlMs / 1000));
+  const dpopUrl = resolveDpopRedisUrl();
+  if (dpopUrl || isRedisConfigured()) {
+    return new RedisDPoPNonceStore(Math.ceil(ttlMs / 1000), undefined, dpopUrl || undefined);
   }
   if (process.env['GUARDIAN_CLUSTER_MODE'] === 'true' || process.env['KUBERNETES_SERVICE_HOST']) {
     Logger.warn(
-      '[dpop] Using in-memory DPoP nonce store in clustered deployment — set Redis for replay protection across instances',
+      '[dpop] Using in-memory DPoP nonce store in clustered deployment — set REDIS_URL or GUARDIAN_DPOP_REDIS_URL for replay protection across instances',
     );
   }
   return new InMemoryDPoPNonceStore(ttlMs);

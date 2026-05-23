@@ -14,6 +14,11 @@ describe('url-guard', () => {
     expect(isDangerousUrl('http://2130706433/').block).toBe(true);
   });
 
+  it('blocks IPv4-mapped IPv6 localhost (hex-normalized)', () => {
+    expect(isDangerousUrl('http://[::ffff:127.0.0.1]/').block).toBe(true);
+    expect(isDangerousUrl('http://[::ffff:7f00:1]/').block).toBe(true);
+  });
+
   it('blocks octal-dotted localhost', () => {
     expect(isDangerousUrl('http://0177.0.0.1/admin').block).toBe(true);
   });

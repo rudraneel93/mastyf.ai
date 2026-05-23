@@ -45,9 +45,11 @@ function cacheKey(input: {
   toolName: string;
   arguments?: Record<string, unknown>;
   syncRule?: string;
+  tenantId?: string;
 }): string {
   const leaves = walkStringLeaves(input.arguments ?? {}).map((l) => l.value).join('\n');
-  const raw = `${input.serverName}\0${input.toolName}\0${input.syncRule || ''}\0${leaves}`;
+  const tid = input.tenantId?.trim() || 'default';
+  const raw = `${tid}\0${input.serverName}\0${input.toolName}\0${input.syncRule || ''}\0${leaves}`;
   return createHash('sha256').update(raw).digest('hex').slice(0, 24);
 }
 
@@ -100,6 +102,7 @@ export function scoreLocalSemanticRisk(input: {
   toolName: string;
   arguments?: Record<string, unknown>;
   syncRule?: string;
+  tenantId?: string;
 }): LocalSemanticScore {
   const key = cacheKey(input);
   const cached = localSemanticCache.get(key);

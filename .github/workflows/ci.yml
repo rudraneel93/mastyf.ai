@@ -88,6 +88,22 @@ jobs:
       - name: Integration tests
         run: pnpm test:integration
 
+      - name: Postgres scale pilot (50 concurrent)
+        run: pnpm test:scale-postgres
+        env:
+          DATABASE_URL: postgresql://guardian:guardian@localhost:5432/guardian
+          SCALE_TEST_CONCURRENCY: '50'
+
+      - name: Proxy scale pilot (50 replicas)
+        run: pnpm test:scale-proxy
+        env:
+          SCALE_PROXY_REPLICAS: '50'
+          SCALE_PROXY_TOTAL_CALLS: '250'
+          SCALE_PROXY_STRICT: 'false'
+
+      - name: Multi-region failover checks
+        run: pnpm exec vitest run tests/utils/multi-region-failover.test.ts
+
       - name: Multi-tenant dashboard regression
         run: pnpm exec vitest run tests/dashboard/dashboard-multi-tenant.test.ts
 

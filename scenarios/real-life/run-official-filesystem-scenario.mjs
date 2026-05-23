@@ -43,8 +43,43 @@ writeFileSync(join(docsDir, 'readme.txt'), 'Benign docs folder.\n', 'utf-8');
 
 const templatePath = resolve(__dirname, 'proxy-filesystem-config.template.json');
 const configPath = resolve(__dirname, 'proxy-filesystem-config.json');
-const template = readFileSync(templatePath, 'utf-8').replaceAll('__MCP_FS_ROOT__', MCP_FS_ROOT);
-writeFileSync(configPath, template);
+
+/** Prefer repo node_modules over npx so swarm analysis works offline / without registry DNS. */
+export function resolveOfficialFilesystemMcpEntry(fsRoot) {
+  const pkg = '@modelcontextprotocol/server-filesystem';
+  const localEntry = join(ROOT, 'node_modules', pkg, 'dist', 'index.js');
+  if (existsSync(localEntry)) {
+    return { command: process.execPath, args: [localEntry, fsRoot], source: 'node_modules' };
+  }
+  const override = process.env.REAL_LIFE_FILESYSTEM_MCP_ENTRY?.trim();
+  if (override && existsSync(override)) {
+    return { command: process.execPath, args: [override, fsRoot], source: 'env' };
+  }
+  return { command: 'npx', args: ['-y', pkg, fsRoot], source: 'npx' };
+}
+
+function writeFilesystemProxyConfig(fsRoot) {
+  const { command, args } = resolveOfficialFilesystemMcpEntry(fsRoot);
+  writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        mcpServers: {
+          'official-filesystem': {
+            command,
+            args,
+            env: {},
+            transport: 'stdio',
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+writeFilesystemProxyConfig(MCP_FS_ROOT);
 
 function rpc(id, method, params = {}) {
   return JSON.stringify({ jsonrpc: '2.0', id: String(id), method, params }) + '\n';
@@ -136,16 +171,25 @@ function pickFreeTcpPort() {
   });
 }
 
-async function waitForProxyReady(getStderr, timeoutMs = 20000) {
+/** Proxy accepts MCP on stdin only after cli.ts prints this (after AI/dashboard init). */
+const PROXY_READY_MARKERS = [
+  'MCP Guardian proxy running',
+];
+
+function isProxyReady(stderr) {
+  return PROXY_READY_MARKERS.some((m) => stderr.includes(m));
+}
+
+function defaultProxyReadyTimeoutMs() {
+  const raw = parseInt(process.env.REAL_LIFE_PROXY_READY_MS || '45000', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 45000;
+}
+
+async function waitForProxyReady(getStderr, timeoutMs = defaultProxyReadyTimeoutMs()) {
   return new Promise((resolveReady, reject) => {
     const t = setInterval(() => {
       const stderr = getStderr();
-      if (
-        stderr.includes('Proxy started for')
-        || stderr.includes('proxy running')
-        || stderr.includes('Protection Active')
-        || stderr.includes('stdio active for')
-      ) {
+      if (isProxyReady(stderr)) {
         clearInterval(t);
         clearTimeout(hard);
         resolveReady();
@@ -157,39 +201,13 @@ async function waitForProxyReady(getStderr, timeoutMs = 20000) {
       if (stderr.includes('Failed to start') || stderr.includes('Failed')) {
         reject(new Error(stderr.slice(-3000)));
       } else {
-        reject(new Error(`Proxy banner not seen within ${timeoutMs}ms`));
+        const hint = stderr.length === 0
+          ? ' No proxy stderr captured — run pnpm build and ensure npx can reach the network.'
+          : '';
+        reject(new Error(
+          `Proxy banner not seen within ${timeoutMs}ms.${hint}\n${stderr.slice(-2500)}`,
+        ));
       }
-    }, timeoutMs);
-  });
-}
-
-/** Wait until npx has started @modelcontextprotocol/server-filesystem upstream */
-async function waitForUpstreamReady(getStderr, timeoutMs = 45000) {
-  return new Promise((resolveReady, reject) => {
-    const t = setInterval(() => {
-      const stderr = getStderr();
-      if (
-        stderr.includes('Secure MCP Filesystem')
-        || stderr.includes('Filesystem Server running on stdio')
-      ) {
-        clearInterval(t);
-        clearTimeout(hard);
-        resolveReady();
-      }
-    }, 100);
-    const hard = setTimeout(() => {
-      clearInterval(t);
-      const stderr = getStderr();
-      const portConflict = /EADDRINUSE/i.test(stderr) && /9090|METRICS_PORT/i.test(stderr);
-      const hint = portConflict
-        ? ' Metrics port 9090 is in use (e.g. dashboard:proxy already running). '
-        + 'Stop the other proxy or set METRICS_ENABLED=false for analysis.'
-        : '';
-      reject(
-        new Error(
-          `Upstream filesystem MCP did not start within ${timeoutMs}ms.${hint}\n${stderr.slice(-2500)}`,
-        ),
-      );
     }, timeoutMs);
   });
 }
@@ -226,6 +244,73 @@ async function listToolsWithRetry(proc, responses, maxAttempts = 6) {
     await new Promise((r) => setTimeout(r, 400 + attempt * 600));
   }
   return { listResp: null, toolNames: [] };
+}
+
+/** Upstream ready when npx banner, preflight health, or tools/list succeeds. */
+const UPSTREAM_READY_MARKERS = [
+  'Secure MCP Filesystem',
+  'Filesystem Server running on stdio',
+];
+
+function isUpstreamReady(stderr) {
+  if (UPSTREAM_READY_MARKERS.some((m) => stderr.includes(m))) return true;
+  const preflight = stderr.match(/\[preflight\][^\n]*\btools=(\d+)/);
+  return preflight != null && parseInt(preflight[1], 10) > 0;
+}
+
+function defaultUpstreamReadyTimeoutMs() {
+  const raw = parseInt(process.env.REAL_LIFE_UPSTREAM_READY_MS || '90000', 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 90000;
+}
+
+async function waitForUpstreamReady(
+  proc,
+  responses,
+  getStderr,
+  timeoutMs = defaultUpstreamReadyTimeoutMs(),
+) {
+  const start = Date.now();
+  let handshakeDone = false;
+  let lastErr = null;
+
+  while (Date.now() - start < timeoutMs) {
+    const stderr = getStderr();
+    const mayConnect = isUpstreamReady(stderr) || Date.now() - start > 5000;
+
+    if (mayConnect) {
+      if (!handshakeDone) {
+        try {
+          await mcpHandshake(proc, responses);
+          handshakeDone = true;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (handshakeDone) {
+        try {
+          const { toolNames } = await listToolsWithRetry(proc, responses, 4);
+          if (toolNames.length > 0) return toolNames;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
+  const stderr = getStderr();
+  const portConflict = /EADDRINUSE/i.test(stderr) && /9090|METRICS_PORT/i.test(stderr);
+  const hint = portConflict
+    ? ' Metrics port 9090 is in use (e.g. dashboard:proxy already running). '
+    + 'Stop the other proxy or set REAL_LIFE_METRICS_ENABLED=false for analysis.'
+    : '';
+  const detail = lastErr instanceof Error ? lastErr.message : lastErr ? String(lastErr) : '';
+  throw new Error(
+    `Upstream filesystem MCP did not start within ${timeoutMs}ms.${hint}`
+    + (detail ? `\nLast MCP error: ${detail}` : '')
+    + `\n${stderr.slice(-2500)}`,
+  );
 }
 
 async function waitForResponse(responses, id, timeoutMs = 5000) {
@@ -287,7 +372,7 @@ export function loadLearningSnapshot() {
   return snap;
 }
 
-export function buildHybridEnv(metricsPort) {
+export function buildHybridEnv(metricsPort, liveDbPath, liveHomeDir) {
   const metricsEnabled = process.env.REAL_LIFE_METRICS_ENABLED === 'true';
   return {
     ...process.env,
@@ -295,6 +380,10 @@ export function buildHybridEnv(metricsPort) {
     GUARDIAN_WS_ENABLED: 'false',
     METRICS_ENABLED: metricsEnabled ? 'true' : 'false',
     METRICS_PORT: metricsPort,
+    MCP_GUARDIAN_DB_PATH: liveDbPath,
+    MCP_GUARDIAN_HOME: liveHomeDir,
+    GUARDIAN_AUDIT_SYNC_ENABLED: 'false',
+    GUARDIAN_POLICY_SYNC_ENABLED: 'false',
     GUARDIAN_ALLOW_MODE_OVERRIDE: 'true',
     GUARDIAN_AI_ENABLED: process.env.GUARDIAN_AI_ENABLED ?? 'true',
     GUARDIAN_AI_INSTANT_LEARNING: process.env.GUARDIAN_AI_INSTANT_LEARNING ?? 'true',
@@ -315,7 +404,11 @@ export async function createLiveProxySession() {
 
   const metricsPort =
     process.env.METRICS_PORT || String(await pickFreeTcpPort());
-  const hybridEnv = buildHybridEnv(metricsPort);
+  const liveDbDir = mkdtempSync(join(tmpdir(), 'guardian-live-proxy-'));
+  const liveDbPath = join(liveDbDir, 'history.db');
+  const liveHomeDir = join(liveDbDir, 'home');
+  mkdirSync(liveHomeDir, { recursive: true });
+  const hybridEnv = buildHybridEnv(metricsPort, liveDbPath, liveHomeDir);
 
   const responses = new Map();
   let stderr = '';
@@ -338,9 +431,7 @@ export async function createLiveProxySession() {
     waitForProxyReady(() => stderr).then(resolveReady).catch(reject);
   });
 
-  await waitForUpstreamReady(() => stderr);
-  await mcpHandshake(proc, responses);
-  const { toolNames } = await listToolsWithRetry(proc, responses);
+  const toolNames = await waitForUpstreamReady(proc, responses, () => stderr);
 
   return {
     proc,

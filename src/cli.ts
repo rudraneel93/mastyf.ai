@@ -19,7 +19,7 @@ import { startDashboardServer, setDashboardDataSource } from './utils/dashboard-
 import { DashboardAuth } from './auth/dashboard-auth.js';
 import { initTracing } from './utils/tracing.js';
 import { createContainer } from './container.js';
-import { bootstrapCompliance, shutdownEnterprise } from './utils/enterprise-bootstrap.js';
+import { bootstrapCompliance, shutdownEnterprise, bootstrapControlPlane } from './utils/enterprise-bootstrap.js';
 import { createDatabase } from './database/create-database.js';
 import { bootstrapSecrets } from './utils/enterprise-bootstrap.js';
 import { broadcastDashboardEvent } from './utils/dashboard-events.js';
@@ -659,6 +659,7 @@ program
     await bootstrapSecrets();
     const db = await createDatabase(process.env.MCP_GUARDIAN_DB_PATH || undefined);
     await bootstrapCompliance(db);
+    await bootstrapControlPlane(policyWatcher);
     const { loadDetectorPluginsFromPath } = await import('./plugins/detector-plugin.js');
     await loadDetectorPluginsFromPath();
     // Pass PolicyWatcher (not just engine) so hot-reload works

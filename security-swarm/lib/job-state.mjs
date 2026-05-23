@@ -5,11 +5,12 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } fr
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { REPO_ROOT, resolveSwarmDir } from './swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
-export const REPO_ROOT = join(__dir, '..', '..');
 /** Override via GUARDIAN_SWARM_DIR for per-tenant dashboard runs. */
-export const SWARM_DIR = process.env.GUARDIAN_SWARM_DIR || join(REPO_ROOT, 'reports', 'security-swarm');
+export { REPO_ROOT };
+export const SWARM_DIR = resolveSwarmDir();
 export const JOB_PATH = join(SWARM_DIR, 'job.json');
 export const JOB_LOG_PATH = join(SWARM_DIR, 'job.log');
 export const ANALYSIS_PATH = join(SWARM_DIR, 'analysis.txt');

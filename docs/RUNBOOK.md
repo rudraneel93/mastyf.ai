@@ -153,6 +153,35 @@ kubectl exec -it <guardian-pod> -- env | grep REDIS_URL
 
 ---
 
+## Policy YAML vs full proxy pipeline
+
+**Symptoms:**
+- Offline YAML-only evaluators report high false-negative rates (~75% on adversarial fixtures)
+- Operators believe Guardian is "configured" because `default-policy.yaml` loads successfully
+- Attacks using encoding evasion, confusables, or SSRF URL tricks pass when guards are bypassed
+
+**Root cause:** Production protection is **not** YAML regex alone. The proxy runs, in order:
+
+1. Payload normalization (`unicode_strict` + TR39 confusables)
+2. TypeScript semantic guards (URL/path/shell/SQL exfil, etc.)
+3. YAML rules (regex, deny lists, rate limits)
+4. Optional OPA + LLM semantic layer
+
+**Do not:**
+- Set `unicode_strict: false` in production without a documented exception
+- Deploy policy YAML without the Guardian proxy in front of MCP servers
+- Treat corpus/harness YAML-only scores as production block rates
+
+**Verify:**
+```bash
+pnpm test -- tests/policy/adversarial-scenarios.test.ts
+pnpm security-swarm:analyze   # full pipeline + gates (Pro)
+```
+
+See `default-policy.yaml` header comment and README **Policies** section.
+
+---
+
 ## Policy File Corruption
 
 **Symptoms:**

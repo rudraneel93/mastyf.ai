@@ -16,6 +16,13 @@ import { REPO_ROOT } from './swarm-artifacts.js';
 import { loadSemanticAuditRecordsAsync } from '../ai/semantic-audit-store.js';
 import { buildSemanticVisualsFromRecords } from './semantic-visuals.js';
 import { isSwarmSessionActiveForTenant, isStrictLiveDashboard } from './swarm-session.js';
+import {
+  fillTimeSeries,
+  generateTimeBuckets,
+  parseWindowDays,
+  windowRangeMs,
+} from './time-buckets.js';
+import { buildChartMeta } from './chart-meta.js';
 
 
 const RULE_GLOSSARY: Record<string, string> = {
@@ -57,6 +64,10 @@ export interface VisualsDataBundle {
       pipeline: 'session-swarm' | 'none';
     };
     emptyReasons: Record<string, string>;
+    recordCount?: number;
+    sparse?: boolean;
+    window?: string;
+    generatedAt?: string;
   };
   traffic: {
     hasData: boolean;
@@ -110,17 +121,23 @@ function percentile(sorted: number[], p: number): number {
   return sorted[idx] ?? 0;
 }
 
-function buildHourlyBuckets(records: ProxyCallRecord[], sinceMs: number): HourlyBucket[] {
-  const buckets = new Map<number, ProxyCallRecord[]>();
+function buildHourlyBuckets(
+  records: ProxyCallRecord[],
+  sinceMs: number,
+  endMs: number,
+): { hourly: HourlyBucket[]; sparse: boolean } {
+  const buckets = generateTimeBuckets(sinceMs, endMs, 'hour');
+  const rawMap = new Map<number, ProxyCallRecord[]>();
   for (const r of records) {
     const t = new Date(r.timestamp || 0).getTime();
-    if (Number.isNaN(t) || t < sinceMs) continue;
+    if (Number.isNaN(t) || t < sinceMs || t > endMs) continue;
     const hour = Math.floor(t / 3_600_000) * 3_600_000;
-    const list = buckets.get(hour) ?? [];
+    const list = rawMap.get(hour) ?? [];
     list.push(r);
-    buckets.set(hour, list);
+    rawMap.set(hour, list);
   }
-  return [...buckets.entries()]
+
+  const rawHourly = [...rawMap.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([hourMs, recs]) => {
       let blocked = 0;
@@ -144,6 +161,24 @@ function buildHourlyBuckets(records: ProxyCallRecord[], sinceMs: number): Hourly
         latencyP95Ms: percentile(latencies, 95),
       };
     });
+
+  const filled = fillTimeSeries(rawHourly, 'hourStart', buckets, ['calls', 'blocked', 'passed']);
+  const hourly = filled.points.map((p) => {
+    const existing = rawHourly.find((h) => h.hourStart === p.hourStart);
+    if (existing) return existing;
+    return {
+      hourStart: String(p.hourStart),
+      calls: 0,
+      blocked: 0,
+      passed: 0,
+      passRatePct: 0,
+      costUsd: 0,
+      latencyP50Ms: 0,
+      latencyP95Ms: 0,
+    };
+  });
+
+  return { hourly, sparse: filled.sparse };
 }
 
 function loadAttackLearningState(tenantId?: string): AttackLearningState | null {
@@ -188,12 +223,13 @@ export async function buildVisualsData(opts: {
   /** Reuse proxy/dashboard DB — avoids open/close churn on /api/visuals/live */
   historyDb?: Awaited<ReturnType<typeof createDatabase>>;
 } = {}): Promise<VisualsDataBundle> {
-  const windowDays = opts.windowDays ?? 7;
+  const windowDays = parseWindowDays(opts.windowDays ?? 7);
   const tenantId = opts.tenantId || DEFAULT_TENANT_ID;
   const swarmDir = getEffectiveSwarmDir(tenantId);
   const swarmSessionLive = isSwarmSessionActiveForTenant(tenantId);
   const dbPath = opts.dbPath ?? resolveGuardianDbPath();
-  const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
+  const { startMs, endMs } = windowRangeMs(windowDays);
+  const sinceMs = startMs;
   const emptyReasons: Record<string, string> = {};
 
   let allRecords: ProxyCallRecord[] = [];
@@ -220,7 +256,7 @@ export async function buildVisualsData(opts: {
     return !Number.isNaN(t) && t >= sinceMs;
   });
 
-  const hourly = buildHourlyBuckets(windowRecords, sinceMs);
+  const { hourly, sparse: trafficSparse } = buildHourlyBuckets(windowRecords, sinceMs, endMs);
   const serverMap = new Map<string, ProxyCallRecord[]>();
   const toolCounts = new Map<string, number>();
   const ruleCounts = new Map<string, number>();
@@ -342,8 +378,16 @@ export async function buildVisualsData(opts: {
   ];
   const timings = latest?.timings as { totalSec?: number; steps?: Array<{ label: string; elapsedSec: number }> } | undefined;
 
+  const chartMeta = buildChartMeta({
+    windowDays,
+    recordCount: windowRecords.length,
+    sparse: trafficSparse,
+    dataSources: ['history.db'],
+    emptyReason: windowRecords.length === 0 ? emptyReasons.traffic : undefined,
+  });
+
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: chartMeta.generatedAt,
     windowDays,
     meta: {
       dbPath,
@@ -352,6 +396,10 @@ export async function buildVisualsData(opts: {
       hasInstantLearning: instantLearning.source === 'live',
       hasSemantic: semanticSlice.hasData,
       swarmSessionLive,
+      recordCount: chartMeta.recordCount,
+      sparse: chartMeta.sparse,
+      window: chartMeta.window,
+      generatedAt: chartMeta.generatedAt,
       dataSources: {
         traffic: windowRecords.length > 0 ? 'history.db' : 'none',
         semantic: semanticSlice.hasData ? 'semantic-audit-store' : 'none',

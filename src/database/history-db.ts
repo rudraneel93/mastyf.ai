@@ -362,26 +362,57 @@ export class HistoryDatabase implements IDatabase {
       : this.db
         .prepare('SELECT * FROM call_records WHERE server_name = ? ORDER BY id DESC LIMIT ?')
         .all(serverName, limit);
-    return (rows as Array<Record<string, unknown>>).map((row: any) => ({
-      serverName: row.server_name ?? '',
-      toolName: row.tool_name ?? '',
-      requestTokens: row.request_tokens ?? 0,
-      responseTokens: row.response_tokens ?? 0,
-      totalTokens: row.total_tokens ?? 0,
-      durationMs: row.duration_ms ?? 0,
-      timestamp: row.created_at ?? new Date().toISOString(),
-      model: row.model ?? undefined,
-      costUsd: row.cost_usd != null ? Number(row.cost_usd) : undefined,
-      pricingSource: row.pricing_source ?? undefined,
-      blocked: Boolean(row.blocked),
-      blockRule: row.block_rule ?? undefined,
-      blockReason: decryptField(row.block_reason ?? null) ?? undefined,
-      tokenSource: row.token_source === 'api' || row.token_source === 'estimated'
-        ? row.token_source
-        : undefined,
-      tenantId: row.tenant_id ?? 'default',
-    }));
+    return (rows as Array<Record<string, unknown>>).map((row: any) => this.mapCallRecordRow(row));
     });
+  }
+
+  /** Incremental sync — rows with id > afterId in ascending order. */
+  async getCallRecordsAfterId(
+    serverName: string,
+    afterId: number,
+    limit: number,
+    tenantId?: string,
+  ): Promise<Array<ProxyCallRecord & { sourceId: number }>> {
+    return monitorDbQuery('getCallRecordsAfterId', () => {
+      const rows = tenantId
+        ? this.db
+          .prepare(
+            'SELECT * FROM call_records WHERE server_name = ? AND tenant_id = ? AND id > ? ORDER BY id ASC LIMIT ?',
+          )
+          .all(serverName, tenantId, afterId, limit)
+        : this.db
+          .prepare(
+            'SELECT * FROM call_records WHERE server_name = ? AND id > ? ORDER BY id ASC LIMIT ?',
+          )
+          .all(serverName, afterId, limit);
+      return (rows as Array<Record<string, unknown>>).map((row: any) => ({
+        ...this.mapCallRecordRow(row),
+        sourceId: Number(row.id) || 0,
+      }));
+    });
+  }
+
+  private mapCallRecordRow(row: Record<string, unknown>): ProxyCallRecord {
+    const r = row as any;
+    return {
+      serverName: r.server_name ?? '',
+      toolName: r.tool_name ?? '',
+      requestTokens: r.request_tokens ?? 0,
+      responseTokens: r.response_tokens ?? 0,
+      totalTokens: r.total_tokens ?? 0,
+      durationMs: r.duration_ms ?? 0,
+      timestamp: r.created_at ?? new Date().toISOString(),
+      model: r.model ?? undefined,
+      costUsd: r.cost_usd != null ? Number(r.cost_usd) : undefined,
+      pricingSource: r.pricing_source ?? undefined,
+      blocked: Boolean(r.blocked),
+      blockRule: r.block_rule ?? undefined,
+      blockReason: decryptField(r.block_reason ?? null) ?? undefined,
+      tokenSource: r.token_source === 'api' || r.token_source === 'estimated'
+        ? r.token_source
+        : undefined,
+      tenantId: r.tenant_id ?? 'default',
+    };
   }
 
   async transaction<T>(fn: () => Promise<T> | T): Promise<T> {

@@ -115,6 +115,18 @@ Document erasure in your ROPA; retention default 30 days (`HistoryDatabase` purg
 | Postgres unavailable | Proxy may degrade; enable `GUARDIAN_STRICT_MODE` only when DB required |
 | Redis down | Rate limits fall back to local LRU; DPoP strict mode may block — see [PRODUCTION_BLOCKERS.md](./PRODUCTION_BLOCKERS.md) |
 | Policy mis-deploy | Roll back ConfigMap / `default-policy.yaml`; use `policy-audit` mode |
+| Multi-region failover | Promote standby Postgres; update `DATABASE_URL` / ingress; set `GUARDIAN_REGION` on standby fleet; run `pnpm enterprise:preflight:multi-region` |
+
+---
+
+## Multi-region active-active DR
+
+1. **Primary region loss** — DNS/ingress to standby (`values-enterprise-standby.yaml`); promote Postgres read-replica to primary.
+2. **Dashboard** — point `DATABASE_URL` at promoted PG; `GUARDIAN_DASHBOARD_DATA_SOURCE=unified` reads all replicas' synced audit data.
+3. **Redis** — per-region Redis stays local; set `GUARDIAN_DPOP_REDIS_URL` and `GUARDIAN_GLOBAL_RATE_LIMIT_REDIS_URL` to a surviving global cluster if used.
+4. **Verify** — `pnpm enterprise:preflight:multi-region`; dashboard region filter; `mcp-guardian fleet status`.
+
+See [MULTI_REGION.md](./MULTI_REGION.md) and [ENTERPRISE_TOPOLOGY.md](./ENTERPRISE_TOPOLOGY.md).
 
 ---
 

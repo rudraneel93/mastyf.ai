@@ -15,12 +15,15 @@ import {
   type AuditResponse,
   type AuditHeatmapResponse,
 } from '@/lib/guardian-api';
-import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE } from '@/lib/chartTheme';
+import { CHART_AXIS, CHART_GRID, CHART_SERIES } from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
 import { ChartCard } from './ChartCard';
 import { InsightsNarrativeRail } from './InsightsNarrativeRail';
 import { DataTablePro, type Column } from './DataTablePro';
+import { ChartTooltip } from './chart-kit';
+import { AuditActivityHeatmap } from './AuditActivityHeatmap';
+import { useDashboardWindow } from './DashboardWindowContext';
 
 type EventRow = NonNullable<AuditResponse['events']>[number];
 
@@ -45,11 +48,12 @@ export function AuditExplorerPanel({
   onFpReject,
   canMutate,
 }: Props) {
+  const { windowDays, window } = useDashboardWindow();
   const [heatmap, setHeatmap] = useState<AuditHeatmapResponse | null>(null);
 
   const loadHeatmap = useCallback(async () => {
-    setHeatmap(await fetchAuditHeatmap(7));
-  }, []);
+    setHeatmap(await fetchAuditHeatmap(windowDays));
+  }, [windowDays]);
 
   useEffect(() => {
     void loadHeatmap();
@@ -82,7 +86,7 @@ export function AuditExplorerPanel({
 
       <DashboardSection
         title="Live audit explorer"
-        subtitle="SIEM-style view of proxy decisions — source: history.db call_records"
+        subtitle={`SIEM-style view — ${window} window from history.db`}
       >
         <div className="kpi-row">
           <KpiCard label="Total events" value={audit?.total?.toLocaleString() ?? '—'} />
@@ -129,17 +133,28 @@ export function AuditExplorerPanel({
         <div className="dash-grid">
           <div className="dash-grid-span-12">
             <ChartCard
-              title="Block heatmap (top patterns)"
-              subtitle="Rule × tool combinations driving blocks in the last 7 days"
+              title="Activity heatmap"
+              subtitle={`Day × hour event density (${window})`}
+              empty={!heatmap?.activity?.days?.length}
+              meta={heatmap?.meta}
+            >
+              <AuditActivityHeatmap activity={heatmap?.activity} />
+            </ChartCard>
+          </div>
+          <div className="dash-grid-span-12">
+            <ChartCard
+              title="Block patterns (rule × tool)"
+              subtitle="Top combinations driving blocks"
               empty={heatmapChart.length === 0}
+              meta={heatmap?.meta}
             >
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={heatmapChart} layout="vertical">
                   <CartesianGrid {...CHART_GRID} />
                   <XAxis type="number" {...CHART_AXIS} />
                   <YAxis type="category" dataKey="label" width={140} {...CHART_AXIS} />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Bar dataKey="count" fill={CHART_COLORS[2]} name="Blocks" />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar dataKey="count" fill={CHART_SERIES.block} name="Blocks" />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>

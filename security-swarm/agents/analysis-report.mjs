@@ -5,10 +5,11 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { resolveSwarmDir } from '../lib/swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
-const SWARM_DIR = join(REPO, 'reports', 'security-swarm');
+const SWARM_DIR = resolveSwarmDir();
 const ANALYSIS_PATH = join(SWARM_DIR, 'analysis.txt');
 const LIVE_JSON = join(REPO, 'scenarios', 'real-life', 'output', 'live-filesystem-session.json');
 const CONTINUOUS_JSON = join(REPO, 'scenarios', 'real-life', 'output', 'continuous-live-attack-session.json');

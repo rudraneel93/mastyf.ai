@@ -2,8 +2,11 @@
 
 **Runtime security, cost governance, and health monitoring proxy for MCP infrastructure.**
 
+**Website → [mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app)** — product overview, Security Swarm + LLM threat research architecture diagrams, competitive USP, evidence stats, Pro checkout ($4.99 lifetime), and optional [cloud console](https://mcp-guardian-cloud.vercel.app/dashboard).
+
 [![npm version](https://img.shields.io/npm/v/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
 [![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
+[![Website](https://img.shields.io/badge/Website-mcp--guardian--cloud.vercel.app-0070f3)](https://mcp-guardian-cloud.vercel.app/)
 [![mcp-guardian MCP server](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian/badges/score.svg)](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.25-green)](https://github.com/modelcontextprotocol/typescript-sdk)
@@ -16,13 +19,41 @@
 
 **v3.1.0 (Threat Discovery)** — **Threat Lab** (Ollama/Qwen LLM threat discovery), **Auto Threat Research** (runtime + batch corpus writes), and a dedicated **Threat Discovery** dashboard tab with architecture view, run controls, and candidate review. Requires local Ollama + `qwen3:8b` or cloud LLM — not bundled with npm ([PRO_SETUP.md](docs/PRO_SETUP.md#llm-prerequisites) · [THREAT_LAB.md](docs/THREAT_LAB.md)).
 
-**v3.0.0 (Pro paywall hardening)** — Runtime enforcement on Pro surfaces: **Security Swarm CLI** (`pnpm security-swarm:*`), **fleet** (`mcp-guardian fleet`, TUI Fleet tab), **AI attack learning** on the proxy, and **dashboard startup** when `DASHBOARD_ENABLED=true`. Requires `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` ([PRO_SETUP.md](docs/PRO_SETUP.md)). **`GUARDIAN_OPEN_CORE=false` removed** — use `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true` for maintainer dev only. **Dual license:** MIT [Community Scope](COMMUNITY_SCOPE.md) + [LICENSE-PRO](LICENSE-PRO) for Pro paths. Cloud marketing site: [mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app).
+**v3.0.0 (Pro paywall hardening)** — Runtime enforcement on Pro surfaces: **Security Swarm CLI** (`pnpm security-swarm:*`), **fleet** (`mcp-guardian fleet`, TUI Fleet tab), **AI attack learning** on the proxy, and **dashboard startup** when `DASHBOARD_ENABLED=true`. Requires `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` ([PRO_SETUP.md](docs/PRO_SETUP.md)). **`GUARDIAN_OPEN_CORE=false` removed** — use `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true` for maintainer dev only. **Dual license:** MIT [Community Scope](COMMUNITY_SCOPE.md) + [LICENSE-PRO](LICENSE-PRO) for Pro paths.
+
+### Why MCP Guardian (vs generic gateways)
+
+AI agents connect to databases, GitHub, Slack, and internal APIs through MCP — often with **no security layer** between the agent and the tool server. Generic API gateways (Kong, AWS API Gateway) do not understand tool-call semantics, prompt injection, rug-pull detection, or cross-tool chaining.
+
+| | MCP Guardian | Generic gateway / DIY middleware |
+|---|--------------|----------------------------------|
+| **Protocol** | Native stdio, HTTP, SSE, WebSocket | HTTP-only; breaks on MCP SDK updates |
+| **Detection** | **557+** adversarial fixtures + normalization pipeline | YAML-only policies miss ~75% without layered guards |
+| **Response security** | **267** secret/PII rules, context-aware DLP | Not applicable |
+| **Continuous red-team** | Security Swarm + Auto Threat Research (self-improving) | Manual pen tests |
+| **Enterprise deploy** | Helm chart, Postgres RLS, DPoP, audit hash chain | Weeks of custom integration |
+
+Full narrative, diagrams, and evidence on the **[marketing site](https://mcp-guardian-cloud.vercel.app/)**.
 
 ### Security Swarm architecture
 
 ![Security Swarm — agentic architecture (CI agents + runtime learning loop)](docs/assets/security-swarm-architecture.png)
 
 *Closed-loop workflow: **CI track** (Scout → Corpus → Evasion → Parity → Proxy → Report) gates policy quality; **runtime track** (BlockGuard → InstantLearner → SemanticAuditor → PatternSynthesizer → Calibrator) runs on every proxied `tools/call`. **Solo analyze** (`pnpm security-swarm:analyze`, **Pro license required v3.0+**) adds live MCP probes, personalized traffic from `history.db`, visuals, and plain-English `report.json` for the dashboard. Full agent table, gates, and env: [Security Swarm (CI + runtime learning loop)](#security-swarm-ci--runtime-learning-loop).*
+
+#### LLM Threat Discovery (Threat Lab)
+
+![LLM Threat Discovery — human review before policy apply](docs/assets/llm-threat-discovery-architecture.png)
+
+*Pro-tier **Threat Lab**: swarm bypasses, semantic TPs, ThreatIntel CVEs, and corpus seeds → local Ollama LLM proposes attack fixtures + optional YAML rules → validation gates → signed manifest → **human accept/reject** before policy changes. [THREAT_LAB.md](docs/THREAT_LAB.md)*
+
+#### Self-Sustaining Threat Research (Auto Research)
+
+![Self-Sustaining Threat Research — autonomous adv fixture loop](docs/assets/auto-threat-research-architecture.png)
+
+*Pro-tier **Auto Threat Research**: live proxy detections (semantic flags, repeat blocks, ThreatIntel) → debounced queue → LLM research → taxonomy classify → **adv-*.json** corpus writes (audit only; no auto-apply). [THREAT_LAB.md](docs/THREAT_LAB.md)*
+
+Interactive architecture tabs on **[mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app/#threat-research)**.
 
 ## Proven under attack (v2.10.0)
 
@@ -435,7 +466,7 @@ Helm overlay: [`deploy/helm/mcp-guardian/values-enterprise.yaml`](deploy/helm/mc
 
 Optional **cloud control plane** at **`apps/cloud`** — free, open source; does **not** host Guardian proxies.
 
-**Production:** [mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app) — marketing site with Security Swarm architecture, adversarial harness stats, and npm package info ([@mcp-guardian/server](https://www.npmjs.com/package/@mcp-guardian/server), 11k+ downloads/month).
+**Production:** **[mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app)** — marketing site with problem/solution narrative, Security Swarm + LLM threat research architecture diagrams, competitive USP table, adversarial harness stats, and npm package info ([@mcp-guardian/server](https://www.npmjs.com/package/@mcp-guardian/server), 11k+ downloads/month). **Control plane URL for all Pro buyers:** `https://mcp-guardian-cloud.vercel.app`.
 
 | Flow | Destination |
 |------|-------------|

@@ -1,6 +1,8 @@
 /**
  * Safe policy regex compilation — YAML escape normalization + ReDoS hardening.
  */
+import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
 import { MAX_POLICY_REGEX_SOURCE_LEN } from '../utils/eval-bounds.js';
 import { Logger } from '../utils/logger.js';
 
@@ -8,6 +10,8 @@ const REGEX_EVAL_TIMEOUT_MS = parseInt(
   process.env.GUARDIAN_REGEX_EVAL_TIMEOUT_MS || '50',
   10,
 );
+
+const WORKER_SCRIPT = fileURLToPath(new URL('./regex-eval-worker.mjs', import.meta.url));
 
 /** Normalize YAML-escaped policy patterns before RegExp construction. */
 export function normalizePolicyRegexSource(pattern: string): string {
@@ -34,18 +38,43 @@ export function isRegexPatternSafe(pattern: string): { safe: boolean; reason?: s
   return { safe: true };
 }
 
+export function shouldRejectUnsafePolicyRegex(): boolean {
+  if (process.env.GUARDIAN_POLICY_REJECT_UNSAFE_REGEX === 'false') return false;
+  if (process.env.GUARDIAN_POLICY_REJECT_UNSAFE_REGEX === 'true') return true;
+  return process.env.NODE_ENV === 'production';
+}
+
+export class UnsafePolicyRegexError extends Error {
+  constructor(
+    message: string,
+    public readonly pattern: string,
+  ) {
+    super(message);
+    this.name = 'UnsafePolicyRegexError';
+  }
+}
+
 export function compilePolicyRegex(pattern: string, flags = 'i'): RegExp {
   const check = isRegexPatternSafe(pattern);
   if (!check.safe) {
-    Logger.warn(`Policy: rejecting unsafe regex — ${check.reason}: ${pattern.slice(0, 80)}`);
+    const msg = `Policy: rejecting unsafe regex — ${check.reason}: ${pattern.slice(0, 80)}`;
+    if (shouldRejectUnsafePolicyRegex()) {
+      throw new UnsafePolicyRegexError(msg, pattern);
+    }
+    Logger.warn(msg);
     return /(?!)/;
   }
   return new RegExp(normalizePolicyRegexSource(pattern), flags);
 }
 
-/** Run regex.test with bounded input length and wall-clock budget. */
-export function safeRegexTest(regex: RegExp, value: string, maxChars: number): boolean {
-  const input = value.length > maxChars ? value.slice(0, maxChars) : value;
+/** Use worker-thread eval when enabled (default on in production). */
+export function shouldUseRegexWorker(): boolean {
+  if (process.env.GUARDIAN_REGEX_USE_WORKER === 'false') return false;
+  if (process.env.GUARDIAN_REGEX_USE_WORKER === 'true') return true;
+  return process.env.NODE_ENV === 'production';
+}
+
+function safeRegexTestInline(regex: RegExp, input: string): boolean {
   const start = Date.now();
   try {
     const matched = regex.test(input);
@@ -61,4 +90,44 @@ export function safeRegexTest(regex: RegExp, value: string, maxChars: number): b
     Logger.warn(`[policy] Regex eval error: ${e instanceof Error ? e.message : String(e)}`);
     return false;
   }
+}
+
+function safeRegexTestWorker(regex: RegExp, input: string): boolean {
+  const sab = new SharedArrayBuffer(8);
+  const state = new Int32Array(sab);
+  let worker: Worker | null = null;
+  try {
+    worker = new Worker(WORKER_SCRIPT, {
+      workerData: {
+        sab,
+        source: regex.source,
+        flags: regex.flags,
+        input,
+      },
+    });
+    const waitResult = Atomics.wait(state, 0, 0, REGEX_EVAL_TIMEOUT_MS + 25);
+    if (waitResult === 'timed-out' || Atomics.load(state, 0) !== 1) {
+      Logger.warn(
+        `[policy] Regex worker eval exceeded ${REGEX_EVAL_TIMEOUT_MS}ms — treating as non-match`,
+      );
+      return false;
+    }
+    return Atomics.load(state, 1) === 1;
+  } catch (e) {
+    Logger.warn(
+      `[policy] Regex worker failed (${e instanceof Error ? e.message : String(e)}) — inline fallback`,
+    );
+    return safeRegexTestInline(regex, input);
+  } finally {
+    void worker?.terminate();
+  }
+}
+
+/** Run regex.test with bounded input length and worker-thread or wall-clock budget. */
+export function safeRegexTest(regex: RegExp, value: string, maxChars: number): boolean {
+  const input = value.length > maxChars ? value.slice(0, maxChars) : value;
+  if (shouldUseRegexWorker()) {
+    return safeRegexTestWorker(regex, input);
+  }
+  return safeRegexTestInline(regex, input);
 }

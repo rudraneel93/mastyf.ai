@@ -69,6 +69,10 @@ describe('Adversarial scenarios (default-policy.yaml)', () => {
     expectBlock(engine, ctx('puppeteer_navigate', { url: 'http://[::1]:8080/' }, 'puppeteer'));
   });
 
+  it('V-01 blocks IPv4-mapped IPv6 localhost', () => {
+    expectBlock(engine, ctx('puppeteer_navigate', { url: 'http://[::ffff:127.0.0.1]/' }, 'puppeteer'));
+  });
+
   it('V-01 blocks data: URL scheme', () => {
     expectBlock(engine, ctx('echo', { url: 'data:text/html,<script>alert(1)</script>' }));
   });

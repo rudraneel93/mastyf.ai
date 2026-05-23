@@ -13,8 +13,9 @@
 | GDPR erasure | `HistoryDatabase.eraseAllAuditData()` + operator SIEM purge |
 | HIPAA PHI patterns (template) | `policy-templates/hipaa-compliance.yaml` — merge with base policy |
 | PCI cardholder masking (template) | `policy-templates/pci-dss-masking.yaml` |
+| GxP controlled vocabulary (template) | `policy-templates/gxp-compliance.yaml` |
 | Per-tenant audit isolation | `~/.mcp-guardian/tenants/{tenantId}/policy-audit.jsonl`; optional Postgres RLS (`006-tenant-rls.sql`) |
-| Dashboard access trail | `GET /api/admin/access-log` (admin / tenant-admin) |
+| Dashboard access trail | `GET /api/audit?kind=access` and `GET /api/admin/access-log`; entries include `{ userId, tenantId, endpoint, timestamp, method, status, ip }` |
 
 ## Data retention (default)
 

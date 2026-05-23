@@ -271,6 +271,7 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
     toolName: job.toolName,
     arguments: job.arguments,
     syncRule: job.syncDecision.rule,
+    tenantId: job.tenantId,
   });
   stats.processed++;
   if (!score.suspicious) {

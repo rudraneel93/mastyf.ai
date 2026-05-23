@@ -9,6 +9,7 @@ Optional YAML fragments to merge with `default-policy.yaml` (or your own base po
 | [hipaa-compliance.yaml](./hipaa-compliance.yaml) | PHI pattern blocks + audit metadata | Regulated workloads |
 | [pci-dss-masking.yaml](./pci-dss-masking.yaml) | Cardholder data block/redact rules | Payment-adjacent MCP tools |
 | [data-residency.yaml](./data-residency.yaml) | Residency metadata flags + doc hooks | Multi-region governance |
+| [gxp-compliance.yaml](./gxp-compliance.yaml) | GxP controlled vocabulary + audit metadata | Pharma / regulated workloads |
 
 ## Enterprise cost governance
 

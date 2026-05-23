@@ -51,7 +51,12 @@ export function getLlmConfig(): LlmConfig {
       process.env.OLLAMA_URL ||
       'http://localhost:11434',
     maxTokens: parseInt(process.env.GUARDIAN_LLM_MAX_TOKENS || '512', 10),
-    timeoutMs: parseInt(process.env.GUARDIAN_LLM_TIMEOUT_MS || '30000', 10),
+    timeoutMs: parseInt(
+      process.env.GUARDIAN_SEMANTIC_LLM_TIMEOUT_MS
+        || process.env.GUARDIAN_LLM_TIMEOUT_MS
+        || '30000',
+      10,
+    ),
     temperature: parseFloat(process.env.GUARDIAN_LLM_TEMPERATURE || '0.1'),
     enabled: process.env.GUARDIAN_LLM_ENABLED !== 'false',
   };

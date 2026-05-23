@@ -162,7 +162,7 @@ export GUARDIAN_TENANT_SEMANTIC_JSON='{"acme-corp":{"syncResponse":true,"asyncAu
 - Dashboard and TUI list/metric APIs scope to the resolved tenant (`X-Guardian-Tenant` / `X-Tenant-Id` on HTTP, `GUARDIAN_TENANT_ID` for TUI/CLI).
 - Dashboard WebSocket clients send `tenantId` on `subscribe`; live metrics/audit pushes are per connection.
 - Security-swarm artifacts and visuals data live under `reports/tenants/{tenantId}/security-swarm/` (legacy `reports/security-swarm/` remains for `default` until migrated).
-- PostgreSQL `aggregated_metrics` remains instance-global; tenant-scoped PG aggregates use `unified_*` tables via `AuditTrailSync.getAggregatedMetrics(tenantId)`.
+- PostgreSQL `aggregated_metrics` remains instance-global; tenant-scoped dashboard charts and PG aggregates use `unified_*` tables (`unified_audit_trail`, etc.) via `UnifiedDataReader` when `GUARDIAN_DASHBOARD_DATA_SOURCE=auto|unified` and proxies sync with `GUARDIAN_AUDIT_SYNC_ENABLED=true`. Legacy helper: `AuditTrailSync.getAggregatedMetrics(tenantId)`.
 
 ## API
 

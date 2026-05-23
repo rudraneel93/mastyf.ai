@@ -1,15 +1,14 @@
-import { homedir } from 'os';
 import { join } from 'path';
 import { DEFAULT_TENANT_ID, resolveTenantId } from '../tenant/resolve-tenant.js';
-
-const GUARDIAN_DIR = join(homedir(), '.mcp-guardian');
+import { guardianHomeDir } from '../audit/tenant-audit-paths.js';
 
 function tenantDataDir(tenantId?: string): string {
   const tid = tenantId || resolveTenantId();
+  const base = guardianHomeDir();
   if (tid === DEFAULT_TENANT_ID) {
-    return GUARDIAN_DIR;
+    return base;
   }
-  return join(GUARDIAN_DIR, 'tenants', tid);
+  return join(base, 'tenants', tid);
 }
 
 function resolveTenantScopedPath(

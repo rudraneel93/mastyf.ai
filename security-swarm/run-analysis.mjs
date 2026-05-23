@@ -31,7 +31,7 @@ const SKIP_LIVE = process.argv.includes('--skip-live');
 const SKIP_SWARM = process.argv.includes('--skip-swarm');
 const QUIET = process.argv.includes('--quiet');
 const RUN_CONTINUOUS = process.argv.includes('--continuous');
-const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous');
+const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous') || process.env.GUARDIAN_SWARM_SKIP_CONTINUOUS === 'true';
 
 const LIVE_JSON = join(REPO_ROOT, 'scenarios', 'real-life', 'output', 'live-filesystem-session.json');
 const VISUALS_SCRIPT = join(SWARM_DIR, 'scripts', 'generate-swarm-visuals.py');
@@ -165,6 +165,10 @@ async function main() {
       process.env.GUARDIAN_SEMANTIC_STORE_CALIBRATION = 'true';
       process.env.SWARM_CALIBRATE_CAPTURE = 'true';
       process.env.REAL_LIFE_METRICS_ENABLED = 'false';
+      process.env.REAL_LIFE_PROXY_READY_MS = process.env.REAL_LIFE_PROXY_READY_MS || '45000';
+      process.env.REAL_LIFE_UPSTREAM_READY_MS = process.env.REAL_LIFE_UPSTREAM_READY_MS || '90000';
+      process.env.GUARDIAN_POLICY_SYNC_ENABLED = 'false';
+      process.env.GUARDIAN_AUDIT_SYNC_ENABLED = 'false';
       if (FULL && !process.env.REAL_LIFE_BURST_REPEATS) {
         process.env.REAL_LIFE_BURST_REPEATS = '20';
       }
@@ -276,7 +280,7 @@ async function main() {
       swarmOk = latest?.overall ?? swarmOk;
       await writePlainEnglishReport({ liveOk, swarmOk });
       emitArtifact(['report.json', 'traffic-summary.json', 'user-servers-session.json', 'visuals-data.json']);
-      log('Plain-English report: reports/security-swarm/report.json');
+      log(`Plain-English report: ${join(SWARM_DIR, 'report.json')}`);
     } catch (err) {
       log(`Report: ${err instanceof Error ? err.message : String(err)}`);
     }

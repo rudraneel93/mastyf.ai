@@ -126,6 +126,8 @@ export function scanForSecrets(target: string, context: string): SecretFinding[]
         redacted: redact(matchedValue),
         context,
         method: 'regex',
+        start: match.index,
+        end: match.index + matchedValue.length,
       });
     }
   }

@@ -16,6 +16,7 @@ export interface PolicyChangeRecord {
   oldValue?: string;
   newValue?: string;
   sourceHash?: string;
+  residency_region?: string;
 }
 
 export class PolicyAuditor {
@@ -36,7 +37,8 @@ export class PolicyAuditor {
   record(change: PolicyChangeRecord): void {
     if (!this.enabled) return;
     try {
-      const payload = { ...change, source: 'mcp-guardian-policy-auditor' };
+      const residencyRegion = process.env.GUARDIAN_REGION || 'default';
+      const payload = { ...change, source: 'mcp-guardian-policy-auditor', residency_region: residencyRegion };
       if (isAuditHashChainEnabled()) {
         appendChainedJsonlLine(this.auditPath, payload);
       } else {

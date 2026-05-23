@@ -82,6 +82,41 @@ const PII_PATTERNS: PatternDef[] = [
     redactLabel: 'NPI',
   },
   {
+    id: 'pii-icd10',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b(?:ICD(?:-10)?|diagnosis\s*code)\s*[:#]?\s*[A-TV-Z][0-9][0-9AB]\.?[0-9A-TV-Z]{0,4}\b/gi,
+    redactLabel: 'ICD10',
+  },
+  {
+    id: 'pii-icd10-standalone',
+    severity: 'medium',
+    category: 'pii',
+    regex: /\b[A-TV-Z][0-9][0-9AB]\.[0-9A-TV-Z]{1,4}\b/g,
+    redactLabel: 'ICD10',
+  },
+  {
+    id: 'pii-ndc',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b(?:NDC|drug\s*code)\s*[:#]?\s*\d{4,5}-\d{3,4}-\d{1,2}\b/gi,
+    redactLabel: 'NDC',
+  },
+  {
+    id: 'pii-ndc-standalone',
+    severity: 'medium',
+    category: 'pii',
+    regex: /\b\d{4,5}-\d{3,4}-\d{1,2}\b(?=.*\b(?:ndc|drug|rx|prescription|medication)\b)/gi,
+    redactLabel: 'NDC',
+  },
+  {
+    id: 'pii-diagnosis',
+    severity: 'high',
+    category: 'pii',
+    regex: /\b(?:diagnosis|dx|assessment)\s*[:=]\s*[^\n,;]{3,120}/gi,
+    redactLabel: 'DIAGNOSIS',
+  },
+  {
     id: 'pii-email-bulk',
     severity: 'medium',
     category: 'pii',
@@ -146,7 +181,7 @@ const SENSITIVE_CONTENT_MARKERS: PatternDef[] = [
     id: 'content-phi-marker',
     severity: 'high',
     category: 'pii',
-    regex: /\b(?:MRN|patient\s*id|medical\s*record|diagnosis|HIPAA)\s*[:=]\s*\S+/gi,
+    regex: /\b(?:MRN|patient\s*id|medical\s*record|diagnosis|HIPAA|ICD(?:-10)?|NDC)\s*[:=]\s*\S+/gi,
     redactLabel: 'PHI',
   },
 ];
@@ -268,6 +303,8 @@ export function evaluateResponseDlp(
       severity: sev,
       ruleId: f.type,
       message: `Secret (${f.severity}): ${f.type} in tool response`,
+      start: f.start,
+      end: f.end,
     });
   }
 

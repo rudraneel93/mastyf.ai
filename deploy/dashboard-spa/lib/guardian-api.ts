@@ -23,6 +23,22 @@ export type AuditResponse = {
   semanticAudit?: { queued: number; processed: number; flagged: number; enabled: boolean };
 };
 
+export type ChartMeta = {
+  window?: string;
+  windowDays?: number;
+  generatedAt?: string;
+  recordCount?: number;
+  sparse?: boolean;
+  dataSources?: string[];
+  emptyReason?: string;
+};
+
+export type KpiComparison = {
+  deltaPct: number | null;
+  deltaAbs: number;
+  direction: 'up' | 'down' | 'flat';
+};
+
 export type AggregateMetrics = {
   available?: boolean;
   totalRequests: number;
@@ -35,6 +51,7 @@ export type AggregateMetrics = {
   activeServers?: number;
   lastUpdated?: string;
   burnRatePerHour?: number | null;
+  meta?: ChartMeta;
   error?: string;
 };
 
@@ -45,6 +62,7 @@ export type CostResponse = {
   burnRatePerHour?: number | null;
   budgetUsd?: number | null;
   pricingModel?: string;
+  windowDays?: number;
   serverReports?: Array<{
     name: string;
     cost: number;
@@ -53,6 +71,7 @@ export type CostResponse = {
     unpriced?: number;
   }>;
   budgetAlerts?: string[];
+  meta?: ChartMeta;
   error?: string;
 };
 
@@ -69,12 +88,18 @@ export type CostTimeseriesResponse = {
   granularity?: 'hour' | 'day';
   series?: Array<{ bucket: string; server: string; costUsd: number; calls: number }>;
   totalsByServer?: Array<{ server: string; costUsd: number; calls: number }>;
+  pivoted?: Array<{ bucket: string; total: number; [server: string]: string | number }>;
+  meta?: ChartMeta;
+  comparison?: {
+    totalCostUsd: KpiComparison;
+  };
   error?: string;
 };
 
 export type ExecutiveSummaryResponse = {
   available?: boolean;
   timestamp?: string;
+  windowDays?: number;
   totalRequests?: number;
   blockedRequests?: number;
   passedRequests?: number;
@@ -90,6 +115,18 @@ export type ExecutiveSummaryResponse = {
   runwayDays?: number | null;
   topServersByCost?: Array<{ server: string; costUsd: number; calls: number }>;
   topToolsByCalls?: Array<{ tool: string; calls: number }>;
+  meta?: ChartMeta;
+  comparison?: {
+    totalRequests: KpiComparison;
+    blockedRequests: KpiComparison;
+    totalCostUsd: KpiComparison;
+    passRatePct: KpiComparison;
+  };
+  sparklines?: {
+    totalCalls: number[];
+    blocked: number[];
+    costUsd: number[];
+  };
   error?: string;
 };
 
@@ -105,10 +142,19 @@ export type DashboardInsightsResponse = {
   error?: string;
 };
 
+export type AuditActivityMatrix = {
+  days: string[];
+  hours: number[];
+  matrix: number[][];
+  maxCount: number;
+};
+
 export type AuditHeatmapResponse = {
   available?: boolean;
   windowDays?: number;
   cells?: Array<{ rule: string; tool: string; count: number }>;
+  activity?: AuditActivityMatrix;
+  meta?: ChartMeta;
   error?: string;
 };
 
@@ -254,6 +300,10 @@ export type VisualsData = {
     hasInstantLearning?: boolean;
     hasSemantic?: boolean;
     swarmSessionLive?: boolean;
+    recordCount?: number;
+    sparse?: boolean;
+    window?: string;
+    generatedAt?: string;
     dataSources?: {
       traffic?: string;
       semantic?: string;
@@ -324,10 +374,27 @@ export type FleetInstance = {
   instanceName?: string;
   hostname?: string;
   status?: string;
+  region?: string;
+  lastHeartbeat?: string;
   totalRequests?: number;
   blockedRequests?: number;
   totalCostUsd?: number;
+  avgLatencyMs?: number;
   fleetSource?: string;
+  dbPath?: string;
+};
+
+export type FleetResponse = {
+  available?: boolean;
+  source?: string;
+  region?: string;
+  totalInstances?: number;
+  activeInstances?: number;
+  totalRequests?: number;
+  totalBlocked?: number;
+  totalCostUsd?: number;
+  instances?: FleetInstance[];
+  error?: string;
 };
 
 export type AuthStatus = {
@@ -471,8 +538,26 @@ export async function fetchTenantContext(): Promise<{
   };
 }
 
-export async function fetchAggregateMetrics(): Promise<AggregateMetrics | null> {
-  const res = await guardianFetch('/api/aggregate/metrics');
+function withWindowRegionQuery(windowDays: number, region?: string, extra?: Record<string, string>): string {
+  const params = new URLSearchParams({ window: String(windowDays) });
+  if (region) params.set('region', region);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) params.set(k, v);
+  }
+  return params.toString();
+}
+
+export async function fetchDashboardRegions(): Promise<{ regions: string[] } | null> {
+  const res = await guardianFetch('/api/dashboard/regions');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { regions?: string[]; available?: boolean };
+  if (body.available === false) return null;
+  return { regions: body.regions ?? [] };
+}
+
+export async function fetchAggregateMetrics(windowDays = 7, region?: string): Promise<AggregateMetrics | null> {
+  const q = withWindowRegionQuery(windowDays, region);
+  const res = await guardianFetch(`/api/aggregate/metrics?${q}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as AggregateMetrics);
 }
@@ -492,8 +577,8 @@ export async function fetchAudit(opts?: {
   return liveOrNull((await res.json()) as AuditResponse & { available?: boolean });
 }
 
-export async function fetchCost(): Promise<CostResponse | null> {
-  const res = await guardianFetch('/api/cost');
+export async function fetchCost(windowDays = 7, region?: string): Promise<CostResponse | null> {
+  const res = await guardianFetch(`/api/cost?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as CostResponse);
 }
@@ -504,35 +589,63 @@ export async function fetchCostBreakdown(windowDays = 7): Promise<CostBreakdownR
   return liveOrNull((await res.json()) as CostBreakdownResponse);
 }
 
+export type CostRecommendation = {
+  ruleName: string;
+  description: string;
+  reason: string;
+  confidence: number;
+  estimatedSavingsUsd: number;
+  action: string;
+};
+
+export type CostRecommendationsResponse = {
+  available?: boolean;
+  windowDays?: number;
+  recommendations?: CostRecommendation[];
+  error?: string;
+};
+
+export async function fetchCostRecommendations(
+  windowDays = 7,
+): Promise<CostRecommendationsResponse | null> {
+  const res = await guardianFetch(`/api/cost/recommendations?window=${windowDays}`);
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as CostRecommendationsResponse);
+}
+
 export async function fetchCostTimeseries(
-  windowDays = 30,
+  windowDays = 7,
   granularity: 'hour' | 'day' = 'day',
+  region?: string,
 ): Promise<CostTimeseriesResponse | null> {
-  const res = await guardianFetch(
-    `/api/cost/timeseries?window=${windowDays}&granularity=${granularity}`,
-  );
+  const q = withWindowRegionQuery(windowDays, region, { granularity });
+  const res = await guardianFetch(`/api/cost/timeseries?${q}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as CostTimeseriesResponse);
 }
 
-export async function fetchExecutiveSummary(): Promise<ExecutiveSummaryResponse | null> {
-  const res = await guardianFetch('/api/dashboard/executive-summary');
+export async function fetchExecutiveSummary(
+  windowDays = 7,
+  region?: string,
+): Promise<ExecutiveSummaryResponse | null> {
+  const res = await guardianFetch(`/api/dashboard/executive-summary?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as ExecutiveSummaryResponse);
 }
 
 export async function fetchDashboardInsights(
   scope: 'overview' | 'cost' | 'security' | 'audit' | 'ai',
+  windowDays = 7,
 ): Promise<DashboardInsightsResponse | null> {
-  const res = await guardianFetch(`/api/dashboard/insights?scope=${scope}`);
+  const res = await guardianFetch(`/api/dashboard/insights?scope=${scope}&window=${windowDays}`);
   if (!res.ok) return null;
   const body = (await res.json()) as DashboardInsightsResponse;
   if (body.available === false && !body.bullets?.length) return null;
   return body;
 }
 
-export async function fetchAuditHeatmap(windowDays = 7): Promise<AuditHeatmapResponse | null> {
-  const res = await guardianFetch(`/api/audit/heatmap?window=${windowDays}`);
+export async function fetchAuditHeatmap(windowDays = 7, region?: string): Promise<AuditHeatmapResponse | null> {
+  const res = await guardianFetch(`/api/audit/heatmap?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) return null;
   return liveOrNull((await res.json()) as AuditHeatmapResponse);
 }
@@ -554,11 +667,14 @@ export async function fetchHealth(): Promise<HealthResponse | null> {
   };
 }
 
-export async function fetchFleetInstances(): Promise<FleetInstance[]> {
+export async function fetchFleetInstances(): Promise<FleetResponse | null> {
   const res = await guardianFetch('/api/instances');
-  if (!res.ok) return [];
+  if (!res.ok) return null;
   const data = await res.json();
-  return Array.isArray(data) ? (data as FleetInstance[]) : [];
+  if (Array.isArray(data)) {
+    return { available: true, source: 'legacy', instances: data as FleetInstance[] };
+  }
+  return liveOrNull(data as FleetResponse);
 }
 
 export async function fetchAiSuggestions(): Promise<AiSuggestion[]> {
@@ -888,8 +1004,8 @@ export type VisualsLiveFetchResult =
   | { ok: true; data: VisualsData }
   | { ok: false; status: number; message: string };
 
-export async function fetchVisualsLive(): Promise<VisualsLiveFetchResult> {
-  const res = await guardianFetch('/api/visuals/live');
+export async function fetchVisualsLive(windowDays = 7, region?: string): Promise<VisualsLiveFetchResult> {
+  const res = await guardianFetch(`/api/visuals/live?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) {
     let message =
       res.status === 404

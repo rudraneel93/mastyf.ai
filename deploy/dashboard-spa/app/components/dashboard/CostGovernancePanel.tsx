@@ -8,7 +8,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -17,15 +16,26 @@ import {
 import {
   fetchCost,
   fetchCostBreakdown,
-  fetchCostTimeseries,
+  fetchCostRecommendations,
+  type CostRecommendation,
   type CostResponse,
 } from '@/lib/guardian-api';
-import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE, budgetUtilColor } from '@/lib/chartTheme';
+import {
+  CHART_AXIS,
+  CHART_COLORS,
+  CHART_GRID,
+  CHART_SERIES,
+  formatAxisTime,
+  formatUsd,
+} from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
 import { ChartCard } from './ChartCard';
 import { InsightsNarrativeRail } from './InsightsNarrativeRail';
 import { DataTablePro, type Column } from './DataTablePro';
+import { ChartTooltip } from './chart-kit';
+import { useDashboardWindow } from './DashboardWindowContext';
+import { useVisuals } from './VisualsProvider';
 
 type Props = {
   refreshKey?: number;
@@ -35,46 +45,50 @@ type Props = {
 type ServerRow = NonNullable<CostResponse['serverReports']>[number];
 type ToolRow = { server: string; tool: string; calls: number; costUsd: number };
 
-function pivotTimeseries(
-  series: Array<{ bucket: string; server: string; costUsd: number }>,
-): Array<Record<string, string | number>> {
-  const buckets = new Map<string, Record<string, string | number>>();
-  for (const p of series) {
-    const label = p.bucket.slice(5, 16).replace('T', ' ');
-    const row = buckets.get(p.bucket) || { bucket: label, total: 0 };
-    row[p.server] = (Number(row[p.server]) || 0) + p.costUsd;
-    row.total = (Number(row.total) || 0) + p.costUsd;
-    buckets.set(p.bucket, row);
-  }
-  return [...buckets.values()];
-}
-
 export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Props) {
+  const { windowDays, window } = useDashboardWindow();
+  const { costTimeseries, loading: visualsLoading } = useVisuals();
   const [cost, setCost] = useState<CostResponse | null>(initialCost);
   const [tools, setTools] = useState<ToolRow[]>([]);
-  const [timeseries, setTimeseries] = useState<Array<Record<string, string | number>>>([]);
-  const [servers, setServers] = useState<string[]>([]);
-  const [windowDays, setWindowDays] = useState(30);
+  const [recommendations, setRecommendations] = useState<CostRecommendation[]>([]);
   const [loading, setLoading] = useState(!initialCost);
+
+  const granularity = windowDays <= 7 ? 'hour' : 'day';
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [c, b, ts] = await Promise.all([
-      fetchCost(),
+    const [c, b, rec] = await Promise.all([
+      fetchCost(windowDays),
       fetchCostBreakdown(windowDays),
-      fetchCostTimeseries(windowDays, 'day'),
+      fetchCostRecommendations(windowDays),
     ]);
     setCost(c);
     setTools(b?.tools || []);
-    const series = ts?.series || [];
-    setTimeseries(pivotTimeseries(series));
-    setServers([...new Set(series.map((s) => s.server))]);
+    setRecommendations(rec?.recommendations || []);
     setLoading(false);
   }, [windowDays]);
 
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  const timeseries = useMemo(() => {
+    const pivoted = costTimeseries?.pivoted ?? [];
+    return pivoted.map((row) => ({
+      ...row,
+      bucket: formatAxisTime(String(row.bucket), granularity),
+    }));
+  }, [costTimeseries?.pivoted, granularity]);
+
+  const servers = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of costTimeseries?.pivoted ?? []) {
+      for (const key of Object.keys(row)) {
+        if (key !== 'bucket' && key !== 'total') names.add(key);
+      }
+    }
+    return [...names];
+  }, [costTimeseries?.pivoted]);
 
   const budgetPct =
     cost?.budgetUsd && cost.totalCost != null && cost.budgetUsd > 0
@@ -86,7 +100,7 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
     {
       key: 'cost',
       header: 'Cost (USD)',
-      render: (r) => `$${r.cost.toFixed(4)}`,
+      render: (r) => formatUsd(r.cost),
       sortValue: (r) => r.cost,
     },
     { key: 'tokens', header: 'Tokens', render: (r) => r.tokens.toLocaleString(), sortValue: (r) => r.tokens },
@@ -101,7 +115,7 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
     {
       key: 'costUsd',
       header: 'Cost (USD)',
-      render: (r) => `$${r.costUsd.toFixed(4)}`,
+      render: (r) => formatUsd(r.costUsd),
       sortValue: (r) => r.costUsd,
     },
   ];
@@ -115,7 +129,11 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
     [tools],
   );
 
-  if (!cost && !loading) {
+  const chartLoading = loading || visualsLoading;
+  const costMeta = cost?.meta ?? costTimeseries?.meta;
+  const costCmp = costTimeseries?.comparison?.totalCostUsd;
+
+  if (!cost && !chartLoading) {
     return (
       <DashboardSection title="Cost governance" subtitle="Measured spend from proxy call_records">
         <p className="muted">No cost data — connect proxy history DB and route MCP traffic.</p>
@@ -123,7 +141,7 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
     );
   }
 
-  const utilVariant = budgetPct != null ? budgetUtilColor(budgetPct) : 'default';
+  const utilVariant = budgetPct != null ? (budgetPct >= 100 ? 'danger' : budgetPct >= 75 ? 'warn' : 'success') : 'default';
 
   return (
     <div className="cost-governance-panel">
@@ -131,37 +149,24 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
 
       <DashboardSection
         title="Cost governance"
-        subtitle="FinOps view — actual measured spend, not estimates"
-        actions={
-          <label className="inline">
-            Window
-            <select
-              value={windowDays}
-              onChange={(e) => setWindowDays(Number(e.target.value))}
-              aria-label="Cost window days"
-            >
-              <option value={7}>7 days</option>
-              <option value={30}>30 days</option>
-              <option value={90}>90 days</option>
-            </select>
-          </label>
-        }
+        subtitle={`FinOps view — ${window} measured spend`}
       >
         <div className="kpi-row">
           <KpiCard
             label="Total spend"
-            value={cost?.totalCost != null ? `$${cost.totalCost.toFixed(4)}` : '—'}
+            value={cost?.totalCost != null ? formatUsd(cost.totalCost) : '—'}
+            comparison={costCmp ? { ...costCmp, label: 'vs prior window' } : undefined}
             explanation="Sum of costUsd on intercepted MCP calls with pricing metadata."
           />
           <KpiCard
             label="Burn rate"
-            value={cost?.burnRatePerHour != null ? `$${cost.burnRatePerHour.toFixed(4)}` : '—'}
+            value={cost?.burnRatePerHour != null ? formatUsd(cost.burnRatePerHour) : '—'}
             unit="/hr"
             explanation="Spend divided by observed traffic time span in history DB."
           />
           <KpiCard
             label="Projected monthly"
-            value={cost?.projectedMonthly != null ? `$${cost.projectedMonthly.toFixed(2)}` : '—'}
+            value={cost?.projectedMonthly != null ? formatUsd(cost.projectedMonthly, 2) : '—'}
             explanation="Extrapolated from current burn rate over 30 days."
           />
           <KpiCard
@@ -196,17 +201,18 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
           <div className="dash-grid-span-8">
             <ChartCard
               title="Spend over time"
-              subtitle="Daily cost stacked by MCP server — identifies spikes and drift"
-              loading={loading}
+              subtitle="Cost stacked by MCP server (top 5 + Other)"
+              loading={chartLoading}
               empty={timeseries.length === 0}
+              meta={costMeta}
+              sparse={costMeta?.sparse}
             >
               <ResponsiveContainer width="100%" height={280}>
                 <AreaChart data={timeseries}>
                   <CartesianGrid {...CHART_GRID} />
-                  <XAxis dataKey="bucket" {...CHART_AXIS} />
-                  <YAxis {...CHART_AXIS} tickFormatter={(v) => `$${Number(v).toFixed(3)}`} />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Legend />
+                  <XAxis dataKey="bucket" {...CHART_AXIS} interval="preserveStartEnd" />
+                  <YAxis {...CHART_AXIS} tickFormatter={(v) => formatUsd(Number(v), 3)} />
+                  <Tooltip content={<ChartTooltip valueFormatter={(v) => formatUsd(v)} />} />
                   {servers.map((srv, i) => (
                     <Area
                       key={srv}
@@ -216,6 +222,7 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
                       stroke={CHART_COLORS[i % CHART_COLORS.length]}
                       fill={CHART_COLORS[i % CHART_COLORS.length]}
                       fillOpacity={0.5}
+                      name={srv}
                     />
                   ))}
                 </AreaChart>
@@ -226,17 +233,18 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
             <ChartCard
               title="Top tools by cost"
               subtitle="Focus optimization on highest USD drivers"
-              loading={loading}
+              loading={chartLoading}
               empty={toolChartData.length === 0}
               height={280}
+              meta={costMeta}
             >
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={toolChartData} layout="vertical">
                   <CartesianGrid {...CHART_GRID} />
-                  <XAxis type="number" {...CHART_AXIS} tickFormatter={(v) => `$${v}`} />
+                  <XAxis type="number" {...CHART_AXIS} tickFormatter={(v) => formatUsd(Number(v), 2)} />
                   <YAxis type="category" dataKey="label" width={100} {...CHART_AXIS} />
-                  <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                  <Bar dataKey="costUsd" fill={CHART_COLORS[0]}>
+                  <Tooltip content={<ChartTooltip valueFormatter={(v) => formatUsd(v)} />} />
+                  <Bar dataKey="costUsd" fill={CHART_SERIES.cost} name="Cost">
                     {toolChartData.map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
@@ -259,7 +267,7 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
             </DashboardSection>
           </div>
           <div className="dash-grid-span-6">
-            <DashboardSection title="By tool" subtitle={`Top tools in last ${windowDays} days`}>
+            <DashboardSection title="By tool" subtitle={`Top tools in ${window}`}>
               <DataTablePro
                 columns={toolColumns}
                 rows={tools}
@@ -269,6 +277,26 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
             </DashboardSection>
           </div>
         </div>
+
+        {recommendations.length > 0 ? (
+          <DashboardSection
+            title="Optimization recommendations"
+            subtitle="Policy suggestions from cost pattern analysis"
+          >
+            <ul className="cost-recommendations-list">
+              {recommendations.map((r) => (
+                <li key={r.ruleName} className="cost-recommendation-item">
+                  <strong>{r.ruleName}</strong>
+                  <span className="hint">
+                    {r.reason} · est. savings {formatUsd(r.estimatedSavingsUsd, 2)} ·{' '}
+                    {Math.round(r.confidence * 100)}% confidence
+                  </span>
+                  {r.description ? <p>{r.description}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </DashboardSection>
+        ) : null}
       </DashboardSection>
     </div>
   );

@@ -40,7 +40,11 @@ export function AgentFlowPanel({ ws, roles }: Props) {
 
       <h3>Security report</h3>
       <SwarmResultsView
-        refreshKey={ws.swarmDoneTick + (ws.pipeline.state === 'done' ? 1000 : 0)}
+        refreshKey={
+          ws.swarmDoneTick
+          + ws.pipeline.progressPct
+          + (ws.pipeline.state === 'done' ? 1000 : 0)
+        }
         showReport
         className="swarm-results-flow"
       />

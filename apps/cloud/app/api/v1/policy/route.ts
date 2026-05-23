@@ -8,6 +8,7 @@ import {
 import { getDefaultPolicyYaml } from '@/lib/default-policy';
 import { getDb } from '@/lib/db';
 import { policies } from '@/lib/db/schema';
+import { publishPolicyYaml } from '@/lib/policy-publish';
 import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 
@@ -46,7 +47,10 @@ export async function GET(request: Request) {
   });
 
   return new NextResponse(policy?.yamlContent ?? getDefaultPolicyYaml(), {
-    headers: { 'Content-Type': 'text/yaml; charset=utf-8' },
+    headers: {
+      'Content-Type': 'text/yaml; charset=utf-8',
+      'X-Policy-Version': String(policy?.version ?? 0),
+    },
   });
 }
 
@@ -72,28 +76,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Policy YAML required' }, { status: 400 });
   }
 
-  const existing = await getDb().query.policies.findFirst({
-    where: eq(policies.orgId, writeCtx.orgId),
-  });
-
-  if (existing) {
-    await getDb()
-      .update(policies)
-      .set({
-        yamlContent: yaml,
-        version: existing.version + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(policies.id, existing.id));
-  } else {
-    const { randomUUID } = await import('crypto');
-    await getDb().insert(policies).values({
-      id: randomUUID(),
-      orgId: writeCtx.orgId,
-      yamlContent: yaml,
-      version: 1,
-    });
-  }
+  await publishPolicyYaml(writeCtx.orgId, yaml);
 
   return NextResponse.json({ ok: true });
 }

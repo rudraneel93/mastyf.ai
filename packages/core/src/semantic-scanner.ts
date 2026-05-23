@@ -238,12 +238,30 @@ export async function runSemanticScan(
 
   } catch (err) {
     recordCoreSemanticFailure(err);
+    const ollamaFallbackEnabled =
+      process.env.OLLAMA_ENABLED === "true"
+      || process.env.GUARDIAN_LLM_PROVIDER === "ollama";
+    if (!useOllama && ollamaFallbackEnabled) {
+      try {
+        const rawText = await runSemanticViaOllama(userPrompt, model, timeoutMs, temperature);
+        await cache.set(cacheKey, rawText);
+        recordCoreSemanticSuccess();
+        return verdictToIssues(parseVerdictFromText(rawText));
+      } catch {
+        /* fall through to local heuristic */
+      }
+    }
     if (useOllama) {
       try {
         const rawText = await runSemanticViaOllama(userPrompt, model, timeoutMs, temperature);
         await cache.set(cacheKey, rawText);
+        recordCoreSemanticSuccess();
         return verdictToIssues(parseVerdictFromText(rawText));
       } catch (ollamaErr) {
+        if (isCoreLocalSemanticEnabled()) {
+          const localHits = runLocalSemanticFallback(tool);
+          if (localHits.length) return localHits;
+        }
         return [{
           id: "MCPG-META-003",
           layer: "semantic",
@@ -254,6 +272,10 @@ export async function runSemanticScan(
           confidence: 1.0,
         }];
       }
+    }
+    if (isCoreLocalSemanticEnabled()) {
+      const localHits = runLocalSemanticFallback(tool);
+      if (localHits.length) return localHits;
     }
     if ((err as Error).name === "AbortError") {
       return [{

@@ -48,6 +48,23 @@ function tenantJobPaths(tenantId: string): string[] {
   return JOB_FILES.map((name) => join(dir, name));
 }
 
+/** Latest completed/running/failed job in tenant dir (survives dashboard restarts). */
+function getLatestTenantJob(tenantId: string): { startedAtMs: number; state: string } | null {
+  let latest: { startedAtMs: number; state: string } | null = null;
+  for (const p of tenantJobPaths(tenantId)) {
+    const job = parseJobFile(p);
+    if (!job) continue;
+    if (!['running', 'done', 'failed'].includes(job.state)) continue;
+    if (!latest || job.startedAtMs > latest.startedAtMs) latest = job;
+  }
+  return latest;
+}
+
+function isTenantSwarmPath(filePath: string, tenantId: string): boolean {
+  const tenantDir = resolveTenantSwarmDir(tenantId);
+  return filePath.startsWith(`${tenantDir}/`) || filePath === tenantDir;
+}
+
 /** Earliest job start time in this dashboard session, if any. */
 export function getSessionJobStartedMs(tenantId: string): number | null {
   let earliest: number | null = null;
@@ -71,7 +88,9 @@ export function hasRunningSessionJob(tenantId: string): boolean {
 /** True when a swarm / threat-discovery job ran (or is running) this dashboard session. */
 export function isSwarmSessionActiveForTenant(tenantId: string): boolean {
   if (!isStrictLiveDashboard()) return true;
-  return getSessionJobStartedMs(tenantId) != null || hasRunningSessionJob(tenantId);
+  if (getSessionJobStartedMs(tenantId) != null || hasRunningSessionJob(tenantId)) return true;
+  // Tenant-scoped artifacts remain visible after dashboard restart (unlike legacy CI dir).
+  return getLatestTenantJob(tenantId) != null;
 }
 
 export function isLegacySwarmPath(filePath: string): boolean {
@@ -89,6 +108,17 @@ export function isSwarmArtifactVisibleForSession(
   if (!isStrictLiveDashboard()) return true;
 
   const tid = validateTenantId(tenantId?.trim() || DEFAULT_TENANT_ID);
+
+  // Per-tenant dir: show artifacts from the latest tenant job (not gated by process boot time).
+  if (isTenantSwarmPath(filePath, tid)) {
+    const job = getLatestTenantJob(tid);
+    if (!job) return false;
+    try {
+      return statSync(filePath).mtimeMs >= job.startedAtMs - ARTIFACT_MTIME_GRACE_MS;
+    } catch {
+      return false;
+    }
+  }
 
   if (isLegacySwarmPath(filePath)) {
     if (!isLegacyArtifactsAllowed()) return false;

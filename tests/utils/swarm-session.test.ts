@@ -23,7 +23,27 @@ describe('swarm-session', () => {
     if (existsSync(tenantRoot)) rmSync(tenantRoot, { recursive: true, force: true });
   });
 
-  it('treats artifacts as hidden when job predates dashboard session', () => {
+  it('hides legacy committed artifacts unless session job and opt-in env', () => {
+    const legacyDir = join(process.cwd(), 'reports', 'security-swarm');
+    const artifact = join(legacyDir, 'latest-stale-test.json');
+    writeFileSync(artifact, '{}');
+    writeFileSync(
+      join(TENANT_DIR, 'job.json'),
+      JSON.stringify({
+        jobId: 'old',
+        state: 'done',
+        startedAt: new Date(dashboardSessionStartedMs - 60_000).toISOString(),
+      }),
+    );
+    const now = Date.now() / 1000;
+    utimesSync(artifact, now, now);
+
+    expect(isSwarmSessionActiveForTenant(TENANT)).toBe(true);
+    expect(isSwarmArtifactVisibleForSession(artifact, TENANT)).toBe(false);
+    rmSync(artifact, { force: true });
+  });
+
+  it('exposes tenant artifacts after dashboard restart when job completed', () => {
     const artifact = join(TENANT_DIR, 'latest.json');
     writeFileSync(artifact, '{}');
     writeFileSync(
@@ -37,8 +57,8 @@ describe('swarm-session', () => {
     const now = Date.now() / 1000;
     utimesSync(artifact, now, now);
 
-    expect(isSwarmSessionActiveForTenant(TENANT)).toBe(false);
-    expect(isSwarmArtifactVisibleForSession(artifact, TENANT)).toBe(false);
+    expect(isSwarmSessionActiveForTenant(TENANT)).toBe(true);
+    expect(isSwarmArtifactVisibleForSession(artifact, TENANT)).toBe(true);
   });
 
   it('exposes artifacts when job started in current session', () => {

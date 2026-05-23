@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchDashboardInsights, type DashboardInsightsResponse } from '@/lib/guardian-api';
 import { InsightCallout } from './InsightCallout';
+import { useDashboardWindow } from './DashboardWindowContext';
 
 type Scope = 'overview' | 'cost' | 'security' | 'audit' | 'ai';
 
@@ -12,15 +13,16 @@ type Props = {
 };
 
 export function InsightsNarrativeRail({ scope, refreshKey = 0 }: Props) {
+  const { windowDays } = useDashboardWindow();
   const [insights, setInsights] = useState<DashboardInsightsResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const data = await fetchDashboardInsights(scope);
+    const data = await fetchDashboardInsights(scope, windowDays);
     setInsights(data);
     setLoading(false);
-  }, [scope]);
+  }, [scope, windowDays]);
 
   useEffect(() => {
     void load();

@@ -1,0 +1,24 @@
+# GxP-oriented policy overlay — controlled vocabulary + audit emphasis for regulated pharma workloads.
+# Does not replace validation (CSV/21 CFR Part 11); blocks common GxP document markers in tool I/O.
+version: '1.0'
+policy:
+  mode: block
+  default_action: block
+  rules:
+    - id: GXP-CONTROLLED-VOCAB
+      description: Block unapproved controlled vocabulary terms in tool arguments
+      target: all_tools
+      patterns:
+        - '(?i)\\b(?:batch\\s+record|batch\\s+release|deviation\\s+report|CAPA|change\\s+control)\\b'
+        - '(?i)\\b(?:validated\\s+system|CSV|computer\\s+system\\s+validation)\\b'
+        - '(?i)\\b(?:SOP|standard\\s+operating\\s+procedure)\\s*[:#]\\s*\\S+'
+        - '(?i)\\b(?:lot\\s+number|batch\\s+id|product\\s+code)\\s*[:=]\\s*\\S+'
+      action: block
+      reason: GxP controlled vocabulary — use approved document workflow
+    - id: GXP-AUDIT-EMPHASIS
+      description: Ensure GxP policy events are audited with immutable trail
+      action: audit
+      metadata:
+        compliance: gxp
+        log_immutable: true
+        residency_enforced: true

@@ -2,6 +2,29 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.2.1] - 2026-05-23
+
+### Added (MCP Tests 31 closure)
+
+- **Comprehensive analysis artifact** — `reports/enterprise-mcp-tests-31/MCP_GUARDIAN_COMPREHENSIVE_ANALYSIS.md`.
+- **GxP policy template** — `policy-templates/gxp-compliance.yaml`.
+- **Cost optimization API** — `GET /api/cost/recommendations` + dashboard CostGovernancePanel rail.
+- **Postgres partition maintenance** — `scripts/postgres-partition-maintenance.mjs`.
+- **CodeQL SAST** — `.github/workflows/codeql.yml`.
+- **CI scale pilot** — enterprise job runs `pnpm test:scale-postgres` at concurrency 50.
+- **Multi-region failover tests** — `tests/utils/multi-region-failover.test.ts`.
+
+### Fixed
+
+- **Core semantic circuit open** — `engine.ts` uses local heuristic fallback instead of silent skip.
+- **Cross-provider Ollama fallback** — core semantic scanner retries via Ollama when cloud LLM fails.
+- **Policy ReDoS fail-closed** — `GUARDIAN_POLICY_REJECT_UNSAFE_REGEX` throws on unsafe patterns at load (production default).
+- **Response DLP secret spans** — generic secret scanner matches get start/end for context-aware redaction.
+- **Session rotate-on-use audit** — rotation events logged to `session-audit.jsonl`.
+- **WebSocket upstream timeout** — `GUARDIAN_UPSTREAM_TIMEOUT_MS` on WS connect.
+- **Local semantic cache tenant isolation** — cache keys include `tenantId`.
+- **Audit residency stamping** — policy audit records include `residency_region` from `GUARDIAN_REGION`.
+
 ## [3.2.0] - 2026-05-23
 
 ### Added

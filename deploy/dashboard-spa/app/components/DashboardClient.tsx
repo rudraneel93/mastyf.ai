@@ -11,7 +11,7 @@ import {
   fetchFleetInstances,
   fetchSecurity,
   rejectFp,
-  type FleetInstance,
+  type FleetResponse,
   type AuditResponse,
   type AggregateMetrics,
   type CostResponse,
@@ -37,6 +37,9 @@ import { HealthReliabilityPanel } from './dashboard/HealthReliabilityPanel';
 import { AuditExplorerPanel } from './dashboard/AuditExplorerPanel';
 import { FleetOverviewPanel } from './dashboard/FleetOverviewPanel';
 import { AnalyticsChartsHub } from './dashboard/AnalyticsChartsHub';
+import { DashboardWindowProvider, DashboardWindowSelector } from './dashboard/DashboardWindowContext';
+import { DashboardRegionProvider, DashboardRegionSelector } from './dashboard/DashboardRegionContext';
+import { VisualsProvider } from './dashboard/VisualsProvider';
 import { hasPermission } from '@/lib/dashboard-roles';
 import type { AuthStatus } from '@/lib/guardian-api';
 
@@ -87,7 +90,7 @@ export function DashboardClient() {
   const [cost, setCost] = useState<CostResponse | null>(null);
   const [security, setSecurity] = useState<SecurityResponse | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [fleet, setFleet] = useState<FleetInstance[]>([]);
+  const [fleetMeta, setFleetMeta] = useState<FleetResponse | null>(null);
   const [actionMsg, setActionMsg] = useState('');
   const [sessionKey, setSessionKey] = useState(0);
   const [roles, setRoles] = useState<string[]>([]);
@@ -163,7 +166,7 @@ export function DashboardClient() {
         }
         if (secRes) setSecurity(secRes);
         if (healthRes) setHealth(healthRes);
-        setFleet(fleetRes);
+        setFleetMeta(fleetRes);
         return;
       }
 
@@ -179,7 +182,7 @@ export function DashboardClient() {
       if (costRes) setCost(costRes);
       if (secRes) setSecurity(secRes);
       if (healthRes) setHealth(healthRes);
-      setFleet(fleetRes);
+      setFleetMeta(fleetRes);
       setRefreshTick((t) => t + 1);
     } catch (e) {
       pollFailuresRef.current += 1;
@@ -257,6 +260,9 @@ export function DashboardClient() {
 
   return (
     <LoginGate onAuthenticated={onAuthenticated}>
+    <DashboardWindowProvider>
+    <DashboardRegionProvider>
+    <VisualsProvider refreshKey={refreshTick} pollMs={REST_POLL_MS}>
     <main>
       <header>
         <h1>MCP Guardian</h1>
@@ -266,6 +272,8 @@ export function DashboardClient() {
         <p className="subtitle">Data-authentic agentic SOC — metrics from real proxy call_records</p>
         <TenantContextBar authStatus={authStatus} />
         <ProUpgradeBanner authStatus={authStatus} />
+        <DashboardWindowSelector />
+        <DashboardRegionSelector />
       </header>
 
       {apiUnreachable && <MotionlessBanner />}
@@ -295,7 +303,7 @@ export function DashboardClient() {
             metrics={displayMetrics}
             semanticFlags={displayAudit?.flagged ?? displayAudit?.semanticAudit?.flagged ?? 0}
           />
-          <AnalyticsChartsHub refreshKey={refreshTick} pollMs={REST_POLL_MS} />
+          <AnalyticsChartsHub refreshKey={refreshTick} />
         </>
       )}
 
@@ -359,7 +367,7 @@ export function DashboardClient() {
       {tab === 'swarm' && (
         <>
           <SwarmPanel pipeline={ws.pipeline} swarmDoneTick={ws.swarmDoneTick} />
-          <AnalyticsChartsHub refreshKey={ws.swarmDoneTick || refreshTick} pollMs={0} />
+          <AnalyticsChartsHub refreshKey={ws.swarmDoneTick || refreshTick} />
         </>
       )}
 
@@ -367,9 +375,14 @@ export function DashboardClient() {
         <AdminPanel roles={roles} tenantLocked={!!authStatus?.tenantLocked} />
       )}
 
-      {tab === 'fleet' && <FleetOverviewPanel fleet={fleet} />}
+      {tab === 'fleet' && (
+        <FleetOverviewPanel fleet={fleetMeta?.instances ?? []} meta={fleetMeta} />
+      )}
 
     </main>
+    </VisualsProvider>
+    </DashboardRegionProvider>
+    </DashboardWindowProvider>
     </LoginGate>
   );
 }

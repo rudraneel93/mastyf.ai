@@ -26,6 +26,13 @@ Large tenants can grow `call_records` beyond tens of millions of rows. Apply opt
 
 Guardian’s migration runner applies the index automatically; **partition DDL is operator-managed** because it requires calendar-specific bounds.
 
+Monthly partition helper (dry-run first):
+
+```bash
+node scripts/postgres-partition-maintenance.mjs --dry-run
+DATABASE_URL=postgresql://... node scripts/postgres-partition-maintenance.mjs
+```
+
 ## Automated backups
 
 | Backend | Helm template | Notes |

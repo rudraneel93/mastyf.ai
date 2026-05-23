@@ -13,6 +13,16 @@ import {
   setAttackLearningSharedStore,
   loadAttackLearningFromSharedStore,
 } from '../ai/instant-attack-learning.js';
+import { initUnifiedDataReaderPool, closeUnifiedDataReaderPool } from '../utils/unified-data-reader.js';
+import {
+  startInstanceRegistry,
+  stopInstanceRegistry,
+} from '../control-plane/instance-registry.js';
+import {
+  startPolicySubscriber,
+  stopPolicySubscriber,
+} from '../control-plane/policy-subscriber.js';
+import type { PolicyWatcher } from '../policy/policy-watcher.js';
 
 let exporterManager: ExporterManager | null = null;
 let policyAuditor: PolicyAuditor | null = null;
@@ -108,8 +118,44 @@ export async function bootstrapCompliance(db: IDatabase): Promise<void> {
   }
 
   bootstrapMtlsHotReload();
+  runEnterpriseSecurityPreflight();
+
+  if (process.env['DATABASE_URL'] && process.env['DASHBOARD_ENABLED'] === 'true') {
+    await initUnifiedDataReaderPool().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      Logger.warn(`[bootstrap] Unified data reader init skipped: ${msg}`);
+    });
+  }
 
   Logger.info('[bootstrap] Enterprise compliance modules initialized');
+}
+
+/** Startup warnings for production security posture (mcp tests 31 §3.5 / §3.1). */
+export function runEnterpriseSecurityPreflight(): void {
+  const jwtMaxSec = parseInt(process.env.GUARDIAN_JWT_MAX_LIFETIME_SEC || '86400', 10);
+  if (Number.isFinite(jwtMaxSec) && jwtMaxSec > 86400) {
+    const msg = `[bootstrap] GUARDIAN_JWT_MAX_LIFETIME_SEC=${jwtMaxSec} exceeds 86400 — long-lived tokens increase replay risk`;
+    if (process.env.GUARDIAN_JWT_STRICT_LIFETIME === 'true') {
+      throw new Error(msg);
+    }
+    Logger.warn(msg);
+  }
+  if (
+    process.env.NODE_ENV === 'production'
+    && process.env.GUARDIAN_SEMANTIC_SYNC_RESPONSE === 'false'
+  ) {
+    Logger.warn(
+      '[bootstrap] GUARDIAN_SEMANTIC_SYNC_RESPONSE=false in production — tool responses bypass sync semantic gate',
+    );
+  }
+}
+
+export async function bootstrapControlPlane(
+  policyWatcher?: PolicyWatcher | null,
+): Promise<void> {
+  startInstanceRegistry();
+  const tenantSlug = process.env['GUARDIAN_TENANT_ID'] || 'default';
+  startPolicySubscriber(tenantSlug, policyWatcher ?? null);
 }
 
 /** Start mTLS cert watcher and prime shared HTTPS agent for HTTP/SSE proxies. */
@@ -151,6 +197,9 @@ export async function shutdownEnterprise(): Promise<void> {
     auditTrailSync.stop();
     auditTrailSync = null;
   }
+  stopInstanceRegistry();
+  stopPolicySubscriber();
+  await closeUnifiedDataReaderPool();
   exporterManager = null;
   policyAuditor = null;
 }

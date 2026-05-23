@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   isSyncSemanticResponseEnabledForTenant,
+  isSyncSemanticResponseEnabledGlobal,
   isSemanticAsyncEnabledForTenant,
   isSemanticStrictForTenant,
   resetTenantSemanticConfigForTests,
@@ -19,6 +20,15 @@ describe('tenant semantic config', () => {
     resetTenantSemanticConfigForTests();
     if (prev) process.env.GUARDIAN_TENANT_SEMANTIC_JSON = prev;
     if (prevSync) process.env.GUARDIAN_SEMANTIC_SYNC_RESPONSE = prevSync;
+  });
+
+  it('production global default enables sync response', () => {
+    const prevNode = process.env.NODE_ENV;
+    delete process.env.GUARDIAN_SEMANTIC_SYNC_RESPONSE;
+    process.env.NODE_ENV = 'production';
+    expect(isSyncSemanticResponseEnabledGlobal()).toBe(true);
+    if (prevNode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = prevNode;
   });
 
   it('tenant override enables sync response for one tenant only', () => {

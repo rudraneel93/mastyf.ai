@@ -1,5 +1,9 @@
 # Optional merges: policy-templates/http-tools-policy.yaml (GUARDIAN_HTTP_TOOLS_POLICY=true),
 # policy-templates/enterprise-cost-governance.yaml (rate limits + token budgets). See policy-templates/README.md.
+#
+# DEPLOYMENT: YAML rules alone catch a minority of adversarial fixtures — the proxy also runs
+# TypeScript guards (URL/path/shell), TR39 confusables (unicode_strict), and semantic layers.
+# Do NOT disable unicode_strict or run policy-only evaluators in production without those guards.
 version: '1.0'
 policy:
   mode: block

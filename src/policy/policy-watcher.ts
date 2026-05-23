@@ -118,6 +118,11 @@ export class PolicyWatcher {
     return this.current;
   }
 
+  /** Force reload from disk (e.g. after cloud policy sync write). */
+  async reloadNow(): Promise<void> {
+    await this.reloadPolicyAsync();
+  }
+
   /** @internal — deterministic reload for tests (skips chokidar debounce). */
   async forceReloadForTests(): Promise<void> {
     await this.reloadPolicyAsync();

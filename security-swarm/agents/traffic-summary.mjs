@@ -5,10 +5,11 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { resolveSwarmDir } from '../lib/swarm-dir.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
-const SWARM_DIR = join(REPO, 'reports', 'security-swarm');
+const SWARM_DIR = resolveSwarmDir();
 const OUT_PATH = join(SWARM_DIR, 'traffic-summary.json');
 
 const RULE_GLOSSARY = {

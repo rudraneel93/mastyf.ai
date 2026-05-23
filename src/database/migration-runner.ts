@@ -24,6 +24,21 @@ export async function runMigrations(
 
   const files = all.filter((f) => f.endsWith('.sql')).sort();
 
+  const prefixCounts = new Map<string, string[]>();
+  for (const file of files) {
+    const prefix = file.slice(0, 3);
+    const list = prefixCounts.get(prefix) ?? [];
+    list.push(file);
+    prefixCounts.set(prefix, list);
+  }
+  for (const [prefix, group] of prefixCounts) {
+    if (group.length > 1) {
+      Logger.warn(
+        `[migrations] Duplicate numeric prefix "${prefix}" on ${group.join(', ')} — versions are tracked by full filename; ensure both are intentional`,
+      );
+    }
+  }
+
   const applied: string[] = [];
   const client = await pool.connect();
   try {

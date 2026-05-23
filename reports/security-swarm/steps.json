@@ -5,7 +5,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 1.7,
+      "elapsedSec": 2,
       "stdout": "",
       "stderr": ""
     },
@@ -14,7 +14,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 3.2,
+      "elapsedSec": 3.4,
       "stdout": "",
       "stderr": ""
     },
@@ -23,7 +23,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 76,
+      "elapsedSec": 72.7,
       "stdout": "",
       "stderr": ""
     },
@@ -32,7 +32,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 1.8,
+      "elapsedSec": 1.5,
       "stdout": "",
       "stderr": ""
     },
@@ -41,7 +41,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 0.6,
+      "elapsedSec": 0.5,
       "stdout": "",
       "stderr": ""
     },
@@ -50,7 +50,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 46,
+      "elapsedSec": 43.9,
       "stdout": "",
       "stderr": ""
     },
@@ -59,7 +59,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 62.8,
+      "elapsedSec": 67.8,
       "stdout": "",
       "stderr": ""
     }

@@ -2,8 +2,10 @@
 
 MCP Guardian does **not** replace a full HIPAA compliance program. For regulated workloads, combine:
 
-1. **Policy overlay** — `policy-templates/hipaa-compliance.yaml` (PHI pattern blocks).
+1. **Policy overlay** — `policy-templates/hipaa-compliance.yaml` (PHI pattern blocks including ICD-10/NDC).
 2. **Immutable audit chain** — enable append-only hash chaining for dashboard and SIEM events.
+
+The HIPAA template’s `log_to: elasticsearch` field is **customer SIEM wiring** — use `GUARDIAN_AUDIT_HASH_CHAIN_SIEM=true` and ship chained JSONL to Elasticsearch frozen tier or your WORM store.
 
 ## Enable immutable audit
 

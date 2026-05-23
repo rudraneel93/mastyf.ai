@@ -37,10 +37,14 @@ describe('buildExecutiveSummary', () => {
         timestamp: new Date(now - 1800000).toISOString(),
       },
     ];
-    const summary = await buildExecutiveSummary(mockDb(records), 'default');
+    const summary = await buildExecutiveSummary(mockDb(records), 'default', 7);
     expect(summary.totalRequests).toBe(2);
     expect(summary.blockedRequests).toBe(1);
     expect(summary.passRatePct).toBe(50);
     expect(summary.totalCostUsd).toBeGreaterThan(0);
+    expect(summary.windowDays).toBe(7);
+    expect(summary.meta.recordCount).toBe(2);
+    expect(summary.comparison).toBeDefined();
+    expect(summary.sparklines?.totalCalls.length).toBeGreaterThan(0);
   });
 });
