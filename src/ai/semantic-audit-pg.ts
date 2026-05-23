@@ -55,6 +55,7 @@ function rowToRecord(row: Record<string, unknown>): StoredSemanticAudit {
     label: row.label as StoredSemanticAudit['label'],
     labelUserId: row.label_user_id ? String(row.label_user_id) : undefined,
     labelAt: row.label_at ? new Date(String(row.label_at)).toISOString() : undefined,
+    argumentsSnapshot: row.arguments_snapshot as Record<string, unknown> | undefined,
   };
 }
 
@@ -69,8 +70,8 @@ export async function pgAppendSemanticAuditRecord(
     await pool.query(
       `INSERT INTO semantic_audit_outcomes (
         id, tenant_id, request_id, server_name, tool_name,
-        sync_decision, semantic_audit, model, duration_ms, recorded_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        sync_decision, semantic_audit, model, duration_ms, recorded_at, arguments_snapshot
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [
         id,
         tenantId,
@@ -82,6 +83,7 @@ export async function pgAppendSemanticAuditRecord(
         record.model ?? null,
         record.durationMs ?? null,
         record.timestamp || new Date().toISOString(),
+        record.argumentsSnapshot ? JSON.stringify(record.argumentsSnapshot) : null,
       ],
     );
     return id;

@@ -51,6 +51,19 @@ describe('Security Swarm Pro gate (v3)', () => {
     expect(r.status).toBe(0);
   });
 
+  it('check-pro exits 0 with maintainer dev unlock', () => {
+    delete process.env.GUARDIAN_LICENSE_KEY;
+    delete process.env.GUARDIAN_CI_BYPASS_LICENSE;
+    process.env.NODE_ENV = 'development';
+    process.env.GUARDIAN_DEV_UNLOCK_ALL = 'true';
+
+    const r = spawnSync(process.execPath, [CHECK_PRO, 'swarm'], {
+      cwd: REPO,
+      encoding: 'utf8',
+    });
+    expect(r.status).toBe(0);
+  });
+
   it('run.mjs exits before swarm work without license', () => {
     delete process.env.GUARDIAN_LICENSE_KEY;
     delete process.env.GUARDIAN_CONTROL_PLANE_URL;

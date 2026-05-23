@@ -26,6 +26,7 @@ import { SetupPanel } from './SetupPanel';
 import { SwarmPanel } from './SwarmPanel';
 import { AiLearningPanel } from './AiLearningPanel';
 import { ThreatDiscoveryPanel } from './ThreatDiscoveryPanel';
+import { EnterpriseAiPanel } from './EnterpriseAiPanel';
 import { PolicyPanel } from './PolicyPanel';
 import { AdminPanel } from './AdminPanel';
 import { TenantContextBar } from './TenantContextBar';
@@ -42,6 +43,7 @@ import { DashboardRegionProvider, DashboardRegionSelector } from './dashboard/Da
 import { VisualsProvider } from './dashboard/VisualsProvider';
 import { hasPermission } from '@/lib/dashboard-roles';
 import type { AuthStatus } from '@/lib/guardian-api';
+import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
 type TabId =
   | 'setup'
@@ -52,6 +54,7 @@ type TabId =
   | 'cost'
   | 'health'
   | 'ai'
+  | 'enterprise-ai'
   | 'threat-discovery'
   | 'policy'
   | 'fleet'
@@ -67,6 +70,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'cost', label: 'Cost' },
   { id: 'health', label: 'Health' },
   { id: 'ai', label: 'AI copilot' },
+  { id: 'enterprise-ai', label: 'Enterprise AI' },
   { id: 'threat-discovery', label: 'Threat Discovery' },
   { id: 'policy', label: 'Policy' },
   { id: 'fleet', label: 'Fleet' },
@@ -98,6 +102,9 @@ export function DashboardClient() {
   const [auditAction, setAuditAction] = useState('');
   const [auditServer, setAuditServer] = useState('');
   const [refreshTick, setRefreshTick] = useState(0);
+  const [threatLabContext, setThreatLabContext] = useState<ThreatLabContext | null>(null);
+  const [threatDiscoverySubTab, setThreatDiscoverySubTab] = useState<'overview' | 'threat-lab' | 'auto-research' | 'architecture' | undefined>();
+  const [policyCopilotTab, setPolicyCopilotTab] = useState<'generate' | 'counterfactual'>('generate');
 
   const pollFailuresRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
@@ -344,6 +351,31 @@ export function DashboardClient() {
           roles={roles}
           refreshTick={ws.aiRefreshTick}
           onAction={(m) => setActionMsg(m)}
+          onOpenThreatLab={(ctx) => {
+            setThreatLabContext(ctx);
+            setThreatDiscoverySubTab('threat-lab');
+            setTab('threat-discovery');
+            setActionMsg('Opened incident in Threat Lab');
+          }}
+        />
+      )}
+
+      {tab === 'enterprise-ai' && (
+        <EnterpriseAiPanel
+          roles={roles}
+          refreshTick={ws.aiRefreshTick}
+          onAction={(m) => setActionMsg(m)}
+          onOpenThreatLab={(ctx) => {
+            setThreatLabContext(ctx);
+            setThreatDiscoverySubTab('threat-lab');
+            setTab('threat-discovery');
+            setActionMsg('Opened incident in Threat Lab');
+          }}
+          onOpenPolicyCounterfactual={() => {
+            setPolicyCopilotTab('counterfactual');
+            setTab('policy');
+            setActionMsg('Open Policy → What-if counterfactual simulator');
+          }}
         />
       )}
 
@@ -353,6 +385,9 @@ export function DashboardClient() {
           authStatus={authStatus}
           refreshKey={ws.threatDiscoveryTick}
           onAction={(m) => setActionMsg(m)}
+          initialSubTab={threatDiscoverySubTab}
+          threatLabContext={threatLabContext}
+          onClearThreatLabContext={() => setThreatLabContext(null)}
         />
       )}
 
@@ -361,6 +396,7 @@ export function DashboardClient() {
           roles={roles}
           lastBlocked={lastBlocked ?? null}
           onAction={(m) => setActionMsg(m)}
+          copilotInitialTab={policyCopilotTab}
         />
       )}
 

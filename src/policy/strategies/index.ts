@@ -5,6 +5,7 @@ export { requestPromptInjectionStrategy } from './request-prompt-injection-strat
 export { resourceGuardStrategy } from './resource-guard-strategy.js';
 export { secretsInArgsStrategy } from './secrets-in-args-strategy.js';
 export { sessionFlowStrategy } from './session-flow-strategy.js';
+export { threatIntelStrategy } from './threat-intel-strategy.js';
 export { timingGuardStrategy } from './timing-guard-strategy.js';
 export { toolDefinitionStrategy } from './tool-definition-strategy.js';
 export { semanticGuardsStrategy } from './semantic-guards-strategy.js';
@@ -22,6 +23,7 @@ import { requestPromptInjectionStrategy } from './request-prompt-injection-strat
 import { resourceGuardStrategy } from './resource-guard-strategy.js';
 import { secretsInArgsStrategy } from './secrets-in-args-strategy.js';
 import { sessionFlowStrategy } from './session-flow-strategy.js';
+import { threatIntelStrategy } from './threat-intel-strategy.js';
 import { timingGuardStrategy } from './timing-guard-strategy.js';
 import { toolDefinitionStrategy } from './tool-definition-strategy.js';
 import { semanticGuardsStrategy } from './semantic-guards-strategy.js';
@@ -40,5 +42,6 @@ export const SYNC_POLICY_STRATEGIES: PolicyStrategy[] = [
   toolDenyStrategy,
   semanticGuardsStrategy,
   sessionFlowStrategy,
+  threatIntelStrategy,
   yamlRulesStrategy,
 ];

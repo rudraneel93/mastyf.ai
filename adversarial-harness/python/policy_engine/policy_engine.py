@@ -26,6 +26,7 @@ from .session_flow_guard import (
     evaluate_session_flow_guard,
     record_session_tool_call,
 )
+from .threat_intel_guard import evaluate_threat_intel_guard
 from .shell_tokenizer import ShellTokenizer
 from .tool_chain import evaluate_tool_chain_guard
 from .types import AgentIdentity, CallContext, PolicyAction, PolicyDecision, PolicyMode
@@ -504,6 +505,11 @@ class PolicyEngine:
             if flow:
                 return PolicyDecision(self._resolve_action(flow.action), flow.rule, flow.reason)
             record_session_tool_call(norm_ctx)
+
+            threat = evaluate_threat_intel_guard(norm_ctx.arguments)
+            if threat:
+                rule, reason = threat
+                return PolicyDecision(self._resolve_action("block"), rule, reason)
 
         permitted = False
         for rule in self.rules:

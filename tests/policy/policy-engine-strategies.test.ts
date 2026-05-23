@@ -50,6 +50,7 @@ describe('policy-engine strategies', () => {
       'tool-deny',
       'semantic-guards',
       'session-flow',
+      'threat-intel',
       'yaml-rules',
     ]);
   });

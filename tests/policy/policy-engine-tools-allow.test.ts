@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import type { PolicyConfig, CallContext } from '../../src/policy/policy-types.js';
+import { resetSessionFlowStore } from '../../src/policy/session-flow-store.js';
 
 function ctx(toolName: string, overrides: Partial<CallContext> = {}): CallContext {
   return {
@@ -14,6 +15,10 @@ function ctx(toolName: string, overrides: Partial<CallContext> = {}): CallContex
 }
 
 describe('PolicyEngine tools.allow scope semantics', () => {
+  beforeEach(() => {
+    resetSessionFlowStore();
+  });
+
   it('applies rate limit only to scoped tool, not global block', () => {
     const config: PolicyConfig = {
       version: '1.0',

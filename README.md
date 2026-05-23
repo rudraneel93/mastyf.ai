@@ -13,7 +13,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Current release: [v3.2.1](CHANGELOG.md#321---2026-05-23)** — MCP Tests 31 closure, enterprise fleet heartbeat, scale hardening. Prior: [v3.2.0](CHANGELOG.md#320---2026-05-23) (enterprise dashboard), [v3.1.0](CHANGELOG.md#310---2026-05-23) (Threat Discovery).
+**Current release: [v3.2.2](CHANGELOG.md#322---2026-05-24)** — Enterprise AI tab, threat-intel guard, swarm gate fixes. Prior: [v3.2.1](CHANGELOG.md#321---2026-05-23) (MCP Tests 31), [v3.2.0](CHANGELOG.md#320---2026-05-23) (enterprise dashboard), [v3.1.0](CHANGELOG.md#310---2026-05-23) (Threat Discovery).
+
+**v3.2.2 (Enterprise AI + threat-intel guard)** — **Enterprise AI** dashboard tab (LoRA, supply chain, tribunal, compliance, incident investigator); **threat-intel** policy guard for CVE/Threat Lab probes on allowlisted tools; Security Swarm fast-mode bypass gate fix; maintainer **dev unlock** for `pnpm security-swarm:*` without license key; `pnpm dashboard:build` in CI.
 
 **v3.2.1 (MCP Tests 31 closure)** — Worker-thread regex eval, semantic burst/USD rate limits, 50-replica CI scale pilots, swarm archival/alerting, unified multi-region data reader, cloud fleet heartbeat + policy publish, dashboard chart-kit, GxP template, CodeQL SAST.
 
@@ -547,6 +549,8 @@ pnpm dashboard:build && pnpm dashboard:proxy
 | **Setup** | Onboarding status, wrapped server registry, quick links to `pnpm onboard` |
 | **Agent flow** | Live WebSocket timeline, analysis pipeline strip, **plain-English report**, **infrastructure visuals** (Recharts), regression details |
 | **Analysis** | Same artifacts as Agent flow — verdict banner, traffic tables, PNG gallery |
+| **Enterprise AI** | LoRA export/train, supply chain, shadow red team, federated hints, tribunal, compliance, **Incident Investigator** (requires `pnpm dashboard:build`) |
+| **Threat Discovery** | Threat Lab workbench, Auto Threat Research, candidate accept/reject |
 
 **Generate / refresh reports:**
 
@@ -1220,9 +1224,12 @@ Architecture diagram: [Security Swarm architecture](#security-swarm-architecture
 
 Gates: **228/228** corpus, **0** bypasses, **100%** corpus parity. Full agent table: [security-swarm/README.md](security-swarm/README.md).
 
-**v3.0+ license:** `pnpm security-swarm:*` and `run-analysis.mjs` require a valid Pro license (`GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL`) unless `GUARDIAN_CI_BYPASS_LICENSE=true` (CI only). Upstream GitHub Actions sets this for corpus/swarm jobs.
+**v3.0+ license:** `pnpm security-swarm:*` and `run-analysis.mjs` require a valid Pro license (`GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL`) unless you use a maintainer bypass. **Local dev:** `NODE_ENV=development GUARDIAN_DEV_UNLOCK_ALL=true` or `GUARDIAN_CI_BYPASS_LICENSE=true` (CI only). Upstream GitHub Actions sets the CI bypass for corpus/swarm jobs.
 
 ```bash
+# Local maintainer run (no license key)
+NODE_ENV=development GUARDIAN_DEV_UNLOCK_ALL=true SWARM_TOOL_WATCH=true pnpm security-swarm:fast
+
 pnpm security-swarm:analyze       # one-click: live MCP + gates → tenant artifacts (~2–15 min) [Pro]
 pnpm security-swarm:analyze:full  # includes continuous attack phase when Ollama configured
 pnpm real-life:continuous         # 60-min hybrid attack stream (LIVE_ATTACK_DURATION_MINUTES=60)
@@ -1616,7 +1623,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 | `GUARDIAN_SEMANTIC_ASYNC` (tier-2 LLM audit) | No | Yes |
 | Threat Lab / Threat Discovery / Auto Threat Research | No | Yes (LLM required — see below) |
 
-**Default (v3.0+):** Pro features require `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` (see [PRO_SETUP.md](docs/PRO_SETUP.md)). Security Swarm CLI, fleet, and AI learning are gated at runtime. Maintainer dev only: `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true`. **Deprecated:** `GUARDIAN_OPEN_CORE=false` (ignored with a warning).
+**Default (v3.0+):** Pro features require `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` (see [PRO_SETUP.md](docs/PRO_SETUP.md)). Security Swarm CLI, fleet, and AI learning are gated at runtime. **Maintainer local dev:** `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true` (also bypasses `check-pro.js` for swarm CLI). **CI only:** `GUARDIAN_CI_BYPASS_LICENSE=true`. **Deprecated:** `GUARDIAN_OPEN_CORE=false` (ignored with a warning).
 
 ### LLM prerequisites (Threat Lab, Threat Discovery, semantic async)
 

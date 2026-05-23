@@ -10,9 +10,12 @@ import { SOURCE_LABELS } from '@/lib/threat-discovery-copy';
 import { ThreatCandidateDrawer } from './ThreatCandidateDrawer';
 import { hasPermission } from '@/lib/dashboard-roles';
 
+import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
+
 type Props = {
   candidates: ThreatLabCandidate[];
   roles?: string[];
+  preloadedContext?: ThreatLabContext | null;
   manifestMeta?: {
     timestamp?: string;
     mode?: string;
@@ -25,6 +28,7 @@ type Props = {
 export function ThreatLabWorkbench({
   candidates,
   roles,
+  preloadedContext,
   manifestMeta,
   onRefresh,
 }: Props) {
@@ -49,6 +53,19 @@ export function ThreatLabWorkbench({
 
   return (
     <div className="threat-lab-workbench">
+      {preloadedContext ? (
+        <aside className="threat-lab-context-banner">
+          <strong>Incident context</strong>
+          <p>
+            Semantic audit <code>{preloadedContext.semanticAuditId}</code> · {preloadedContext.category} ·{' '}
+            {preloadedContext.toolName}
+          </p>
+          {preloadedContext.narrative ? <p className="hint">{preloadedContext.narrative}</p> : null}
+          <button type="button" className="secondary btn-sm" onClick={() => onRefresh?.()}>
+            Refresh candidates
+          </button>
+        </aside>
+      ) : null}
       <p className="hint">
         LLM-proposed fixtures and policy rules — human accept applies rule to live policy.
         {manifestMeta?.mode ? ` Mode: ${manifestMeta.mode}.` : ''}

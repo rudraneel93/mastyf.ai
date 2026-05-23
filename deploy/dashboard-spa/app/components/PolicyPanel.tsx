@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { PolicyCopilotPanel } from './PolicyCopilotPanel';
 import {
   fetchPolicy,
   reloadPolicy,
@@ -14,9 +15,10 @@ type Props = {
   roles?: string[];
   lastBlocked?: { tool_name: string; server_name: string; reason: string | null } | null;
   onAction?: (msg: string) => void;
+  copilotInitialTab?: 'generate' | 'counterfactual';
 };
 
-export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
+export function PolicyPanel({ roles, lastBlocked, onAction, copilotInitialTab }: Props) {
   const canTest = hasPermission(roles, 'policy_test');
   const canMutate = hasPermission(roles, 'policy_mutate');
   const [policy, setPolicy] = useState<PolicyInfo | null>(null);
@@ -108,6 +110,8 @@ export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
           </>
         ) : null}
       </p>
+
+      <PolicyCopilotPanel roles={roles} onAction={onAction} initialTab={copilotInitialTab} />
 
       <div className="btn-row">
         <button

@@ -15,9 +15,15 @@ const OUT = outArg?.slice('--out='.length) || join(process.cwd(), 'exports', 'tr
 
 async function main(): Promise<void> {
   mkdirSync(dirname(OUT), { recursive: true });
+  const tenantArg = process.argv.find((a) => a.startsWith('--tenant='));
+  const tenantId = tenantArg?.slice('--tenant='.length) || process.env.GUARDIAN_TENANT_ID || 'default';
   const lines: string[] = [];
 
-  const semantic = await loadSemanticAuditRecordsAsync({ sinceMs: 90 * 24 * 60 * 60 * 1000, limit: 5000 });
+  const semantic = await loadSemanticAuditRecordsAsync({
+    tenantId: tenantId !== 'default' ? tenantId : undefined,
+    sinceMs: 90 * 24 * 60 * 60 * 1000,
+    limit: 5000,
+  });
   for (const r of semantic) {
     if (!r.labeled || !r.label || r.label === 'ignored') continue;
     if ((r.semanticAudit?.reasoning || '').startsWith('Swarm seed from live MCP (')) continue;
@@ -80,7 +86,27 @@ async function main(): Promise<void> {
 
   writeFileSync(OUT, `${lines.join('\n')}\n`, 'utf-8');
   console.log(`[export-training-data] wrote ${lines.length} row(s) → ${OUT}`);
-  console.log('[export-training-data] Phase 3: use this JSONL for LoRA fine-tune when labeled volume ≥ 500');
+
+  const { buildLoraExportManifest, MIN_LORA_LABELED_ROWS } = await import(
+    '../../src/ai/tenant-semantic-model.js'
+  );
+  const labeledRows = lines.filter((l) => {
+    try {
+      return JSON.parse(l).source === 'semantic_audit';
+    } catch {
+      return false;
+    }
+  }).length;
+  const manifest = buildLoraExportManifest(tenantId, labeledRows);
+  const manifestPath = OUT.replace(/\.jsonl$/, '.manifest.json');
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  console.log(`[export-training-data] manifest → ${manifestPath}`);
+  console.log(
+    `[export-training-data] Phase 3: ${labeledRows}/${MIN_LORA_LABELED_ROWS} labeled rows for LoRA`,
+  );
+  if (labeledRows >= MIN_LORA_LABELED_ROWS) {
+    console.log(`[export-training-data] ${manifest.ollamaCreateHint}`);
+  }
 }
 
 main().catch((err) => {

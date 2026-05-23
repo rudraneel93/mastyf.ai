@@ -84,6 +84,11 @@ function dashboardSpaDir(deployRoot: string): string {
   return join(deployRoot, 'dashboard-spa');
 }
 
+function isReactDashboardBuilt(deployRoot: string | null): boolean {
+  if (!deployRoot) return false;
+  return existsSync(join(deployRoot, 'dashboard-spa', 'out', 'index.html'));
+}
+
 function loadDashboardHtml(): string {
   const dir = deployDir();
   const spaIndex = dir ? join(dashboardSpaDir(dir), 'index.html') : '';
@@ -334,6 +339,13 @@ export async function startDashboardServer(
       const msg = err instanceof Error ? err.message : String(err);
       Logger.warn(`[dashboard] Unified data reader pool init failed: ${msg}`);
     });
+  }
+
+  const deployRoot = deployDir();
+  if (dashboardEnabled && deployRoot && !isReactDashboardBuilt(deployRoot)) {
+    Logger.warn(
+      '[dashboard] React dashboard not built — run pnpm dashboard:build (serving legacy static shell until out/ exists)',
+    );
   }
 
   if (!dashboardEnabled && !wsEnabled) {
@@ -977,6 +989,314 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/policy/copilot' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const goal = String(body.goal || '').trim();
+        if (!goal) {
+          writeJson(res, 400, { error: 'goal required' });
+          return;
+        }
+        const { generatePolicyCopilotSuggestion } = await import('../ai/policy-copilot.js');
+        const suggestion = await generatePolicyCopilotSuggestion(goal, {
+          availableTools: Array.isArray(body.availableTools) ? body.availableTools.map(String) : undefined,
+          tenantId: requestTenantId,
+        });
+        if (!suggestion) {
+          writeJson(res, 503, { error: 'Could not generate policy suggestion' });
+          return;
+        }
+        writeJson(res, 200, suggestion);
+        return;
+      }
+
+      if (url === '/api/policy/copilot/replay' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const rule = body.rule;
+        if (!rule || typeof rule !== 'object') {
+          writeJson(res, 400, { error: 'rule object required' });
+          return;
+        }
+        const { replayDraftRuleAsync } = await import('../ai/policy-copilot.js');
+        const replay = await replayDraftRuleAsync(rule as import('../policy/policy-types.js').PolicyRule, {
+          tenantId: requestTenantId,
+        });
+        writeJson(res, 200, replay);
+        return;
+      }
+
+      if (url === '/api/policy/copilot/counterfactual' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { simulatePolicyCounterfactual } = await import('../ai/policy-counterfactual.js');
+        const draftRule =
+          body.rule && typeof body.rule === 'object' && 'name' in body.rule && 'action' in body.rule
+            ? (body.rule as import('../policy/policy-types.js').PolicyRule)
+            : undefined;
+        const report = await simulatePolicyCounterfactual({
+          draftRule,
+          tenantId: requestTenantId,
+          windowDays: Number(body.windowDays) || 14,
+        });
+        writeJson(res, 200, report);
+        return;
+      }
+
+      if (url === '/api/incidents/investigate' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const triggerId = String(body.triggerId || body.semanticAuditId || '').trim();
+        if (!triggerId) {
+          writeJson(res, 400, { error: 'triggerId required' });
+          return;
+        }
+        const { investigateIncident } = await import('../ai/incident-investigator.js');
+        const triggerTypeRaw = body.triggerType;
+        const triggerType =
+          triggerTypeRaw === 'semantic_flag' ||
+          triggerTypeRaw === 'repeat_block' ||
+          triggerTypeRaw === 'swarm_bypass'
+            ? triggerTypeRaw
+            : undefined;
+        const investigation = await investigateIncident({
+          triggerId,
+          triggerType,
+          tenantId: requestTenantId,
+          useLlm: body.useLlm !== false,
+        });
+        if (!investigation) {
+          writeJson(res, 404, { error: 'Trigger record not found' });
+          return;
+        }
+        writeJson(res, 200, investigation);
+        return;
+      }
+
+      if (url === '/api/learning/semantic/active-learning' && method === 'GET') {
+        setCors();
+        const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+        const { buildActiveLearningReport } = await import('../ai/semantic-active-learning.js');
+        const records = await loadSemanticAuditRecordsAsync({
+          tenantId: requestTenantId,
+          sinceMs: 30 * 24 * 60 * 60 * 1000,
+          limit: 500,
+        });
+        writeJson(res, 200, buildActiveLearningReport(records));
+        return;
+      }
+
+      if (url === '/api/learning/semantic/tribunal' && method === 'GET') {
+        setCors();
+        const { buildTribunalReport } = await import('../ai/swarm-debate-tribunal.js');
+        const u = new URL(req.url || url, 'http://localhost');
+        const limit = parseInt(u.searchParams.get('limit') || '3', 10);
+        const report = await buildTribunalReport({
+          tenantId: requestTenantId,
+          limit: Number.isFinite(limit) ? limit : 3,
+          useLlm: u.searchParams.get('useLlm') !== 'false',
+        });
+        writeJson(res, 200, report);
+        return;
+      }
+
+      if (url === '/api/dashboard/agent-abuse' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const fed = await resolveChartContext(requestTenantId, windowDays);
+          const db = fed.db;
+          if (!db) {
+            writeJson(res, 200, unavailable({ scores: [] }, 'No history database'));
+            return;
+          }
+          const { loadAllRecordsInWindow } = await import('./cost-timeseries.js');
+          const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+          const { computeAgentAbuseScores } = await import('./agent-abuse-score.js');
+          const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
+          const semantics = await loadSemanticAuditRecordsAsync({
+            tenantId: requestTenantId,
+            sinceMs: windowDays * 24 * 60 * 60 * 1000,
+            limit: 500,
+          });
+          const scores = computeAgentAbuseScores(records, semantics, { limit: 20 });
+          writeJson(res, 200, available({ scores, windowDays }));
+        } catch {
+          writeJson(res, 200, unavailable({ scores: [] }, 'Failed agent abuse scores'));
+        }
+        return;
+      }
+
+      if (url === '/api/security-swarm/tool-integrity' && method === 'GET') {
+        setCors();
+        const { existsSync, readFileSync } = await import('fs');
+        const { join } = await import('path');
+        const reportPath = join(process.cwd(), 'reports', 'security-swarm', 'tool-watch.json');
+        if (!existsSync(reportPath)) {
+          writeJson(res, 200, { hasData: false, hint: 'Run SWARM_TOOL_WATCH=true pnpm security-swarm' });
+          return;
+        }
+        const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
+        writeJson(res, 200, { hasData: true, ...report });
+        return;
+      }
+
+      if (url === '/api/security-swarm/shadow-red-team' && method === 'GET') {
+        setCors();
+        const { existsSync, readFileSync } = await import('fs');
+        const { join } = await import('path');
+        const reportPath = join(process.cwd(), 'reports', 'security-swarm', 'shadow-red-team.json');
+        if (!existsSync(reportPath)) {
+          writeJson(res, 200, {
+            hasData: false,
+            hint: 'Run pnpm security-swarm:shadow-red-team or SWARM_SHADOW_RED_TEAM=true',
+          });
+          return;
+        }
+        const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
+        writeJson(res, 200, { hasData: true, ...report });
+        return;
+      }
+
+      if (url === '/api/security-swarm/supply-chain' && method === 'GET') {
+        setCors();
+        const { loadToolBaseline } = await import('../ai/shadow-red-team.js');
+        const { buildSupplyChainGraph } = await import('../ai/supply-chain-graph.js');
+        const { loadToolCallCounts } = await import('../ai/supply-chain-loader.js');
+        const baselines = loadToolBaseline();
+        const u = new URL(req.url || url, 'http://localhost');
+        const windowDays = parseInt(u.searchParams.get('window') || '7', 10);
+        const callCounts = await loadToolCallCounts(requestTenantId, Number.isFinite(windowDays) ? windowDays : 7);
+        const graph = buildSupplyChainGraph(baselines, callCounts);
+        writeJson(res, 200, {
+          hasData: baselines.length > 0,
+          graph,
+          callCounts,
+          hint: baselines.length > 0 ? undefined : 'Run SWARM_TOOL_WATCH=true pnpm security-swarm to capture MCP server baselines',
+        });
+        return;
+      }
+
+      if (url === '/api/fleet/signature-hints' && method === 'GET') {
+        setCors();
+        const { buildLocalSignatureExchange } = await import('../utils/federated-signature-exchange.js');
+        const exchange = await buildLocalSignatureExchange();
+        writeJson(res, 200, exchange);
+        return;
+      }
+
+      if (url === '/api/ai/compliance/report' && method === 'GET') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const windowDays = parseInt(u.searchParams.get('window') || '7', 10);
+        const { generateComplianceReport } = await import('../ai/compliance-copilot.js');
+        const report = await generateComplianceReport({
+          tenantId: requestTenantId,
+          windowDays: Number.isFinite(windowDays) ? windowDays : 7,
+          useLlm: u.searchParams.get('useLlm') !== 'false',
+        });
+        writeJson(res, 200, {
+          report,
+          markdown: report.exportFormats.markdown,
+          json: report.exportFormats.json,
+        });
+        return;
+      }
+
+      if (url === '/api/ai/tenant-model/readiness' && method === 'GET') {
+        setCors();
+        const { checkTenantModelReadiness, routeSemanticModelForTenant } = await import('../ai/tenant-semantic-model.js');
+        const readiness = await checkTenantModelReadiness(requestTenantId);
+        const routing = routeSemanticModelForTenant(requestTenantId);
+        writeJson(res, 200, { ...readiness, routing });
+        return;
+      }
+
+      if (url === '/api/ai/tenant-model/train' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const action = body.action === 'train' ? 'train' : 'export';
+        const { exportTenantTrainingDataset } = await import('../ai/tenant-model-export.js');
+        const { checkTenantModelReadiness } = await import('../ai/tenant-semantic-model.js');
+
+        if (action === 'train') {
+          const readiness = await checkTenantModelReadiness(requestTenantId);
+          if (!readiness.ready) {
+            writeJson(res, 400, {
+              error: readiness.message,
+              readiness,
+            });
+            return;
+          }
+          if (process.env.GUARDIAN_DASHBOARD_ALLOW_LORA_TRAIN !== 'true') {
+            writeJson(res, 403, {
+              error: 'Dashboard LoRA train disabled — set GUARDIAN_DASHBOARD_ALLOW_LORA_TRAIN=true on the host',
+              readiness,
+            });
+            return;
+          }
+          const { startTenantTrainJob } = await import('../ai/tenant-model-train-runner.js');
+          const started = startTenantTrainJob(requestTenantId);
+          if (!started.ok) {
+            writeJson(res, started.status ?? 500, {
+              error: started.error,
+              jobId: started.jobId,
+            });
+            return;
+          }
+          writeJson(res, 202, {
+            jobId: started.jobId,
+            status: 'queued',
+            readiness,
+          });
+          return;
+        }
+
+        const exported = await exportTenantTrainingDataset(requestTenantId);
+        writeJson(res, 200, {
+          action: 'export',
+          readiness: exported.readiness,
+          manifest: exported.manifest,
+          exportPath: exported.exportPath,
+          modelfilePath: exported.modelfilePath,
+          manifestPath: exported.manifestPath,
+          rowsExported: exported.rowsExported,
+          fewShotExamples: exported.fewShotExamples,
+          envHint: `GUARDIAN_TENANT_SEMANTIC_MODEL=true GUARDIAN_SEMANTIC_LOCAL_MODEL=${exported.manifest.modelName}`,
+        });
+        return;
+      }
+
+      if (url === '/api/ai/tenant-model/train/status' && method === 'GET') {
+        setCors();
+        const { getTenantTrainJobStatus } = await import('../ai/tenant-model-train-runner.js');
+        writeJson(res, 200, getTenantTrainJobStatus(requestTenantId));
+        return;
+      }
+
+      if (url === '/api/soar/playbooks' && method === 'GET') {
+        setCors();
+        const { loadPlaybooksFromPath, DEFAULT_PLAYBOOKS } = await import('../alerting/soar-playbooks.js');
+        const playbooks = loadPlaybooksFromPath();
+        writeJson(res, 200, {
+          enabled: process.env.GUARDIAN_SOAR_PLAYBOOKS === 'true',
+          playbooks: playbooks.length ? playbooks : DEFAULT_PLAYBOOKS,
+        });
+        return;
+      }
+
+      if (url === '/api/soar/playbooks' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { evaluatePlaybooks, loadPlaybooksFromPath } = await import('../alerting/soar-playbooks.js');
+        const playbooks = loadPlaybooksFromPath();
+        const event = (body.event && typeof body.event === 'object' ? body.event : body) as Record<string, unknown>;
+        const matches = evaluatePlaybooks(event, playbooks);
+        writeJson(res, 200, { matches });
+        return;
+      }
+
       if (url === '/api/admin/tenant' && method === 'GET') {
         setCors();
         const tenantCtx = resolveTenantContext({
@@ -1575,6 +1895,37 @@ export async function startDashboardServer(
           writeJson(res, 200, available(summary));
         } catch {
           writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed executive summary'));
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/dashboard/insights/export') && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const scopeRaw = u.searchParams.get('scope') || 'overview';
+          const scope = (['overview', 'cost', 'security', 'audit', 'ai'].includes(scopeRaw)
+            ? scopeRaw
+            : 'overview') as InsightScope;
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db;
+          if (!db) {
+            writeJson(res, 404, { error: 'No history database' });
+            return;
+          }
+          const { formatInsightsBriefingMarkdown } = await import('./dashboard-insights.js');
+          const insights = await buildDashboardInsights(db, requestTenantId, scope, { windowDays });
+          const markdown = formatInsightsBriefingMarkdown(insights);
+          const filename = `guardian-briefing-${scope}-${windowDays}d.md`;
+          res.writeHead(200, {
+            'Content-Type': 'text/markdown; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          });
+          res.end(markdown);
+        } catch {
+          writeJson(res, 500, { error: 'Failed to export briefing' });
         }
         return;
       }

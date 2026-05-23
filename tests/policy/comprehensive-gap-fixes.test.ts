@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { load } from 'js-yaml';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import type { CallContext, PolicyConfig } from '../../src/policy/policy-types.js';
+import { resetSessionFlowStore } from '../../src/policy/session-flow-store.js';
 import { scanToolCallArguments } from '../../src/scanners/prompt-injection-detector.js';
 import { deobfuscateRecursive } from '../../src/utils/payload-normalizer.js';
 
@@ -36,6 +37,7 @@ describe('Comprehensive gap fixes (uploaded analysis)', () => {
   let engine: PolicyEngine;
 
   beforeEach(() => {
+    resetSessionFlowStore();
     engine = new PolicyEngine(defaultPolicy);
   });
 
@@ -149,6 +151,7 @@ describe('Comprehensive gap fixes (uploaded analysis)', () => {
   });
 
   it('enforces token budget against UTF-8 inflation', () => {
+    resetSessionFlowStore();
     const inflated = 'A'.repeat(50) + '\u{1F600}'.repeat(200);
     const isolated = new PolicyEngine({
       version: '1.0',

@@ -38,6 +38,16 @@ describe('dashboard-spa', () => {
     expect(apiSrc).toMatch(/base \? `\$\{base\}\$\{normalized\}` : normalized/);
   });
 
+  it('includes Enterprise AI panel for Tier 1/2 features', () => {
+    const enterprise = join(SPA_ROOT, 'app', 'components', 'EnterpriseAiPanel.tsx');
+    const lora = join(SPA_ROOT, 'app', 'components', 'TenantLoraPanel.tsx');
+    expect(existsSync(enterprise)).toBe(true);
+    expect(existsSync(lora)).toBe(true);
+    const client = readFileSync(join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx'), 'utf-8');
+    expect(client).toContain("'enterprise-ai'");
+    expect(client).toContain('EnterpriseAiPanel');
+  });
+
   it('keeps legacy static fallback when Next export is not built', () => {
     const legacyIndex = join(SPA_ROOT, 'index.html');
     const legacyJs = join(SPA_ROOT, 'app.js');

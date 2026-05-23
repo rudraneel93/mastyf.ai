@@ -78,7 +78,7 @@ export class ProLicenseRequiredError extends Error {
 /** CLI entry: node dist/license/check-pro.js <feature> */
 export async function runCheckProCli(argv: string[] = process.argv.slice(2)): Promise<number> {
   const feature = argv[0] || 'swarm';
-  if (isCiLicenseBypass()) return 0;
+  if (isCiLicenseBypass() || isDevUnlockAllowed()) return 0;
 
   const cfg = loadLicenseClientConfig();
   if (!cfg.licenseKey || !cfg.controlPlaneUrl) {

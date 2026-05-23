@@ -1,0 +1,28 @@
+{
+  "playbooks": [
+    {
+      "name": "high-confidence-semantic-run",
+      "when": [
+        { "field": "event", "op": "eq", "value": "semantic_flag" },
+        { "field": "confidence", "op": "gte", "value": 0.9 },
+        { "field": "toolName", "op": "contains", "value": "run" }
+      ],
+      "actions": [
+        { "type": "notify", "severity": "high", "message": "High-confidence semantic flag on run tool" },
+        { "type": "open_threat_lab" },
+        { "type": "suggest_policy_block" }
+      ]
+    },
+    {
+      "name": "tool-integrity-critical",
+      "when": [
+        { "field": "event", "op": "eq", "value": "tool_integrity" },
+        { "field": "severity", "op": "eq", "value": "critical" }
+      ],
+      "actions": [
+        { "type": "notify", "severity": "critical", "message": "Tool integrity critical — possible rug pull" },
+        { "type": "pagerduty" }
+      ]
+    }
+  ]
+}

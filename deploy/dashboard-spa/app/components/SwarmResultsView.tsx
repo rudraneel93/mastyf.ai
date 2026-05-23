@@ -11,6 +11,7 @@ import {
   fetchTrafficSummary,
   fetchUserServersSession,
   fetchThreatLabCandidates,
+  fetchToolIntegrityReport,
   fetchAutoCorpusManifest,
   type PlainEnglishReport,
   type SwarmFigureEntry,
@@ -53,6 +54,7 @@ export function SwarmResultsView({
   const [userServers, setUserServers] = useState<Record<string, unknown> | null>(null);
   const [threatLabCandidates, setThreatLabCandidates] = useState<ThreatLabCandidate[]>([]);
   const [autoCorpusEntries, setAutoCorpusEntries] = useState<AutoCorpusEntry[]>([]);
+  const [toolIntegrity, setToolIntegrity] = useState<Record<string, unknown> | null>(null);
   const [showFullReport, setShowFullReport] = useState(false);
   const [loadError, setLoadError] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
@@ -61,7 +63,7 @@ export function SwarmResultsView({
     setLoading(true);
     setLoadError('');
     try {
-      const [r, l, f, s, pr, tr, us, tl, ac] = await Promise.all([
+      const [r, l, f, s, pr, tr, us, tl, ac, tw] = await Promise.all([
         showReport ? fetchSwarmReportPreview() : Promise.resolve(''),
         fetchSwarmLatest(),
         fetchSwarmFigures(),
@@ -71,6 +73,7 @@ export function SwarmResultsView({
         fetchUserServersSession(),
         fetchThreatLabCandidates(),
         fetchAutoCorpusManifest(),
+        fetchToolIntegrityReport(),
       ]);
       setReport(r || '');
       setLatest(l);
@@ -81,6 +84,7 @@ export function SwarmResultsView({
       setUserServers(us);
       setThreatLabCandidates(tl);
       setAutoCorpusEntries(ac);
+      setToolIntegrity(tw);
       if (!pr && !l && !f.length && !s && !r) {
         setLoadError(
           'No batch artifacts for this dashboard session. Run Security Swarm from Agent flow — committed CI reports are hidden until then.',
@@ -281,6 +285,20 @@ export function SwarmResultsView({
       {!loading && summaryMd && !hasPlainReport ? (
         <pre className="code-block md-preview">{summaryMd}</pre>
       ) : null}
+
+      {toolIntegrity?.hasData ? (
+        <details className="tool-integrity-panel">
+          <summary>Tool integrity (ToolWatch)</summary>
+          <p className="hint">
+            {(toolIntegrity.summary as { serversChanged?: number })?.serversChanged ?? 0} server(s) changed ·{' '}
+            {(toolIntegrity.summary as { criticalCount?: number })?.criticalCount ?? 0} critical diff(s)
+          </p>
+        </details>
+      ) : null}
+
+      <p className="hint enterprise-ai-link-hint">
+        Supply chain graph, shadow red team, and federated signature hints → <strong>Enterprise AI</strong> tab.
+      </p>
     </section>
   );
 }

@@ -10,6 +10,7 @@ import {
   recordSensitiveResponseAccess,
   resetSessionFlowStore,
 } from './session-flow-store.js';
+import { snapshotAuditArguments } from '../utils/audit-args-snapshot.js';
 
 export { recordSensitiveResponseAccess, resetSessionFlowStore as resetSessionFlowHistory };
 
@@ -100,6 +101,7 @@ export function recordSessionToolCall(ctx: CallContext): void {
     sensitiveRead,
     dataAccess,
     at: Date.now(),
+    argumentsSnapshot: snapshotAuditArguments(ctx.arguments),
   });
 }
 

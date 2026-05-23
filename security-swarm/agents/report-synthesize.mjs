@@ -182,14 +182,23 @@ export function synthesizeReport(input) {
     (parity.agreementRate ?? 0) >= (gates.parity?.minOverallAgreementRate ?? 0.97);
   const stepsOk = steps.every((s) => s.ok !== false);
 
+  const harnessReport = load(join(REPO, 'adversarial-harness', 'reports', 'test_harness_report.json'));
+
   const bypasses = [];
   if (parity?.mismatches) {
     for (const m of parity.mismatches) {
       if (m.node === 'allow' || m.python === 'block') bypasses.push(m);
     }
   }
-  if (harness?.comprehensive?.failures) {
-    for (const f of harness.comprehensive.failures) {
+  // Fast mode runs parity batch (Node+Python) but not full harness orchestrator — avoid stale comprehensive-eval.json.
+  if (mode !== 'fast') {
+    if (harness?.comprehensive?.failures) {
+      for (const f of harness.comprehensive.failures) {
+        if (f.expected === 'block') bypasses.push(f);
+      }
+    }
+  } else if (Array.isArray(harnessReport?.policyEngine?.failures)) {
+    for (const f of harnessReport.policyEngine.failures) {
       if (f.expected === 'block') bypasses.push(f);
     }
   }

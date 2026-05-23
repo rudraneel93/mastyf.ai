@@ -153,7 +153,18 @@ export function runEnterpriseSecurityPreflight(): void {
 export async function bootstrapControlPlane(
   policyWatcher?: PolicyWatcher | null,
 ): Promise<void> {
-  startInstanceRegistry();
+  startInstanceRegistry(async () => {
+    const { collectHeartbeatThreatSignatures } = await import('../utils/fleet-threat-signatures.js');
+    const { collectFederatedThreatStats } = await import('../utils/federated-threat-radar.js');
+    const [threatSignatures, federatedStats] = await Promise.all([
+      collectHeartbeatThreatSignatures().catch(() => []),
+      collectFederatedThreatStats().catch(() => null),
+    ]);
+    return {
+      threatSignatures,
+      ...(federatedStats ? { federatedStats } : {}),
+    };
+  });
   const tenantSlug = process.env['GUARDIAN_TENANT_ID'] || 'default';
   startPolicySubscriber(tenantSlug, policyWatcher ?? null);
 }

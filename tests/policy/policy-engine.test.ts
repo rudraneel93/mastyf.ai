@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import { PolicyConfig, CallContext } from '../../src/policy/policy-types.js';
+import { resetSessionFlowStore } from '../../src/policy/session-flow-store.js';
 
 const testPolicy: PolicyConfig = {
   version: '1.0',
@@ -49,6 +50,7 @@ describe('PolicyEngine', () => {
   let engine: PolicyEngine;
 
   beforeEach(() => {
+    resetSessionFlowStore();
     engine = new PolicyEngine(testPolicy);
   });
 

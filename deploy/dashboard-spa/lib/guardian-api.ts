@@ -134,11 +134,13 @@ export type DashboardInsightsResponse = {
   available?: boolean;
   scope?: string;
   generatedAt?: string;
+  windowDays?: number;
   source?: 'measured' | 'llm' | 'deterministic';
   provider?: string;
   model?: string;
   bullets?: string[];
   narrative?: string;
+  citations?: Array<{ id: string; text: string }>;
   error?: string;
 };
 
@@ -644,6 +646,21 @@ export async function fetchDashboardInsights(
   return body;
 }
 
+export async function downloadInsightsBriefing(
+  scope: 'overview' | 'cost' | 'security' | 'audit' | 'ai',
+  windowDays = 7,
+): Promise<void> {
+  const res = await guardianFetch(`/api/dashboard/insights/export?scope=${scope}&window=${windowDays}`);
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `guardian-briefing-${scope}-${windowDays}d.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function fetchAuditHeatmap(windowDays = 7, region?: string): Promise<AuditHeatmapResponse | null> {
   const res = await guardianFetch(`/api/audit/heatmap?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) return null;
@@ -707,6 +724,180 @@ export async function testPolicy(payload: {
   });
   if (!res.ok) return null;
   return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchPolicyCopilot(goal: string, availableTools?: string[]): Promise<Record<string, unknown> | null> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/policy/copilot', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ goal, availableTools }),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchPolicyCounterfactual(
+  rule?: Record<string, unknown>,
+  windowDays = 14,
+): Promise<Record<string, unknown> | null> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/policy/copilot/counterfactual', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ rule, windowDays }),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchActiveLearningReport(): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch('/api/learning/semantic/active-learning');
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchAgentAbuseScores(windowDays = 7): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch(`/api/dashboard/agent-abuse?window=${windowDays}`);
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchToolIntegrityReport(): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch('/api/security-swarm/tool-integrity');
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchShadowRedTeamReport(): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch('/api/security-swarm/shadow-red-team');
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchSupplyChainGraph(): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch('/api/security-swarm/supply-chain');
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchSignatureHints(): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch('/api/fleet/signature-hints');
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchTribunalReport(limit = 3): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch(`/api/learning/semantic/tribunal?limit=${limit}&useLlm=false`);
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchComplianceReport(windowDays = 7): Promise<Record<string, unknown> | null> {
+  const res = await guardianFetch(`/api/ai/compliance/report?window=${windowDays}&useLlm=false`);
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export async function fetchTenantModelReadiness(): Promise<TenantModelReadinessResponse | null> {
+  const res = await guardianFetch('/api/ai/tenant-model/readiness');
+  if (!res.ok) return null;
+  return (await res.json()) as TenantModelReadinessResponse;
+}
+
+export type TenantModelReadinessResponse = {
+  tenantId: string;
+  ready: boolean;
+  labeledCount: number;
+  minRequired: number;
+  modelName: string;
+  exportPath: string;
+  message: string;
+  routing?: { model: string | null; source: 'explicit' | 'tenant' | 'default' };
+};
+
+export type TenantModelExportResponse = {
+  action: 'export';
+  readiness: TenantModelReadinessResponse;
+  manifest: { modelName: string; rowCount: number; ollamaCreateHint: string };
+  exportPath: string;
+  modelfilePath: string;
+  manifestPath: string;
+  rowsExported: number;
+  fewShotExamples: number;
+  envHint: string;
+};
+
+export type TenantModelTrainJobResponse = {
+  jobId: string;
+  status: string;
+  readiness?: TenantModelReadinessResponse;
+  error?: string;
+};
+
+export type TenantModelTrainStatus = {
+  jobId: string;
+  tenantId: string;
+  state: 'idle' | 'running' | 'done' | 'failed';
+  startedAt: string | null;
+  finishedAt: string | null;
+  exitCode: number | null;
+  error: string | null;
+  logTail: string;
+};
+
+export async function fetchTenantModelTrain(
+  action: 'export' | 'train',
+): Promise<TenantModelExportResponse | TenantModelTrainJobResponse | null> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/ai/tenant-model/train', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error || `Train API failed (${res.status})`);
+  }
+  return (await res.json()) as TenantModelExportResponse | TenantModelTrainJobResponse;
+}
+
+export async function fetchTenantModelTrainStatus(): Promise<TenantModelTrainStatus | null> {
+  const res = await guardianFetch('/api/ai/tenant-model/train/status');
+  if (!res.ok) return null;
+  return (await res.json()) as TenantModelTrainStatus;
+}
+
+export type InvestigateIncidentResult = {
+  investigation: Record<string, unknown> | null;
+  error?: string;
+};
+
+export async function investigateIncident(triggerId: string): Promise<InvestigateIncidentResult> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/incidents/investigate', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ triggerId, useLlm: false }),
+  });
+  if (!res.ok) {
+    let message = `Investigation request failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error === 'Not found') {
+        message =
+          'Incident API is unavailable on this dashboard host. Restart the Guardian proxy after `pnpm build` so it loads the latest dashboard routes.';
+      } else if (body.error === 'Trigger record not found') {
+        message = 'Semantic audit record not found — it may have aged out of the 7-day window.';
+      } else if (body.error) {
+        message = body.error;
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+    return { investigation: null, error: message };
+  }
+  return { investigation: (await res.json()) as Record<string, unknown> };
 }
 
 export async function acceptSuggestion(suggestion: AiSuggestion): Promise<boolean> {

@@ -36,6 +36,29 @@ npm install -g @mcp-guardian/server
 
 See [README.md](../README.md) for proxy, dashboard, and policy setup.
 
+### React dashboard (required for Enterprise AI tab)
+
+The full dashboard UI (Enterprise AI, LoRA, supply chain, tribunal, compliance) ships as a Next.js static export. After install or upgrade, build once before starting the dashboard:
+
+```bash
+pnpm dashboard:build
+pnpm dashboard:serve   # or DASHBOARD_ENABLED=true on the proxy
+```
+
+Without `deploy/dashboard-spa/out/`, the server falls back to a legacy static shell with only basic metrics.
+
+After upgrading, **restart the Guardian proxy** (`pnpm build` then restart) so new dashboard API routes (e.g. `/api/incidents/investigate`) are registered.
+
+### Local Security Swarm (maintainer, no license key)
+
+```bash
+pnpm build
+NODE_ENV=development GUARDIAN_DEV_UNLOCK_ALL=true SWARM_TOOL_WATCH=true pnpm security-swarm:fast
+# or: GUARDIAN_CI_BYPASS_LICENSE=true pnpm security-swarm
+```
+
+Production / buyers: set `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` instead ([activate below](#activate-your-license)).
+
 ## LLM prerequisites
 
 Several Pro features — **Threat Lab**, **Threat Discovery**, **Auto Threat Research**, and **semantic async audit** — call an LLM at runtime. They are designed around **local Ollama + Qwen** by default. **Neither Ollama nor model weights are installed by `npm install` or `git clone`**; you must set them up on the host yourself.

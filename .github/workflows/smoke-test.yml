@@ -45,6 +45,8 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
+      - name: Build React dashboard static export
+        run: pnpm dashboard:build
       - name: Run full test suite
         run: pnpm test
       - name: Enterprise preflight (Redis + Postgres)

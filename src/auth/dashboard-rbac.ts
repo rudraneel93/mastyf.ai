@@ -105,6 +105,23 @@ export function permissionForRoute(method: string, url: string): DashboardRouteP
   }
   if (path === '/api/logs') return m === 'GET' ? 'export' : null;
   if (path === '/api/policy/test') return m === 'POST' ? 'policy_test' : null;
+  if (path === '/api/policy/copilot') return m === 'POST' ? 'policy_test' : null;
+  if (path === '/api/policy/copilot/replay') return m === 'POST' ? 'policy_test' : null;
+  if (path === '/api/policy/copilot/counterfactual') return m === 'POST' ? 'policy_test' : null;
+  if (path === '/api/incidents/investigate') return m === 'POST' ? 'ai' : null;
+  if (path === '/api/learning/semantic/active-learning') return m === 'GET' ? 'ai' : null;
+  if (path === '/api/learning/semantic/tribunal') return m === 'GET' ? 'ai' : null;
+  if (path.startsWith('/api/dashboard/insights')) return m === 'GET' ? 'read' : null;
+  if (path === '/api/dashboard/agent-abuse') return m === 'GET' ? 'read' : null;
+  if (path === '/api/security-swarm/tool-integrity') return m === 'GET' ? 'read' : null;
+  if (path === '/api/security-swarm/shadow-red-team') return m === 'GET' ? 'read' : null;
+  if (path === '/api/security-swarm/supply-chain') return m === 'GET' ? 'read' : null;
+  if (path === '/api/fleet/signature-hints') return m === 'GET' ? 'read' : null;
+  if (path === '/api/ai/compliance/report') return m === 'GET' ? 'ai' : null;
+  if (path === '/api/ai/tenant-model/readiness') return m === 'GET' ? 'ai' : null;
+  if (path === '/api/ai/tenant-model/train') return m === 'POST' ? 'ai' : null;
+  if (path === '/api/ai/tenant-model/train/status') return m === 'GET' ? 'ai' : null;
+  if (path === '/api/soar/playbooks') return m === 'GET' ? 'ai' : m === 'POST' ? 'ai' : null;
   if (path === '/api/policy/reload' || path.startsWith('/api/policy/suggestions/')) {
     return m === 'POST' ? 'policy_mutate' : m === 'GET' ? 'read' : null;
   }

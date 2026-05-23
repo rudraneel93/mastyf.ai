@@ -31,8 +31,9 @@ import {
 } from './semantic-llm-rate-limit.js';
 import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
-import { getLicenseClient } from '../license/license-client.js';
+import { routeSemanticModelForTenant } from './tenant-semantic-model.js';
 import { isOpenCoreEnabled } from '../license/feature-tiers.js';
+import { getLicenseClient } from '../license/license-client.js';
 import {
   getEstimatedSemanticCostUsd,
   isTenantDailyBudgetExceeded,
@@ -91,7 +92,8 @@ const semanticAuditQueueDepth = new Gauge({
 const queue: SemanticAuditJob[] = [];
 let processing = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let llm: LlmAssistant | null = null;
+
+let llmByModel = new Map<string, LlmAssistant>();
 let stats = { processed: 0, flagged: 0, dropped: 0 };
 
 export function isSemanticAsyncEnabled(tenantId?: string): boolean {
@@ -104,7 +106,7 @@ export function resetSemanticAuditStateForTests(): void {
   processing = false;
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = null;
-  llm = null;
+  llmByModel.clear();
   stats = { processed: 0, flagged: 0, dropped: 0 };
   semanticAuditQueueDepth.set(0);
 }
@@ -139,6 +141,7 @@ async function persistSemanticAudit(
       model: meta?.model,
       durationMs: meta?.durationMs,
       timestamp: job.timestamp,
+      argumentsSnapshot: (await import('../utils/audit-args-snapshot.js')).snapshotAuditArguments(job.arguments),
     });
   } catch (err) {
     Logger.debug(
@@ -164,9 +167,14 @@ export async function flushSemanticAuditQueue(maxWaitMs = 15000): Promise<Semant
   return getSemanticAuditStats();
 }
 
-function getLlm(): LlmAssistant {
-  if (!llm) llm = new LlmAssistant();
-  return llm;
+function getLlm(tenantId?: string): LlmAssistant {
+  const routing = routeSemanticModelForTenant(tenantId);
+  const modelKey = routing.model || getLlmConfig().model;
+  const cached = llmByModel.get(modelKey);
+  if (cached) return cached;
+  const assistant = new LlmAssistant(routing.model ? { model: routing.model } : undefined);
+  llmByModel.set(modelKey, assistant);
+  return assistant;
 }
 
 /** Enqueue async semantic audit (debounced batch drain). Never blocks the caller. */
@@ -186,7 +194,7 @@ export function enqueueSemanticAudit(job: SemanticAuditJob): void {
     return;
   }
 
-  if (!getLlm().isAvailable() || !isSemanticLlmConfigured()) {
+  if (!getLlm(job.tenantId).isAvailable() || !isSemanticLlmConfigured()) {
     if (isLocalSemanticEnabled(job.tenantId)) {
       void runLocalSemanticAudit(job);
       return;
@@ -362,7 +370,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     try {
       response = await withSemanticTimeout(
         'async_semantic_audit',
-        () => getLlm().generate(systemPrompt, userPrompt),
+        () => getLlm(job.tenantId).generate(systemPrompt, userPrompt),
         null,
       );
       if (response?.text) {
@@ -439,6 +447,19 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       void import('./threat-research-pipeline.js').then(({ buildSemanticFlagEvent, enqueueThreatResearch }) => {
         enqueueThreatResearch(buildSemanticFlagEvent(stored));
       });
+      if (result.suspicious) {
+        void import('../alerting/soar-playbooks.js').then(({ runSoarPlaybooks }) =>
+          runSoarPlaybooks({
+            event: 'semantic_flag',
+            toolName: job.toolName,
+            serverName: job.serverName,
+            confidence: result.confidence,
+            categories: result.categories,
+            requestId: job.requestId,
+            id: stored.id,
+          }),
+        );
+      }
     });
   });
   broadcastSemanticComplete(job, result);

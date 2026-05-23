@@ -300,6 +300,30 @@ if (!latest.overall && existsSync(join(OUT_DIR, 'bypasses.json'))) {
   }
 }
 
+if (process.env.SWARM_TOOL_WATCH === 'true') {
+  run('node', ['security-swarm/agents/tool-watch.mjs'], {
+    label: 'tool-watch',
+    totalSteps: totalSteps + 1,
+    allowFail: true,
+  });
+}
+
+if (process.env.SWARM_SHADOW_RED_TEAM === 'true') {
+  run('node', ['security-swarm/agents/shadow-red-team.mjs'], {
+    label: 'shadow-red-team',
+    totalSteps: totalSteps + 1,
+    allowFail: true,
+  });
+}
+
+if (process.env.SWARM_RED_TEAM_PERSONAS === 'true') {
+  run('node', ['security-swarm/agents/red-team-personas.mjs'], {
+    label: 'red-team-personas',
+    totalSteps: totalSteps + 1,
+    allowFail: true,
+  });
+}
+
 if (process.env.SWARM_THREAT_LAB === 'true') {
   run('node', ['security-swarm/agents/threat-lab.mjs'], {
     label: 'threat-lab',

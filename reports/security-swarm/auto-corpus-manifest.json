@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-05-23T13:40:36.602Z",
-  "count": 7,
+  "timestamp": "2026-05-23T22:23:54.287Z",
+  "count": 9,
   "entries": [
     {
       "advId": "adv-130",
@@ -99,6 +99,34 @@
       "timestamp": "2026-05-23T13:40:36.602Z",
       "toolName": "read_file",
       "category": "credential-exfil"
+    },
+    {
+      "advId": "adv-188",
+      "relPath": "adversarial-harness/fixtures/custom-attacks/adv-188.json",
+      "fingerprint": "b390bd4a684dcace",
+      "source": "semantic_flag",
+      "inputFingerprint": "semantic:1779571816787-rhif2gf",
+      "llmUsed": true,
+      "attackClass": "semantic-prompt-injection",
+      "hypothesis": "An attacker can inject semantically crafted prompts to bypass path-traversal checks by leveraging ambiguous file access patterns.",
+      "confidence": 0.95,
+      "timestamp": "2026-05-23T22:23:41.149Z",
+      "toolName": "read_file",
+      "category": "prompt-injection"
+    },
+    {
+      "advId": "adv-189",
+      "relPath": "adversarial-harness/fixtures/custom-attacks/adv-189.json",
+      "fingerprint": "24bf9a74c7253ca8",
+      "source": "semantic_flag",
+      "inputFingerprint": "semantic:1779571831212-nh1i68x",
+      "llmUsed": true,
+      "attackClass": "semantic-prompt-injection",
+      "hypothesis": "An attacker can inject semantically crafted prompts to bypass existing path-traversal detection mechanisms.",
+      "confidence": 0.95,
+      "timestamp": "2026-05-23T22:23:54.286Z",
+      "toolName": "read_file",
+      "category": "prompt-injection"
     }
   ]
 }

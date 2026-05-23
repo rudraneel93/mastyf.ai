@@ -25,6 +25,8 @@ export interface StoredSemanticAudit {
   label?: 'true_positive' | 'false_positive' | 'ignored';
   labelUserId?: string;
   labelAt?: string;
+  /** Redacted tool arguments for counterfactual replay (no secrets). */
+  argumentsSnapshot?: Record<string, unknown>;
 }
 
 const MAX_RECORDS = parseInt(process.env.GUARDIAN_SEMANTIC_STORE_MAX || '5000', 10);

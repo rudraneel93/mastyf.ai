@@ -58,5 +58,44 @@ export async function POST(request: Request) {
       last_heartbeat = NOW()
   `);
 
-  return NextResponse.json({ ok: true, instanceId: body.instanceId });
+  const rawSigs = body.metrics?.threatSignatures;
+  if (Array.isArray(rawSigs) && rawSigs.length > 0) {
+    const { upsertFleetThreatSignatures } = await import('@/lib/fleet-threat-graph');
+    const signatures = rawSigs
+      .filter((s): s is Record<string, unknown> => s && typeof s === 'object')
+      .map((s) => ({
+        signatureId: String(s.signatureId || ''),
+        rule: String(s.rule || 'unknown'),
+        tool: String(s.tool || 'unknown'),
+        category: String(s.category || 'unknown'),
+        argShapeHash: String(s.argShapeHash || ''),
+        count: Number(s.count) || 1,
+        lastSeen: String(s.lastSeen || new Date().toISOString()),
+      }))
+      .filter((s) => s.signatureId);
+    if (signatures.length) {
+      await upsertFleetThreatSignatures(ctx.org.id, body.instanceId, body.region, signatures);
+    }
+  }
+
+  const rawFed = body.metrics?.federatedStats;
+  if (rawFed && typeof rawFed === 'object' && !Array.isArray(rawFed)) {
+    const fed = rawFed as Record<string, unknown>;
+    if (fed.optIn === true) {
+      const { upsertFederatedThreatStats } = await import('@/lib/federated-threat-radar');
+      await upsertFederatedThreatStats(ctx.org.id, body.instanceId, {
+        tenantId: String(fed.tenantId || 'default'),
+        region: body.region,
+        attackClassCounts: (fed.attackClassCounts as Record<string, number>) || {},
+        ruleEfficacy: (fed.ruleEfficacy as Array<{ rule: string; blocks: number }>) || [],
+        thresholdRecommendation: (fed.thresholdRecommendation as Record<string, unknown>) || {},
+      });
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    instanceId: body.instanceId,
+    signatureHintCount: Array.isArray(rawSigs) ? rawSigs.length : 0,
+  });
 }

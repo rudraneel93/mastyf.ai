@@ -32,4 +32,4 @@ fi
 
 echo "Running cloud migrations..."
 pnpm cloud:migrate
-echo "Migrations complete. Fleet heartbeat table: guardian_fleet_instances (007_fleet_instances.sql)"
+echo "Migrations complete. Includes: 007_fleet_instances, 008_fleet_threat_signatures, 009_federated_threat_stats"

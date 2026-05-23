@@ -1,5 +1,5 @@
 /**
- * Dashboard measured insights for enterprise panels (strict live — no LLM, no extrapolation).
+ * Dashboard insights for enterprise panels — measured by default; opt-in LLM with strict RAG citations.
  */
 import type { IDatabase } from '../database/database-interface.js';
 import { buildExecutiveSummary, type ExecutiveSummary } from './dashboard-executive-summary.js';
@@ -7,8 +7,15 @@ import { buildAuditHeatmap } from './audit-heatmap.js';
 import { loadAllRecordsInWindow } from './cost-timeseries.js';
 import { isStrictLiveDashboard } from './swarm-session.js';
 import { parseWindowDays } from './time-buckets.js';
+import { LlmAssistant } from '../ai/llm-assistant.js';
+import { Logger } from './logger.js';
 
 export type InsightScope = 'overview' | 'cost' | 'security' | 'audit' | 'ai';
+
+export type InsightCitation = {
+  id: string;
+  text: string;
+};
 
 export type DashboardInsightsPayload = {
   scope: InsightScope;
@@ -19,6 +26,7 @@ export type DashboardInsightsPayload = {
   model?: string;
   bullets: string[];
   narrative?: string;
+  citations?: InsightCitation[];
 };
 
 function measuredOverview(summary: ExecutiveSummary): string[] {
@@ -134,6 +142,72 @@ function hasMeasuredDataForScope(
   }
 }
 
+function isInsightsLlmEnabled(): boolean {
+  return process.env.GUARDIAN_INSIGHTS_LLM === 'true';
+}
+
+function buildRagCorpus(
+  scope: InsightScope,
+  summary: ExecutiveSummary,
+  bullets: string[],
+  heatmapTop?: { rule: string; tool: string; count: number },
+): InsightCitation[] {
+  const citations: InsightCitation[] = [];
+  citations.push({
+    id: 'exec:totalRequests',
+    text: `${summary.totalRequests} total proxy calls (${summary.passRatePct}% pass rate)`,
+  });
+  if (summary.totalCostUsd > 0) {
+    citations.push({
+      id: 'exec:totalCostUsd',
+      text: `$${summary.totalCostUsd.toFixed(4)} measured spend`,
+    });
+  }
+  if (summary.blockedRequests > 0) {
+    citations.push({
+      id: 'exec:blockedRequests',
+      text: `${summary.blockedRequests} blocked requests`,
+    });
+  }
+  if (heatmapTop) {
+    citations.push({
+      id: 'audit:heatmapTop',
+      text: `Top block: ${heatmapTop.rule} on ${heatmapTop.tool} (${heatmapTop.count}×)`,
+    });
+  }
+  bullets.forEach((b, i) => {
+    citations.push({ id: `bullet:${scope}:${i}`, text: b });
+  });
+  return citations;
+}
+
+function validateLlmCitations(narrative: string, citations: InsightCitation[]): boolean {
+  const ids = citations.map((c) => c.id);
+  return ids.some((id) => narrative.includes(`[${id}]`) || narrative.includes(id));
+}
+
+async function buildLlmNarrative(
+  scope: InsightScope,
+  citations: InsightCitation[],
+): Promise<{ narrative: string; provider: string; model: string } | null> {
+  const llm = new LlmAssistant({ hotPath: false });
+  if (!llm.isAvailable()) return null;
+  const healthy = await llm.healthCheck();
+  if (!healthy) return null;
+
+  const corpus = citations.map((c) => `[${c.id}] ${c.text}`).join('\n');
+  const result = await llm.generate(
+    `You write board-ready MCP security briefings. Use ONLY the cited facts below. Every sentence must include at least one citation ID in brackets like [exec:totalRequests]. No invented statistics.`,
+    `Scope: ${scope}\n\nFacts:\n${corpus}\n\nWrite 2-3 sentences for executives:`,
+  );
+  if (!result?.text) return null;
+  if (!validateLlmCitations(result.text, citations)) {
+    Logger.debug('[dashboard-insights] LLM narrative rejected — missing citation IDs');
+    return null;
+  }
+  return { narrative: result.text, provider: 'ollama', model: result.model };
+}
+
 export async function buildDashboardInsights(
   db: IDatabase,
   tenantId: string | undefined,
@@ -175,6 +249,25 @@ export async function buildDashboardInsights(
     bullets: [],
   };
 
+  const ragCitations = buildRagCorpus(scope, summary, bullets, heatmapTop);
+
+  if (isInsightsLlmEnabled() && bullets.length > 0) {
+    const llmResult = await buildLlmNarrative(scope, ragCitations);
+    if (llmResult) {
+      return {
+        scope,
+        generatedAt: new Date().toISOString(),
+        windowDays,
+        source: 'llm',
+        provider: llmResult.provider,
+        model: llmResult.model,
+        bullets,
+        narrative: llmResult.narrative,
+        citations: ragCitations,
+      };
+    }
+  }
+
   if (isStrictLiveDashboard()) {
     if (!hasMeasuredDataForScope(scope, summary, securityScore, activeThreats, auditBlocked, auditTotal)) {
       return emptyPayload;
@@ -185,17 +278,50 @@ export async function buildDashboardInsights(
       windowDays,
       source: 'measured',
       bullets,
+      citations: ragCitations.length ? ragCitations : undefined,
     };
   }
 
-  // Non-strict legacy path: deterministic templates (no LLM).
   return {
     scope,
     generatedAt: new Date().toISOString(),
     windowDays,
     source: 'deterministic',
     bullets: bullets.length ? bullets : ['No measured proxy traffic yet.'],
+    citations: ragCitations.length ? ragCitations : undefined,
   };
+}
+
+/** Markdown briefing for compliance export (PDF via browser print or attachment download). */
+export function formatInsightsBriefingMarkdown(payload: DashboardInsightsPayload): string {
+  const lines: string[] = [
+    '# MCP Guardian Executive Briefing',
+    '',
+    `- **Scope:** ${payload.scope}`,
+    `- **Generated:** ${payload.generatedAt}`,
+    `- **Source:** ${payload.source}${payload.model ? ` (${payload.model})` : ''}`,
+  ];
+  if (payload.windowDays != null) lines.push(`- **Window:** ${payload.windowDays} days`);
+  lines.push('');
+
+  if (payload.narrative) {
+    lines.push('## Narrative', '', payload.narrative, '');
+  }
+
+  if (payload.bullets.length) {
+    lines.push('## Key metrics', '');
+    for (const b of payload.bullets) lines.push(`- ${b}`);
+    lines.push('');
+  }
+
+  if (payload.citations?.length) {
+    lines.push('## Citations (RAG corpus)', '');
+    for (const c of payload.citations) lines.push(`- [${c.id}] ${c.text}`);
+    lines.push('');
+  }
+
+  lines.push('---', '_Generated by MCP Guardian — measured aggregates only._');
+  return lines.join('\n');
 }
 
 export function buildDeterministicInsightsOnly(

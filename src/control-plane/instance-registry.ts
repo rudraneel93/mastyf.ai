@@ -3,11 +3,14 @@
  */
 import { getGuardianRegion } from '../utils/region.js';
 import { Logger } from '../utils/logger.js';
+import type { ThreatSignature } from '../utils/fleet-threat-signatures.js';
 
 export type HeartbeatMetrics = {
   totalRequests?: number;
   blockedRequests?: number;
   totalCostUsd?: number;
+  threatSignatures?: ThreatSignature[];
+  federatedStats?: Record<string, unknown>;
 };
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -31,6 +34,15 @@ export async function sendInstanceHeartbeat(metrics?: HeartbeatMetrics): Promise
   const base = controlPlaneUrl();
   const apiKey = cloudApiKey();
   if (!base || !apiKey) return false;
+
+  if (process.env.GUARDIAN_FEDERATED_LEARNING === 'true') {
+    try {
+      const { syncFleetSignatureHintsFromCloud } = await import('../utils/federated-signature-exchange.js');
+      await syncFleetSignatureHintsFromCloud();
+    } catch {
+      /* best-effort */
+    }
+  }
 
   const payload = {
     instanceId: process.env['GUARDIAN_INSTANCE_ID'] || `guardian-${process.pid}`,

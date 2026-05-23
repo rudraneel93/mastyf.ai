@@ -2,6 +2,26 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.2.2] - 2026-05-24
+
+### Added
+
+- **Enterprise AI dashboard tab** — LoRA export/train, supply chain graph, shadow red team, federated signature hints, swarm tribunal, compliance briefing, semantic audit table, and **Incident Investigator** drawer (`POST /api/incidents/investigate`).
+- **Threat-intel policy guard** — `threat-intel` strategy + `config/threat-intel-signatures.json`; blocks Threat Lab / CVE probes on allowlisted tools (Node + Python harness parity).
+- **Tier 1/2 AI modules** — Policy copilot, counterfactual replay, shadow red team, supply chain graph, swarm debate tribunal, compliance copilot, tenant LoRA pipeline (`tenant-model-export`, async train API), semantic active learning, tool integrity watch, SOAR playbooks, session chain detector, federated threat radar.
+- **Security swarm agents** — Optional `SWARM_TOOL_WATCH`, `SWARM_SHADOW_RED_TEAM`, `SWARM_RED_TEAM_PERSONAS` phases; dashboard smoke test includes React SPA + LoRA export.
+- **Cloud fleet APIs** — Federated threat radar + threat graph routes; fleet heartbeat extensions.
+
+### Fixed
+
+- **Security Swarm fast-mode bypass gate** — Stale `comprehensive-eval.json` no longer fails the pipeline when parity and `test_harness_report.json` are clean.
+- **Swarm CLI dev unlock** — `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true` bypasses `check-pro.js` without a license key (maintainer local runs).
+- **Incident investigator UX** — Clear API error when proxy runs stale dashboard routes; rebuild + restart required after upgrade.
+
+### Changed
+
+- **CI** — `pnpm dashboard:build` in smoke-test workflow; [PRO_SETUP.md](docs/PRO_SETUP.md) documents React SPA build for Enterprise AI.
+
 ## [3.2.1] - 2026-05-23
 
 ### Added (MCP Tests 31 closure)

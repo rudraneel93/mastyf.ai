@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import type { CallContext } from '../../src/policy/policy-types.js';
+import { resetSessionFlowStore } from '../../src/policy/session-flow-store.js';
 import { scanToolDefinition } from '../../src/scanners/tool-definition-scanner.js';
 
 function ctx(
@@ -37,6 +38,10 @@ function makeEngine(
 
 describe('v298 gap categories — production PolicyEngine', () => {
   const engine = makeEngine();
+
+  beforeEach(() => {
+    resetSessionFlowStore();
+  });
 
   it('blocks prompt injection in tool description metadata', () => {
     const findings = scanToolDefinition({

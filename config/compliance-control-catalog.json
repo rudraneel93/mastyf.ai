@@ -1,0 +1,22 @@
+{
+  "frameworks": {
+    "NIST-CSF": {
+      "PR.DS-5": { "title": "Protections against data leaks", "keywords": ["path", "traversal", "filesystem", "read_file", "exfil"] },
+      "PR.PT-1": { "title": "Audit/log records are determined, documented, implemented", "keywords": ["semantic", "prompt", "injection", "audit"] },
+      "DE.CM-1": { "title": "Network is monitored", "keywords": ["chain", "exfil", "flow", "webhook", "http"] },
+      "DE.AE-2": { "title": "Potentially adverse events are analyzed", "keywords": ["incident", "investigator", "swarm", "bypass"] },
+      "RS.RP-1": { "title": "Response plan executed during or after an incident", "keywords": ["soar", "playbook", "quarantine"] }
+    },
+    "SOC2": {
+      "CC6.1": { "title": "Logical access security software, infrastructure, architectures", "keywords": ["cost", "rate", "limit", "auth", "session"] },
+      "CC6.7": { "title": "Credentials for infrastructure and software", "keywords": ["dpop", "token", "credential", "secret"] },
+      "CC7.2": { "title": "Security events are monitored", "keywords": ["semantic", "block", "flag", "audit"] },
+      "CC8.1": { "title": "Changes to infrastructure and software are authorized", "keywords": ["policy", "copilot", "tool-integrity", "rug"] }
+    },
+    "CIS": {
+      "CIS-16.11": { "title": "Maintain secure configuration for MCP tool servers", "keywords": ["tool", "integrity", "schema", "rug-pull", "typosquat"] },
+      "CIS-13.2": { "title": "Deploy a host-based intrusion detection solution", "keywords": ["chain", "session", "abuse"] },
+      "CIS-10.1": { "title": "Deploy and maintain anti-malware software", "keywords": ["semantic", "threat-lab", "swarm"] }
+    }
+  }
+}

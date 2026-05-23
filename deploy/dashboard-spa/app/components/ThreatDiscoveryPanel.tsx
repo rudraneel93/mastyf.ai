@@ -9,6 +9,8 @@ import { ThreatArchitectureView } from './ThreatArchitectureView';
 import { ProUpgradeBanner } from './ProUpgradeBanner';
 import type { AuthStatus } from '@/lib/guardian-api';
 
+import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
+
 type SubTab = 'overview' | 'threat-lab' | 'auto-research' | 'architecture';
 
 type Props = {
@@ -16,6 +18,9 @@ type Props = {
   authStatus?: AuthStatus | null;
   refreshKey?: number;
   onAction?: (msg: string) => void;
+  initialSubTab?: SubTab;
+  threatLabContext?: ThreatLabContext | null;
+  onClearThreatLabContext?: () => void;
 };
 
 const SUB_TABS: { id: SubTab; label: string }[] = [
@@ -25,11 +30,23 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'architecture', label: 'Architecture' },
 ];
 
-export function ThreatDiscoveryPanel({ roles, authStatus, refreshKey = 0, onAction }: Props) {
-  const [subTab, setSubTab] = useState<SubTab>('overview');
+export function ThreatDiscoveryPanel({
+  roles,
+  authStatus,
+  refreshKey = 0,
+  onAction,
+  initialSubTab,
+  threatLabContext,
+  onClearThreatLabContext,
+}: Props) {
+  const [subTab, setSubTab] = useState<SubTab>(initialSubTab || 'overview');
   const [status, setStatus] = useState<ThreatDiscoveryStatus | null>(null);
   const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (initialSubTab) setSubTab(initialSubTab);
+  }, [initialSubTab]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +109,7 @@ export function ThreatDiscoveryPanel({ roles, authStatus, refreshKey = 0, onActi
         <ThreatLabWorkbench
           candidates={candidates}
           roles={roles}
+          preloadedContext={threatLabContext}
           manifestMeta={{
             timestamp: status?.threatLab.manifest?.timestamp,
             mode: status?.threatLab.manifest?.mode,

@@ -38,8 +38,10 @@ function ctx(n: number): CallContext {
 }
 
 describe('Redis rate limit fallback', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
+    const { resetSessionFlowStore } = await import('../../src/policy/session-flow-store.js');
+    resetSessionFlowStore();
   });
 
   afterEach(() => {

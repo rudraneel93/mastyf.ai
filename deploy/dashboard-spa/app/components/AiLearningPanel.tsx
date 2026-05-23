@@ -8,6 +8,8 @@ import {
   fetchAiState,
   fetchAiSuggestions,
   fetchAiThreats,
+  fetchActiveLearningReport,
+  fetchAgentAbuseScores,
   fetchSemanticOutcomes,
   labelSemanticOutcome,
   pollAiThreats,
@@ -17,6 +19,7 @@ import {
   type SemanticOutcome,
   type ThreatIntelStatus,
 } from '@/lib/guardian-api';
+import { IncidentInvestigatorDrawer, type ThreatLabContext } from './IncidentInvestigatorDrawer';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { hasPermission } from '@/lib/dashboard-roles';
 import { InsightsNarrativeRail } from './dashboard/InsightsNarrativeRail';
@@ -29,9 +32,10 @@ type Props = {
   roles?: string[];
   refreshTick?: number;
   onAction?: (msg: string) => void;
+  onOpenThreatLab?: (ctx: ThreatLabContext) => void;
 };
 
-export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
+export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreatLab }: Props) {
   const canAi = hasPermission(roles, 'ai');
   const canMutate = hasPermission(roles, 'policy_mutate');
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
@@ -44,15 +48,20 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
   const [threatPollBusy, setThreatPollBusy] = useState(false);
   const [reportSnippet, setReportSnippet] = useState('');
   const [reportStructured, setReportStructured] = useState<Record<string, unknown> | null>(null);
+  const [activeLearning, setActiveLearning] = useState<Record<string, unknown> | null>(null);
+  const [abuseScores, setAbuseScores] = useState<Array<Record<string, unknown>>>([]);
+  const [investigateId, setInvestigateId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [sug, semResp, st, base, thr, rep] = await Promise.all([
+    const [sug, semResp, st, base, thr, rep, al, abuse] = await Promise.all([
       fetchAiSuggestions(),
       fetchSemanticOutcomes(),
       fetchAiState(),
       fetchAiBaselines(),
       fetchAiThreats(),
       fetchAiReport(),
+      fetchActiveLearningReport(),
+      fetchAgentAbuseScores(7),
     ]);
     setSuggestions(sug);
     setSemantic(semResp.records);
@@ -64,6 +73,8 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
     const snippet = rep?.report ? JSON.stringify(rep.report, null, 2).slice(0, 1500) : '';
     setReportSnippet(snippet);
     setReportStructured((rep?.report as Record<string, unknown>) ?? null);
+    setActiveLearning(al);
+    setAbuseScores((abuse?.scores as Array<Record<string, unknown>>) ?? []);
   }, []);
 
   useEffect(() => {
@@ -281,6 +292,74 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
         </ul>
       )}
 
+      {Array.isArray(activeLearning?.reviewQueue) && activeLearning.reviewQueue.length > 0 ? (
+        <>
+          <h3>Review next (uncertainty-ranked)</h3>
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Uncertainty</th>
+                <th>Reasons</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(activeLearning.reviewQueue as Array<Record<string, unknown>>).slice(0, 5).map((r) => (
+                <tr key={String(r.id)}>
+                  <td>{String(r.toolName || '—')}</td>
+                  <td>{String(r.uncertaintyScore ?? '—')}</td>
+                  <td>{((r.uncertaintyReasons as string[]) || []).join('; ')}</td>
+                  <td>
+                    <button type="button" className="secondary btn-sm" onClick={() => setInvestigateId(String(r.id))}>
+                      Investigate
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {activeLearning.thresholds ? (
+            <p className="hint">
+              Threshold suggestion: min confidence{' '}
+              {String((activeLearning.thresholds as Record<string, unknown>).recommendedMinConfidence ?? '—')}
+              {' — '}
+              {String((activeLearning.thresholds as Record<string, unknown>).rationale ?? '')}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      <p className="hint">
+        Swarm tribunal, compliance briefing, and LoRA pipeline → open the <strong>Enterprise AI</strong> tab.
+      </p>
+
+      {abuseScores.length > 0 ? (
+        <>
+          <h3>Agent abuse scores</h3>
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>Server</th>
+                <th>Score</th>
+                <th>Risk</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              {abuseScores.slice(0, 8).map((s) => (
+                <tr key={String(s.sessionKey)}>
+                  <td>{String(s.serverName || '—')}</td>
+                  <td>{String(s.score ?? '—')}</td>
+                  <td>{String(s.riskLevel ?? '—')}</td>
+                  <td className="cell-truncate">{String(s.summary || '—')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
+
       <h3>Semantic audit outcomes</h3>
       {semantic.length === 0 ? (
         <p className="muted">
@@ -310,6 +389,9 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
                 <td>
                   {canAi ? (
                     <span className="btn-row inline">
+                      <button type="button" className="secondary" onClick={() => setInvestigateId(r.id)}>
+                        Investigate
+                      </button>
                       <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'true_positive')}>
                         TP
                       </button>
@@ -358,6 +440,16 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
         </>
       ) : null}
       </DashboardSection>
+      {investigateId ? (
+        <IncidentInvestigatorDrawer
+          triggerId={investigateId}
+          onClose={() => setInvestigateId(null)}
+          onOpenThreatLab={(ctx) => {
+            setInvestigateId(null);
+            onOpenThreatLab?.(ctx);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
