@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "fast",
-  "timestamp": "2026-05-23T13:25:17.879Z",
-  "commitSha": "c8c7aa7e6e981f3f290e0f2138d0247d07b4bfc7",
+  "timestamp": "2026-05-23T14:56:35.181Z",
+  "commitSha": "73f7ba5a89e233e2df04fb910472a843425568e0",
   "findings": [
     {
       "severity": "info",
@@ -11,19 +11,19 @@
     }
   ],
   "timings": {
-    "totalSec": 202,
+    "totalSec": 192.1,
     "steps": [
       {
         "label": "scout-audit",
-        "elapsedSec": 2.6
+        "elapsedSec": 1.7
       },
       {
         "label": "pnpm-build",
-        "elapsedSec": 3.5
+        "elapsedSec": 3.2
       },
       {
         "label": "vitest-policy-proxy-utils",
-        "elapsedSec": 75.4
+        "elapsedSec": 76
       },
       {
         "label": "corpus-eval",
@@ -31,15 +31,15 @@
       },
       {
         "label": "setup-python-venv",
-        "elapsedSec": 0.5
+        "elapsedSec": 0.6
       },
       {
         "label": "harness-node-tests",
-        "elapsedSec": 45.6
+        "elapsedSec": 46
       },
       {
         "label": "harness-parity",
-        "elapsedSec": 72.6
+        "elapsedSec": 62.8
       }
     ]
   },
@@ -66,7 +66,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 2.6,
+      "elapsedSec": 1.7,
       "stdout": "",
       "stderr": ""
     },
@@ -75,7 +75,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 3.5,
+      "elapsedSec": 3.2,
       "stdout": "",
       "stderr": ""
     },
@@ -84,7 +84,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 75.4,
+      "elapsedSec": 76,
       "stdout": "",
       "stderr": ""
     },
@@ -102,7 +102,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 0.5,
+      "elapsedSec": 0.6,
       "stdout": "",
       "stderr": ""
     },
@@ -111,7 +111,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 45.6,
+      "elapsedSec": 46,
       "stdout": "",
       "stderr": ""
     },
@@ -120,14 +120,14 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 72.6,
+      "elapsedSec": 62.8,
       "stdout": "",
       "stderr": ""
     }
   ],
   "scout": {
     "agent": "scout",
-    "timestamp": "2026-05-23T13:21:58.481Z",
+    "timestamp": "2026-05-23T14:53:24.738Z",
     "audit": {
       "ok": true,
       "status": 1,
@@ -149,8 +149,8 @@
     "benignPassRate": 1
   },
   "parity": {
-    "agreement": 446,
-    "total": 446,
+    "agreement": 463,
+    "total": 463,
     "agreementRate": 1,
     "corpusMismatches": 0
   },

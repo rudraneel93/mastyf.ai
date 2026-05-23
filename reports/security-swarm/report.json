@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-23T13:41:36.181Z",
+  "generatedAt": "2026-05-23T14:56:36.065Z",
   "verdict": "PASS",
-  "headline": "Your MCP setup saw 7648 proxied calls (5096 blocked). Industry regression gates passed.",
+  "headline": "Your MCP setup saw 7648 proxied calls (5094 blocked). Industry regression gates passed.",
   "sections": [
     {
       "id": "summary",
       "title": "In plain English",
-      "markdown": "### What we observed from your usage\n- 7648 tool calls in the last 7 days\n- 5096 calls blocked by policy\n- Most common block: semantic-path-guard (4121×)\n### What we tested\n- Swarm gates: 5 passed, 3 failed\n- Live filesystem MCP: 6/6 scenarios\n- Core regression gates OK\n**Common block reasons:** semantic-path-guard; encoding-evasion-guard; timing-enumeration-guard.\n**Infrastructure charts:** 7648 proxied calls (5096 blocked, 7d window) · instant learning: 128 block events, 29 suggestions queued."
+      "markdown": "### What we observed from your usage\n- 7648 tool calls in the last 7 days\n- 5094 calls blocked by policy\n- Most common block: semantic-path-guard (4120×)\n### What we tested\n- Swarm gates: 5 passed, 3 failed\n- Live filesystem MCP: 6/6 scenarios\n- Core regression gates OK\n**Common block reasons:** semantic-path-guard; encoding-evasion-guard; timing-enumeration-guard.\n**Infrastructure charts:** 7648 proxied calls (5094 blocked, 7d window) · instant learning: 112 block events, 29 suggestions queued."
     },
     {
       "id": "your_servers",
@@ -50,7 +50,7 @@
   ],
   "meta": {
     "trafficCalls": 7648,
-    "trafficBlocks": 5096,
+    "trafficBlocks": 5094,
     "regressionPass": true,
     "liveOk": true,
     "swarmOk": true,

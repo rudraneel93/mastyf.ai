@@ -1,20 +1,28 @@
 {
-  "generatedAt": "2026-05-23T13:25:18.026Z",
+  "generatedAt": "2026-05-23T14:56:35.358Z",
   "windowDays": 7,
   "meta": {
     "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
     "tenantId": "default",
     "hasTraffic": true,
     "hasInstantLearning": true,
-    "hasSemantic": false,
+    "hasSemantic": true,
+    "swarmSessionLive": false,
+    "dataSources": {
+      "traffic": "history.db",
+      "semantic": "semantic-audit-store",
+      "regression": "none",
+      "pipeline": "none"
+    },
     "emptyReasons": {
-      "semantic": "No calibration.json or empty semantic outcomes."
+      "regression": "Batch regression data appears after you run Security Swarm in this dashboard session.",
+      "pipeline": "Batch regression data appears after you run Security Swarm in this dashboard session."
     }
   },
   "traffic": {
     "hasData": true,
     "totalCalls": 7648,
-    "totalBlocked": 5096,
+    "totalBlocked": 5094,
     "hourly": [
       {
         "hourStart": "2026-05-17T11:00:00.000Z",
@@ -48,11 +56,11 @@
       },
       {
         "hourStart": "2026-05-22T12:00:00.000Z",
-        "calls": 2720,
-        "blocked": 2718,
+        "calls": 2708,
+        "blocked": 2706,
         "passed": 2,
         "passRatePct": 0.1,
-        "costUsd": 0.047534,
+        "costUsd": 0.047331,
         "latencyP50Ms": 21,
         "latencyP95Ms": 22
       },
@@ -105,16 +113,26 @@
         "costUsd": 0.000734,
         "latencyP50Ms": 28,
         "latencyP95Ms": 149
+      },
+      {
+        "hourStart": "2026-05-23T09:00:00.000Z",
+        "calls": 12,
+        "blocked": 10,
+        "passed": 2,
+        "passRatePct": 16.7,
+        "costUsd": 0.000367,
+        "latencyP50Ms": 23,
+        "latencyP95Ms": 132
       }
     ],
     "byServer": [
       {
         "serverName": "official-filesystem",
         "calls": 5000,
-        "blocked": 4990,
-        "costUsd": 0.088171,
+        "blocked": 4988,
+        "costUsd": 0.088335,
         "latencyP50Ms": 21,
-        "latencyP95Ms": 22
+        "latencyP95Ms": 23
       },
       {
         "serverName": "bench-echo",
@@ -152,7 +170,7 @@
     "topTools": [
       {
         "tool": "read_text_file",
-        "count": 2755
+        "count": 2764
       },
       {
         "tool": "search",
@@ -160,11 +178,11 @@
       },
       {
         "tool": "list_directory",
-        "count": 2239
+        "count": 2228
       },
       {
         "tool": "write_file",
-        "count": 10
+        "count": 12
       },
       {
         "tool": "execute_command",
@@ -194,12 +212,12 @@
     "topBlockRules": [
       {
         "rule": "semantic-path-guard",
-        "count": 4121,
+        "count": 4120,
         "plainEnglish": "semantic-path-guard"
       },
       {
         "rule": "encoding-evasion-guard",
-        "count": 624,
+        "count": 620,
         "plainEnglish": "encoding-evasion-guard"
       },
       {
@@ -214,12 +232,12 @@
       },
       {
         "rule": "request-prompt-injection",
-        "count": 17,
+        "count": 18,
         "plainEnglish": "Prompt injection in tool args"
       },
       {
         "rule": "multimodal-injection",
-        "count": 14,
+        "count": 16,
         "plainEnglish": "multimodal-injection"
       },
       {
@@ -246,7 +264,7 @@
   },
   "instantLearning": {
     "source": "live",
-    "totalEvents": 128,
+    "totalEvents": 112,
     "queuedSuggestions": 29,
     "blocksPerMinute": [
       {
@@ -267,37 +285,37 @@
         "key": "semantic-path-guard:read_text_file",
         "rule": "semantic-path-guard",
         "tool": "read_text_file",
-        "count": 14
+        "count": 7
       },
       {
         "key": "multimodal-injection:write_file",
         "rule": "multimodal-injection",
         "tool": "write_file",
-        "count": 4
-      },
-      {
-        "key": "request-timeout:hang",
-        "rule": "request-timeout",
-        "tool": "hang",
-        "count": 3
-      },
-      {
-        "key": "tool-fingerprint-mismatch:search",
-        "rule": "tool-fingerprint-mismatch",
-        "tool": "search",
-        "count": 3
-      },
-      {
-        "key": "request-prompt-injection:search",
-        "rule": "request-prompt-injection",
-        "tool": "search",
-        "count": 3
+        "count": 2
       },
       {
         "key": "request-prompt-injection:read_text_file",
         "rule": "request-prompt-injection",
         "tool": "read_text_file",
-        "count": 2
+        "count": 1
+      },
+      {
+        "key": "request-timeout:hang",
+        "rule": "request-timeout",
+        "tool": "hang",
+        "count": 1
+      },
+      {
+        "key": "tool-fingerprint-mismatch:search",
+        "rule": "tool-fingerprint-mismatch",
+        "tool": "search",
+        "count": 1
+      },
+      {
+        "key": "request-prompt-injection:search",
+        "rule": "request-prompt-injection",
+        "tool": "search",
+        "count": 1
       }
     ],
     "classConfidence": [
@@ -308,52 +326,37 @@
     ]
   },
   "semantic": {
-    "hasData": false,
-    "totals": {},
-    "confidenceBuckets": [],
-    "labelMix": [],
-    "avgFlagConfidence": 0
+    "hasData": true,
+    "totals": {
+      "records": 36,
+      "flagged": 34
+    },
+    "confidenceBuckets": [
+      {
+        "bucket": "0.85-1.0",
+        "count": 11
+      },
+      {
+        "bucket": "0.7-0.85",
+        "count": 23
+      }
+    ],
+    "labelMix": [
+      {
+        "label": "true_positive",
+        "count": 28
+      },
+      {
+        "label": "unlabeled",
+        "count": 6
+      }
+    ],
+    "avgFlagConfidence": 0.792
   },
   "regression": {
     "gates": null,
     "overall": null,
-    "categoryRecall": [
-      {
-        "category": "credential-exfil",
-        "recallPct": 100,
-        "total": 24
-      },
-      {
-        "category": "cross-tool-chain",
-        "recallPct": 100,
-        "total": 16
-      },
-      {
-        "category": "edge-cases",
-        "recallPct": 100,
-        "total": 22
-      },
-      {
-        "category": "prompt-injection",
-        "recallPct": 100,
-        "total": 32
-      },
-      {
-        "category": "shell-obfuscation",
-        "recallPct": 100,
-        "total": 26
-      },
-      {
-        "category": "sql-nosql",
-        "recallPct": 100,
-        "total": 27
-      },
-      {
-        "category": "ssrf-url",
-        "recallPct": 100,
-        "total": 26
-      }
-    ],
+    "categoryRecall": [],
     "userServers": []
   },
   "pipeline": {
@@ -384,7 +387,7 @@
         "progressPct": 88
       }
     ],
-    "jobState": "running",
+    "jobState": null,
     "stepTimings": [],
     "totalSec": 0
   }

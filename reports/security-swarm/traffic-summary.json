@@ -1,43 +1,43 @@
 {
-  "generatedAt": "2026-05-23T13:21:54.221Z",
+  "generatedAt": "2026-05-23T14:53:22.465Z",
   "windowDays": 7,
   "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
   "hasData": true,
   "totalCalls": 7648,
-  "totalBlocked": 5096,
-  "totalPassed": 2552,
+  "totalBlocked": 5094,
+  "totalPassed": 2554,
   "servers": [
     {
       "serverName": "official-filesystem",
       "calls": 5000,
-      "blocked": 4990,
-      "passed": 10,
+      "blocked": 4988,
+      "passed": 12,
       "blockRatePct": 99.8,
-      "costUsd": 0.088171,
-      "lastSeen": "2026-05-23T07:51:21.000Z",
+      "costUsd": 0.088335,
+      "lastSeen": "2026-05-23T09:22:47.000Z",
       "topTools": [
         {
           "tool": "read_text_file",
-          "count": 2753
+          "count": 2762
         },
         {
           "tool": "list_directory",
-          "count": 2237
+          "count": 2226
         },
         {
           "tool": "write_file",
-          "count": 10
+          "count": 12
         }
       ],
       "topBlockRules": [
         {
           "rule": "semantic-path-guard",
-          "count": 4113,
+          "count": 4112,
           "plainEnglish": "semantic-path-guard"
         },
         {
           "rule": "encoding-evasion-guard",
-          "count": 620,
+          "count": 616,
           "plainEnglish": "encoding-evasion-guard"
         },
         {
@@ -47,12 +47,12 @@
         },
         {
           "rule": "multimodal-injection",
-          "count": 10,
+          "count": 12,
           "plainEnglish": "multimodal-injection"
         },
         {
           "rule": "request-prompt-injection",
-          "count": 5,
+          "count": 6,
           "plainEnglish": "attempt to override AI instructions in tool arguments"
         }
       ]
@@ -202,12 +202,12 @@
   "topBlockRules": [
     {
       "rule": "semantic-path-guard",
-      "count": 4121,
+      "count": 4120,
       "plainEnglish": "semantic-path-guard"
     },
     {
       "rule": "encoding-evasion-guard",
-      "count": 624,
+      "count": 620,
       "plainEnglish": "encoding-evasion-guard"
     },
     {
@@ -222,12 +222,12 @@
     },
     {
       "rule": "request-prompt-injection",
-      "count": 17,
+      "count": 18,
       "plainEnglish": "attempt to override AI instructions in tool arguments"
     },
     {
       "rule": "multimodal-injection",
-      "count": 14,
+      "count": 16,
       "plainEnglish": "multimodal-injection"
     },
     {
@@ -244,7 +244,7 @@
   "topTools": [
     {
       "tool": "read_text_file",
-      "count": 2755
+      "count": 2764
     },
     {
       "tool": "search",
@@ -252,11 +252,11 @@
     },
     {
       "tool": "list_directory",
-      "count": 2239
+      "count": 2228
     },
     {
       "tool": "write_file",
-      "count": 10
+      "count": 12
     },
     {
       "tool": "execute_command",
