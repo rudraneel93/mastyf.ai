@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.2.0] - 2026-05-23
+
+### Added
+
+- **Enterprise dashboard redesign** — Overview, Cost, Security, Health, Audit, and Fleet panels with KPI cards, Recharts hub, executive summary APIs, and measured insight rails.
+- **Strict live-only data policy** — Session-gated swarm/batch artifacts (`GUARDIAN_DASHBOARD_STRICT_LIVE`, default on); committed `reports/security-swarm/` hidden until a job runs in the current dashboard session.
+- **Live semantic visuals** — Semantic charts sourced from the proxy semantic audit store instead of batch `calibration.json`.
+- **New dashboard APIs** — `/api/dashboard/executive-summary`, `/api/dashboard/insights`, `/api/cost/timeseries`, `/api/audit/heatmap`.
+
+### Fixed
+
+- **Threat Lab runner** — Missing `isAuthenticSemanticTp` import caused proactive/reactive runs to crash at `main()`.
+
 ## [3.1.0] - 2026-05-23
 
 ### Added

@@ -37,5 +37,5 @@ export interface CreatePluginOptions {
 /** Factory for typed plugins with lifecycle hooks. */
 export declare function createDetectorPlugin(opts: CreatePluginOptions): DetectorPlugin;
 /** SDK version string embedded in registry logs. */
-export declare const PLUGIN_SDK_VERSION = "3.1.0";
+export declare const PLUGIN_SDK_VERSION = "3.2.0";
 //# sourceMappingURL=index.d.ts.map
