@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "fast",
-  "timestamp": "2026-05-23T07:15:09.832Z",
-  "commitSha": "3dcdf48e8d98d16fa20a783241b874052ccec673",
+  "timestamp": "2026-05-23T13:25:17.879Z",
+  "commitSha": "c8c7aa7e6e981f3f290e0f2138d0247d07b4bfc7",
   "findings": [
     {
       "severity": "info",
@@ -11,35 +11,35 @@
     }
   ],
   "timings": {
-    "totalSec": 170.7,
+    "totalSec": 202,
     "steps": [
       {
         "label": "scout-audit",
-        "elapsedSec": 1.6
+        "elapsedSec": 2.6
       },
       {
         "label": "pnpm-build",
-        "elapsedSec": 2.8
+        "elapsedSec": 3.5
       },
       {
         "label": "vitest-policy-proxy-utils",
-        "elapsedSec": 61.7
+        "elapsedSec": 75.4
       },
       {
         "label": "corpus-eval",
-        "elapsedSec": 2.1
+        "elapsedSec": 1.8
       },
       {
         "label": "setup-python-venv",
-        "elapsedSec": 0.7
+        "elapsedSec": 0.5
       },
       {
         "label": "harness-node-tests",
-        "elapsedSec": 40.1
+        "elapsedSec": 45.6
       },
       {
         "label": "harness-parity",
-        "elapsedSec": 61.7
+        "elapsedSec": 72.6
       }
     ]
   },
@@ -66,7 +66,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 1.6,
+      "elapsedSec": 2.6,
       "stdout": "",
       "stderr": ""
     },
@@ -75,7 +75,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 2.8,
+      "elapsedSec": 3.5,
       "stdout": "",
       "stderr": ""
     },
@@ -84,7 +84,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 61.7,
+      "elapsedSec": 75.4,
       "stdout": "",
       "stderr": ""
     },
@@ -93,7 +93,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 2.1,
+      "elapsedSec": 1.8,
       "stdout": "",
       "stderr": ""
     },
@@ -102,7 +102,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 0.7,
+      "elapsedSec": 0.5,
       "stdout": "",
       "stderr": ""
     },
@@ -111,7 +111,7 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 40.1,
+      "elapsedSec": 45.6,
       "stdout": "",
       "stderr": ""
     },
@@ -120,14 +120,14 @@
       "ok": true,
       "status": 0,
       "timedOut": false,
-      "elapsedSec": 61.7,
+      "elapsedSec": 72.6,
       "stdout": "",
       "stderr": ""
     }
   ],
   "scout": {
     "agent": "scout",
-    "timestamp": "2026-05-23T07:12:20.689Z",
+    "timestamp": "2026-05-23T13:21:58.481Z",
     "audit": {
       "ok": true,
       "status": 1,
@@ -149,8 +149,8 @@
     "benignPassRate": 1
   },
   "parity": {
-    "agreement": 437,
-    "total": 437,
+    "agreement": 446,
+    "total": 446,
     "agreementRate": 1,
     "corpusMismatches": 0
   },

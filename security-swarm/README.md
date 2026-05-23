@@ -13,6 +13,8 @@ Closed-loop agentic workflow for MCP Guardian: scan vulnerabilities, evolve poli
 | **Scout** | CI | `pnpm audit` supply-chain signal |
 | **Corpus** | CI | 228-entry eval (`GUARDIAN_DISABLE_SEMANTIC=true pnpm eval`) |
 | **Evasion** | Full | Custom probes + `evasion-generate.mjs` on net-new bypasses |
+| **Threat Lab** | Optional (Pro) | LLM discovery via `threat-lab.mjs` when `SWARM_THREAT_LAB=true`; requires Ollama — no synthetic fallback |
+| **Auto Threat Research** | Optional (Pro) | Direct `adv-*.json` writes via `auto-threat-research.mjs` when `SWARM_THREAT_RESEARCH_AUTO=true` + `GUARDIAN_THREAT_RESEARCH_AUTO=true` |
 | **Parity** | CI | Node ↔ Python by fixture id |
 | **Proxy** | Full | Live stdio MCP via adversarial-harness |
 | **Learning-sim** | Full | `pnpm eval:attack-learning` |

@@ -1,0 +1,40 @@
+/**
+ * Bridge semantic audit true-positives → pending policy suggestions via Threat Lab.
+ */
+import { discoverFromSemanticAudit, validateThreatLabDiscovery } from './threat-lab.js';
+import type { StoredSemanticAudit } from './semantic-audit-store.js';
+import { queuePendingAttackSuggestion } from './instant-attack-learning.js';
+import { attackMinConfidence } from './attack-pattern-learner.js';
+import { Logger } from '../utils/logger.js';
+
+export async function bridgeSemanticAuditToSuggestion(
+  record: StoredSemanticAudit,
+): Promise<boolean> {
+  if (record.label !== 'true_positive') {
+    return false;
+  }
+
+  const discovery = await discoverFromSemanticAudit(record);
+  if (!discovery) return false;
+
+  const validation = validateThreatLabDiscovery(discovery, { requireReplayBlock: true });
+  if (!validation.ok) {
+    Logger.debug(`[semantic-bridge] rejected: ${validation.errors.join('; ')}`);
+    return false;
+  }
+
+  if (discovery.confidence < attackMinConfidence()) {
+    Logger.debug('[semantic-bridge] below min confidence — skipping queue');
+    return false;
+  }
+
+  return queuePendingAttackSuggestion(
+    {
+      rule: discovery.policyRule,
+      confidence: discovery.confidence,
+      reason: `Threat Lab from semantic audit ${record.id}: ${discovery.hypothesis}`,
+      source: 'attack',
+    },
+    { source: 'threat-lab-semantic', tenantId: record.tenantId },
+  );
+}

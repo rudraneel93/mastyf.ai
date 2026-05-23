@@ -6,5 +6,10 @@
     "maxBypasses": 0,
     "baselineManifest": "security-swarm/config/bypass-baseline.json"
   },
+  "threatLab": {
+    "requireLlm": true,
+    "maxFallbackCandidates": 0,
+    "minReplayBlockRate": 1
+  },
   "vitest": { "maxFailures": 0 }
 }

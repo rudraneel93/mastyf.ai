@@ -1,0 +1,87 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { join } from 'path';
+import {
+  buildThreatDiscoveryStatus,
+  resetThreatDiscoveryStatusCacheForTests,
+} from '../../src/utils/threat-discovery-status.js';
+import { resetThreatResearchQueueForTests } from '../../src/ai/threat-research-pipeline.js';
+
+const TENANT = 'test-threat-status';
+const TENANT_DIR = join(process.cwd(), 'reports', 'tenants', TENANT, 'security-swarm');
+
+describe('buildThreatDiscoveryStatus', () => {
+  beforeEach(() => {
+    resetThreatResearchQueueForTests();
+    resetThreatDiscoveryStatusCacheForTests();
+    mkdirSync(TENANT_DIR, { recursive: true });
+  });
+
+  afterEach(() => {
+    resetThreatResearchQueueForTests();
+    resetThreatDiscoveryStatusCacheForTests();
+    const tenantRoot = join(process.cwd(), 'reports', 'tenants', TENANT);
+    if (existsSync(tenantRoot)) rmSync(tenantRoot, { recursive: true, force: true });
+  });
+
+  it('aggregates threat lab and auto corpus manifests', async () => {
+    writeFileSync(
+      join(TENANT_DIR, 'threat-lab-candidates.json'),
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        count: 1,
+        mode: 'reactive',
+        candidates: [
+          {
+            id: 'adv-test-1',
+            fingerprint: 'abc',
+            attackClass: 'test-class',
+            hypothesis: 'test hypothesis',
+            confidence: 0.9,
+            provenance: { source: 'bypass', llmUsed: true },
+            reviewStatus: 'pending',
+          },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(TENANT_DIR, 'auto-corpus-manifest.json'),
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        count: 1,
+        entries: [
+          {
+            advId: 'adv-999',
+            relPath: 'adversarial-harness/fixtures/custom-attacks/adv-999.json',
+            fingerprint: 'def',
+            source: 'semantic_flag',
+            attackClass: 'test',
+            hypothesis: 'auto hypothesis',
+            confidence: 0.88,
+            timestamp: new Date().toISOString(),
+            toolName: 'read_file',
+            category: 'test',
+          },
+        ],
+      }),
+    );
+
+    const status = await buildThreatDiscoveryStatus(TENANT);
+    expect(status.threatLab.stats.total).toBe(1);
+    expect(status.threatLab.stats.pending).toBe(1);
+    expect(status.autoCorpus.stats.total).toBe(1);
+    expect(status.pipeline).toBeDefined();
+    expect(status.jobs.threatLab.state).toBeDefined();
+  });
+
+  it('returns empty stats when no manifests exist', async () => {
+    const tlPath = join(TENANT_DIR, 'threat-lab-candidates.json');
+    const acPath = join(TENANT_DIR, 'auto-corpus-manifest.json');
+    if (existsSync(tlPath)) rmSync(tlPath);
+    if (existsSync(acPath)) rmSync(acPath);
+
+    const status = await buildThreatDiscoveryStatus(TENANT);
+    expect(status.threatLab.stats.total).toBe(0);
+    expect(status.autoCorpus.stats.total).toBe(0);
+  });
+});

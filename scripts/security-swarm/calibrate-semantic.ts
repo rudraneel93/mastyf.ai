@@ -29,9 +29,9 @@ type LiveRow = {
   blocked?: boolean;
 };
 
-/** When async store is empty, seed from the latest live MCP session (swarm analyze). */
+/** Opt-in only: synthesizes calibration rows from scenario JSON — excluded from Threat Lab. */
 async function seedFromLiveFilesystemSession(): Promise<number> {
-  if (process.env.SWARM_CALIBRATE_SEED_FROM_LIVE === 'false') return 0;
+  if (process.env.SWARM_CALIBRATE_SEED_FROM_LIVE !== 'true') return 0;
   if (!existsSync(LIVE_SESSION)) return 0;
 
   let live: { proxyResults?: LiveRow[]; burstResults?: LiveRow[]; timestamp?: string };
@@ -178,6 +178,53 @@ async function main(): Promise<void> {
   mkdirSync(OUT_DIR, { recursive: true });
   const outPath = join(OUT_DIR, 'calibration.json');
   writeFileSync(outPath, JSON.stringify(report, null, 2));
+
+  const fpRecords = labeled.filter((r) => r.label === 'false_positive');
+  const fpByCategory = new Map<string, number>();
+  for (const r of fpRecords) {
+    for (const cat of r.semanticAudit?.categories || ['unknown']) {
+      fpByCategory.set(cat, (fpByCategory.get(cat) || 0) + 1);
+    }
+  }
+  const patternProposals = [...fpByCategory.entries()]
+    .filter(([, count]) => count >= 2)
+    .map(([category, count]) => ({
+      type: 'tighten_risk_pattern',
+      category,
+      count,
+      suggestion: `Review RISK_PATTERNS for "${category}" — ${count} false positives in window`,
+      advisory: true,
+    }));
+  if (process.env.SWARM_CALIBRATE_LLM === 'true' && patternProposals.length > 0) {
+    try {
+      const { LlmAssistant } = await import('../../src/ai/llm-assistant.js');
+      const llm = new LlmAssistant();
+      const sample = fpRecords.slice(0, 5).map((r) => ({
+        tool: r.toolName,
+        categories: r.semanticAudit?.categories,
+        reasoning: r.semanticAudit?.reasoning?.slice(0, 120),
+      }));
+      const result = await llm.generate(
+        'Suggest benign allowlist or tighter semantic patterns. Output JSON array of {category, pattern, action}.',
+        JSON.stringify(sample),
+      );
+      if (result?.text) {
+        const parsed = JSON.parse(result.text.match(/\[[\s\S]*\]/)?.[0] || '[]') as unknown[];
+        if (Array.isArray(parsed)) {
+          for (const p of parsed.slice(0, 5)) {
+            patternProposals.push({ type: 'llm_pattern', ...(p as object), advisory: true });
+          }
+        }
+      }
+    } catch {
+      /* optional LLM enrichment */
+    }
+  }
+  const proposalsPath = join(OUT_DIR, 'pattern-proposals.json');
+  writeFileSync(
+    proposalsPath,
+    JSON.stringify({ timestamp: new Date().toISOString(), proposals: patternProposals }, null, 2),
+  );
 
   console.log('Semantic calibration report');
   console.log(JSON.stringify(report.totals, null, 2));

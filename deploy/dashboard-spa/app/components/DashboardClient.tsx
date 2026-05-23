@@ -5,6 +5,7 @@ import {
   fetchAggregateMetrics,
   fetchAudit,
   fetchAuthStatus,
+  guardianFetch,
   fetchCost,
   fetchHealth,
   fetchFleetInstances,
@@ -24,6 +25,7 @@ import { AgentFlowPanel } from './AgentFlowPanel';
 import { SetupPanel } from './SetupPanel';
 import { SwarmPanel } from './SwarmPanel';
 import { AiLearningPanel } from './AiLearningPanel';
+import { ThreatDiscoveryPanel } from './ThreatDiscoveryPanel';
 import { PolicyPanel } from './PolicyPanel';
 import { AdminPanel } from './AdminPanel';
 import { TenantContextBar } from './TenantContextBar';
@@ -40,6 +42,7 @@ type TabId =
   | 'cost'
   | 'health'
   | 'ai'
+  | 'threat-discovery'
   | 'policy'
   | 'fleet'
   | 'swarm'
@@ -54,6 +57,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'cost', label: 'Cost' },
   { id: 'health', label: 'Health' },
   { id: 'ai', label: 'AI copilot' },
+  { id: 'threat-discovery', label: 'Threat Discovery' },
   { id: 'policy', label: 'Policy' },
   { id: 'fleet', label: 'Fleet' },
   { id: 'swarm', label: 'Analysis' },
@@ -107,6 +111,9 @@ export function DashboardClient() {
 
   const refreshAll = useCallback(async () => {
     try {
+      const authProbe = await guardianFetch('/api/auth/status');
+      const apiUp = authProbe.ok;
+
       const [auditRes, metricsRes, costRes, secRes, healthRes, fleetRes, authRes] =
         await Promise.all([
           fetchAudit({
@@ -127,16 +134,28 @@ export function DashboardClient() {
       }
 
       if (!auditRes && !metricsRes && !costRes) {
-        pollFailuresRef.current += 1;
-        if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) {
-          setApiUnreachable(true);
-          if (!ws.connected) {
-            applyStatus(
-              'API unavailable — check DASHBOARD_ENABLED on :4000, auth, or rate limit (429)',
-              true,
-            );
+        if (apiUp) {
+          pollFailuresRef.current = 0;
+          setApiUnreachable(false);
+          applyStatus(
+            'Dashboard API connected — no proxy history DB (use pnpm dashboard:proxy for live metrics)',
+            false,
+          );
+        } else {
+          pollFailuresRef.current += 1;
+          if (pollFailuresRef.current >= POLL_FAILURES_BEFORE_DOWN) {
+            setApiUnreachable(true);
+            if (!ws.connected) {
+              applyStatus(
+                'API unavailable — check DASHBOARD_ENABLED on :4000, auth, or rate limit (429)',
+                true,
+              );
+            }
           }
         }
+        if (secRes) setSecurity(secRes);
+        if (healthRes) setHealth(healthRes);
+        setFleet(fleetRes);
         return;
       }
 
@@ -191,7 +210,21 @@ export function DashboardClient() {
   }, [ws.metricsPatch]);
 
   useEffect(() => {
-    if (ws.auditPatch) setAudit((prev) => ({ ...prev, ...ws.auditPatch! }));
+    if (!ws.auditPatch) return;
+    const patch = ws.auditPatch;
+    setAudit((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        ...patch,
+        events: patch.events ?? prev.events,
+        total: patch.total ?? prev.total,
+        blocked: patch.blocked ?? prev.blocked,
+        passed: patch.passed ?? prev.passed,
+        flagged: patch.flagged ?? prev.flagged,
+        semanticAudit: patch.semanticAudit ?? prev.semanticAudit,
+      };
+    });
   }, [ws.auditPatch]);
 
   const onFpReject = async (rule: string, pattern: string) => {
@@ -460,6 +493,15 @@ export function DashboardClient() {
         <AiLearningPanel
           roles={roles}
           refreshTick={ws.aiRefreshTick}
+          onAction={(m) => setActionMsg(m)}
+        />
+      )}
+
+      {tab === 'threat-discovery' && (
+        <ThreatDiscoveryPanel
+          roles={roles}
+          authStatus={authStatus}
+          refreshKey={ws.threatDiscoveryTick}
           onAction={(m) => setActionMsg(m)}
         />
       )}

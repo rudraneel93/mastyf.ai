@@ -22,6 +22,8 @@ export interface PolicyBlockContext {
 export interface BlockLearningEvent extends PolicyBlockContext {
   block_reason: string;
   argSnippets?: string[];
+  /** Redacted tool arguments for LLM threat research (no secrets). */
+  arguments?: Record<string, unknown>;
   tenantId?: string;
 }
 
@@ -96,6 +98,31 @@ export function redactArgSnippets(args: unknown, max = 5): string[] {
 
   visit(args, '');
   return snippets.slice(0, max);
+}
+
+/** Redacted tool arguments object for LLM threat research (no secrets). */
+export function redactArguments(args: unknown, maxStringLen = 200): Record<string, unknown> | undefined {
+  if (args === null || args === undefined) return undefined;
+  if (typeof args !== 'object') return { value: String(args).slice(0, maxStringLen) };
+
+  const redactValue = (value: unknown, keyPath: string): unknown => {
+    if (SENSITIVE_ARG_KEYS.test(keyPath)) return '[REDACTED]';
+    if (typeof value === 'string') return value.slice(0, maxStringLen);
+    if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+    if (Array.isArray(value)) {
+      return value.slice(0, 5).map((item, i) => redactValue(item, `${keyPath}[${i}]`));
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = redactValue(v, keyPath ? `${keyPath}.${k}` : k);
+      }
+      return out;
+    }
+    return String(value).slice(0, maxStringLen);
+  };
+
+  return redactValue(args, '') as Record<string, unknown>;
 }
 
 function debounceMs(): number {

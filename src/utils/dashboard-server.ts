@@ -186,6 +186,31 @@ function tryServeSwarmArtifact(url: string, res: ServerResponse, method: string 
   return true;
 }
 
+const DOCS_ASSET_ALLOW = new Set([
+  'llm-threat-discovery-architecture.png',
+  'auto-threat-research-architecture.png',
+  'security-swarm-architecture.png',
+]);
+
+function tryServeDocsAsset(url: string, res: ServerResponse, method: string = 'GET'): boolean {
+  const prefix = '/docs/assets/';
+  if (!url.startsWith(prefix)) return false;
+  const name = url.slice(prefix.length);
+  if (!name || name.includes('..') || name.includes('/') || !DOCS_ASSET_ALLOW.has(name)) {
+    return false;
+  }
+  const filePath = join(REPO_ROOT, 'docs', 'assets', name);
+  if (!existsSync(filePath)) return false;
+  const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime });
+  if (method === 'HEAD') {
+    res.end();
+  } else {
+    res.end(readFileSync(filePath));
+  }
+  return true;
+}
+
 function getCorsOrigin(req: IncomingMessage): string {
   const allowed = process.env['DASHBOARD_ALLOWED_ORIGINS']?.split(',').map(s => s.trim()).filter(Boolean)
     || ['http://localhost:4000', 'http://127.0.0.1:4000'];
@@ -458,6 +483,11 @@ export async function startDashboardServer(
       || path === '/api/security-swarm/report-json'
       || path === '/api/security-swarm/traffic-summary'
       || path === '/api/security-swarm/user-servers'
+      || path === '/api/security-swarm/auto-corpus'
+      || path === '/api/security-swarm/threat-lab-candidates'
+      || path === '/api/threat-discovery/status'
+      || path.startsWith('/api/threat-discovery/candidates/')
+      || path.startsWith('/docs/assets/')
       || path === '/api/onboarding/status'
       || path === '/api/servers/registry'
       || path === '/api/visuals/live'
@@ -495,6 +525,9 @@ export async function startDashboardServer(
         return;
       }
       if (tryServeSwarmArtifact(url, res, method)) {
+        return;
+      }
+      if (tryServeDocsAsset(url, res, method)) {
         return;
       }
     }
@@ -1524,6 +1557,19 @@ export async function startDashboardServer(
             writeJson(res, 404, { error: 'Semantic audit record not found' });
             return;
           }
+          if (label === 'true_positive') {
+            try {
+              const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+              const records = await loadSemanticAuditRecordsAsync({ tenantId: requestTenantId, limit: 500 });
+              const rec = records.find((r) => r.id === String(body.semanticAuditId));
+              if (rec) {
+                const { bridgeSemanticAuditToSuggestion } = await import('../ai/semantic-to-suggestion.js');
+                void bridgeSemanticAuditToSuggestion(rec);
+              }
+            } catch {
+              /* non-fatal */
+            }
+          }
           if (label === 'false_positive' || label === 'true_positive') {
             try {
               const { getAiEngine } = await import('../ai/suggestion-engine.js');
@@ -1775,6 +1821,105 @@ export async function startDashboardServer(
           return;
         }
         writeJson(res, 200, session);
+        return;
+      }
+      if (url === '/api/security-swarm/threat-lab-candidates' && method === 'GET') {
+        setCors();
+        const { readThreatLabCandidates } = await import('./swarm-artifacts.js');
+        const data = readThreatLabCandidates(requestTenantId);
+        if (!data) {
+          writeJson(res, 404, { error: 'threat-lab-candidates.json not found' });
+          return;
+        }
+        writeJson(res, 200, data);
+        return;
+      }
+      if (url === '/api/security-swarm/threat-lab-candidates/accept' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const id = String(body.id || '');
+        const { readThreatLabCandidates, markThreatLabCandidate } = await import('./swarm-artifacts.js');
+        const data = readThreatLabCandidates(requestTenantId);
+        const candidate = data?.candidates?.find((c: { id: string }) => c.id === id);
+        if (!candidate?.policyRule) {
+          writeJson(res, 404, { error: 'Threat Lab candidate not found' });
+          return;
+        }
+        const { applySuggestionToPolicy } = await import('../ai/policy-applier.js');
+        const policyPath = process.env.GUARDIAN_POLICY_PATH || join(REPO_ROOT, 'default-policy.yaml');
+        applySuggestionToPolicy(
+          candidate.policyRule as unknown as import('../policy/policy-types.js').PolicyRule,
+          policyPath,
+          null,
+        );
+        markThreatLabCandidate(requestTenantId, id, 'accepted');
+        writeJson(res, 200, { status: 'accepted', id, ruleName: candidate.policyRule.name });
+        return;
+      }
+      if (url === '/api/security-swarm/threat-lab-candidates/reject' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const id = String(body.id || '');
+        const { markThreatLabCandidate } = await import('./swarm-artifacts.js');
+        markThreatLabCandidate(requestTenantId, id, 'rejected');
+        writeJson(res, 200, { status: 'rejected', id });
+        return;
+      }
+      if (url === '/api/security-swarm/auto-corpus' && method === 'GET') {
+        setCors();
+        const { readAutoCorpusManifest } = await import('./swarm-artifacts.js');
+        const data = readAutoCorpusManifest(requestTenantId);
+        if (!data) {
+          writeJson(res, 404, { error: 'auto-corpus-manifest.json not found' });
+          return;
+        }
+        writeJson(res, 200, data);
+        return;
+      }
+      if (url.startsWith('/api/threat-discovery/')) {
+        if (!assertFeature(url, 'swarm', res, setCors)) return;
+      }
+      if (url === '/api/threat-discovery/status' && method === 'GET') {
+        setCors();
+        const { buildThreatDiscoveryStatus } = await import('./threat-discovery-status.js');
+        writeJson(res, 200, await buildThreatDiscoveryStatus(requestTenantId));
+        return;
+      }
+      if (url === '/api/threat-discovery/threat-lab/run' && method === 'POST') {
+        setCors();
+        const body = await readBody(req).catch(() => ({}));
+        const mode = (body as { mode?: string }).mode === 'proactive' ? 'proactive' : 'reactive';
+        const { startThreatLabJob } = await import('./threat-discovery-runner.js');
+        const result = startThreatLabJob(requestTenantId, { mode });
+        if (!result.ok) {
+          writeJson(res, result.status ?? 409, { error: result.error, jobId: result.jobId });
+          return;
+        }
+        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt, kind: 'threat-lab' });
+        return;
+      }
+      if (url === '/api/threat-discovery/auto-research/run' && method === 'POST') {
+        setCors();
+        const { startAutoThreatResearchJob } = await import('./threat-discovery-runner.js');
+        const result = startAutoThreatResearchJob(requestTenantId);
+        if (!result.ok) {
+          writeJson(res, result.status ?? 409, { error: result.error, jobId: result.jobId });
+          return;
+        }
+        writeJson(res, 202, { jobId: result.jobId, startedAt: result.startedAt, kind: 'auto-research' });
+        return;
+      }
+      const candidateMatch = url.match(/^\/api\/threat-discovery\/candidates\/([^/]+)$/);
+      if (candidateMatch && method === 'GET') {
+        setCors();
+        const id = decodeURIComponent(candidateMatch[1]);
+        const { readThreatLabCandidateById } = await import('./swarm-artifacts.js');
+        const candidate = readThreatLabCandidateById(requestTenantId, id);
+        if (!candidate) {
+          writeJson(res, 404, { error: 'Candidate not found' });
+          return;
+        }
+        writeJson(res, 200, candidate);
         return;
       }
       if (url === '/api/onboarding/status' && method === 'GET') {

@@ -10,9 +10,9 @@ const pkgPath = process.env.PREPACK_PKG ?? join(process.cwd(), 'package.json');
 const backupPath = pkgPath + '.prepack-backup';
 
 const VERSION_MAP = {
-  '@mcp-guardian/plugin-sdk': '^3.0.0',
-  '@mcp-guardian/core': '^2.9.6',
-  '@mcp-guardian/server': '^2.9.6',
+  '@mcp-guardian/plugin-sdk': '^3.1.0',
+  '@mcp-guardian/core': '^3.1.0',
+  '@mcp-guardian/server': '^3.1.0',
 };
 
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));

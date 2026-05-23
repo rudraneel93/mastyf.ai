@@ -10,7 +10,9 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Current release: [v3.0.0](CHANGELOG.md#300---2026-05-24)** — Pro paywall hardening (Security Swarm CLI, fleet, AI learning) + dual license. Prior: [v2.10.0](CHANGELOG.md#2100---2026-05-23). Unreleased on `main`: [CHANGELOG.md#unreleased](CHANGELOG.md#unreleased).
+**Current release: [v3.1.0](CHANGELOG.md#310---2026-05-23)** — Threat Lab, Auto Threat Research, and Threat Discovery dashboard (Pro). Prior: [v3.0.0](CHANGELOG.md#300---2026-05-24) (Pro paywall hardening). Unreleased on `main`: [CHANGELOG.md#unreleased](CHANGELOG.md#unreleased).
+
+**v3.1.0 (Threat Discovery)** — **Threat Lab** (Ollama/Qwen LLM threat discovery), **Auto Threat Research** (runtime + batch corpus writes), and a dedicated **Threat Discovery** dashboard tab with architecture view, run controls, and candidate review. Requires local Ollama + `qwen3:8b` or cloud LLM — not bundled with npm ([PRO_SETUP.md](docs/PRO_SETUP.md#llm-prerequisites) · [THREAT_LAB.md](docs/THREAT_LAB.md)).
 
 **v3.0.0 (Pro paywall hardening)** — Runtime enforcement on Pro surfaces: **Security Swarm CLI** (`pnpm security-swarm:*`), **fleet** (`mcp-guardian fleet`, TUI Fleet tab), **AI attack learning** on the proxy, and **dashboard startup** when `DASHBOARD_ENABLED=true`. Requires `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` ([PRO_SETUP.md](docs/PRO_SETUP.md)). **`GUARDIAN_OPEN_CORE=false` removed** — use `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true` for maintainer dev only. **Dual license:** MIT [Community Scope](COMMUNITY_SCOPE.md) + [LICENSE-PRO](LICENSE-PRO) for Pro paths. Cloud marketing site: [mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app).
 
@@ -139,7 +141,7 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**v3.0.0** adds **enforced Pro licensing** on swarm CLI, fleet, AI learning, and dashboard startup (see [MCP Guardian Pro](#mcp-guardian-pro--499-lifetime-open-core)). **v2.10.0** ships the **enterprise production bundle**: shared **gateway** ingress, **WebSocket** transport parity, swarm hardening, Postgres **RLS** + backup/DR, semantic **10/min** cap with **24h** LLM cache and **local fallback** when the API is exhausted, **DPoP lock-free** jti claims, dashboard **`PUT /api/policy`**, and **`@mcp-guardian/core`** offline confusables. Prior releases: **2.9.7** (live dashboard, policy editor, open-core Pro, cloud control plane), **2.9.4** (multi-tenant JWT + response gate on all transports), **2.9.2** (adversarial harness + enterprise sim), **2.8.0** (production blockers resolved). Full history: [CHANGELOG.md](CHANGELOG.md).
+**v3.1.0** adds **Threat Lab**, **Auto Threat Research**, and the **Threat Discovery** dashboard tab (Pro + local/cloud LLM). **v3.0.0** adds **enforced Pro licensing** on swarm CLI, fleet, AI learning, and dashboard startup (see [MCP Guardian Pro](#mcp-guardian-pro--499-lifetime-open-core)). **v2.10.0** ships the **enterprise production bundle**: shared **gateway** ingress, **WebSocket** transport parity, swarm hardening, Postgres **RLS** + backup/DR, semantic **10/min** cap with **24h** LLM cache and **local fallback** when the API is exhausted, **DPoP lock-free** jti claims, dashboard **`PUT /api/policy`**, and **`@mcp-guardian/core`** offline confusables. Prior releases: **2.9.7** (live dashboard, policy editor, open-core Pro, cloud control plane), **2.9.4** (multi-tenant JWT + response gate on all transports), **2.9.2** (adversarial harness + enterprise sim), **2.8.0** (production blockers resolved). Full history: [CHANGELOG.md](CHANGELOG.md).
 
 > **Experimental vs shipped (honest)**  
 > **Shipped:** stdio proxy + **shared gateway** (SSE/WS), YAML policy + semantic guards, **policy compile cache**, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC** + **access audit JSONL** (`GET /api/audit`), **browser SPA** with **live-only metrics** and **policy editor**, **ThreatIntel polling**, **tenant-scoped swarm** (HMAC evasion manifests), **response DLP** (HTML/URL decode, `X-Guardian-Redaction-Reason`), **streaming response inspection**, **cost auditor** + `GET /api/cost/breakdown`, **per-tenant daily budget** (`GUARDIAN_TENANT_DAILY_BUDGET_JSON`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA**, **PgBouncer** + Postgres **RLS**, **Helm PDB / resources / NetworkPolicy** (enterprise overlay), **pg_basebackup** CronJob, bounded **session/nonce/LLM caches** (default **24h** TTL), **DPoP** (lock-free or legacy lock), **audit hash chain** ([HIPAA_AUDIT_TRAIL.md](docs/HIPAA_AUDIT_TRAIL.md)), **@mcp-guardian/core** (Ajv + TR39 offline regex), mTLS, non-root Docker, Plugin SDK, async semantic + **local/Ollama fallback**, secret scanner DLP, corpus + harness, instant/batch AI learning, [gap-matrix](reports/enterprise-mcp-tests-31/gap-matrix.md), Windows `guardian-proxy.ps1`.  
@@ -462,7 +464,7 @@ Docs: [SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md) · [OAUTH_CLOUD_SETUP.
 #### Earlier enterprise features
 - **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview; **v2.9.7+** editable policy (`PUT /api/policy`)
 - **Fleet aggregation (v2.7, Pro v3.0+)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`); license required from v3.0
-- **Detector Plugin SDK (v2.8)** — [`@mcp-guardian/plugin-sdk`](https://www.npmjs.com/package/@mcp-guardian/plugin-sdk) on npm (`PLUGIN_SDK_VERSION` 3.0.0); `createDetectorPlugin` + lifecycle hooks; monorepo `workspace:*` — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md), [packages/plugin-sdk/](packages/plugin-sdk/)
+- **Detector Plugin SDK (v2.8)** — [`@mcp-guardian/plugin-sdk`](https://www.npmjs.com/package/@mcp-guardian/plugin-sdk) on npm (`PLUGIN_SDK_VERSION` 3.1.0); `createDetectorPlugin` + lifecycle hooks; monorepo `workspace:*` — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md), [packages/plugin-sdk/](packages/plugin-sdk/)
 - **Tenant isolation** — per-tenant circuit breakers, rate limits, sessions, attack learning, and audit scoping; JWT-authoritative binding when `GUARDIAN_MULTI_TENANT_ENABLED=true`; see [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md)
 - **Response security gate (v2.9.3)** — unified DLP + optional sync semantic on tool **responses** across stdio, HTTP, SSE, WebSocket, and streamable HTTP (`gateToolResponseText`; `GUARDIAN_RESPONSE_DLP_MODE`, `GUARDIAN_SEMANTIC_SYNC_RESPONSE`)
 - **Enterprise auth (v2.9.3)** — OIDC introspection (`GUARDIAN_OIDC_INTROSPECTION`), Redis token revocation denylist, mTLS cert hot-reload (`MtlsCertWatcher`), session rotation (`GUARDIAN_SESSION_ROTATE_ON_USE`)
@@ -1577,8 +1579,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 | AI attack learning (instant + batch on proxy) | No | Yes |
 | `GUARDIAN_MULTI_TENANT_ENABLED` | No | Yes |
 | `GUARDIAN_SEMANTIC_ASYNC` (tier-2 LLM audit) | No | Yes |
+| Threat Lab / Threat Discovery / Auto Threat Research | No | Yes (LLM required — see below) |
 
 **Default (v3.0+):** Pro features require `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` (see [PRO_SETUP.md](docs/PRO_SETUP.md)). Security Swarm CLI, fleet, and AI learning are gated at runtime. Maintainer dev only: `NODE_ENV=development` + `GUARDIAN_DEV_UNLOCK_ALL=true`. **Deprecated:** `GUARDIAN_OPEN_CORE=false` (ignored with a warning).
+
+### LLM prerequisites (Threat Lab, Threat Discovery, semantic async)
+
+Pro unlocks LLM-powered features, but **Ollama and model weights are not npm dependencies**. `npm install` and `git clone` do **not** download Ollama or `qwen3:8b`. For the default local setup:
+
+1. Install [Ollama](https://ollama.com/download) on the Guardian host.
+2. `ollama pull qwen3:8b` and `ollama serve`.
+3. Set `GUARDIAN_LLM_ENABLED=true`, `OLLAMA_BASE_URL=http://localhost:11434`, and optionally `GUARDIAN_LLM_MODEL=qwen3:8b`.
+
+Threat Lab and Threat Discovery require a reachable LLM — they skip cleanly when Ollama is offline (no synthetic fallback). You can use **Anthropic/OpenAI** instead via `GUARDIAN_LLM_PROVIDER` and API keys. Full buyer steps: [docs/PRO_SETUP.md#llm-prerequisites](docs/PRO_SETUP.md#llm-prerequisites) · [docs/THREAT_LAB.md](docs/THREAT_LAB.md).
 
 ### Can users bypass Pro without paying?
 

@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-05-23T06:39:10.158Z",
+  "timestamp": "2026-05-23T13:21:55.536Z",
   "windowDays": 7,
   "storage": "jsonl",
   "llmConfigured": true,
   "totals": {
-    "records": 30,
-    "flagged": 28,
+    "records": 34,
+    "flagged": 32,
     "labeled": 29,
     "truePositive": 28,
     "falsePositive": 1
   },
   "metrics": {
-    "avgFlagConfidence": 0.801,
+    "avgFlagConfidence": 0.795,
     "labeledFpRate": 0.034
   },
   "thresholds": {
@@ -28,46 +28,42 @@
   "profile": "hybrid",
   "sampleFlagged": [
     {
-      "id": "1779464970927-lk1f1tp",
-      "toolName": "run",
-      "confidence": 0.75,
-      "label": "true_positive",
-      "categories": [
-        "prompt-injection"
-      ]
-    },
-    {
-      "id": "1779471654111-svti3de",
-      "toolName": "run",
-      "confidence": 0.75,
-      "label": "true_positive",
-      "categories": [
-        "prompt-injection"
-      ]
-    },
-    {
-      "id": "1779471837833-enoh9zb",
-      "toolName": "run",
-      "confidence": 0.75,
-      "label": "true_positive",
-      "categories": [
-        "prompt-injection"
-      ]
-    },
-    {
-      "id": "1779476222455-ep018ey",
-      "toolName": "run",
-      "confidence": 0.75,
-      "label": "true_positive",
-      "categories": [
-        "prompt-injection"
-      ]
-    },
-    {
       "id": "1779515057712-6jtud3f",
       "toolName": "run",
       "confidence": 0.75,
       "label": "true_positive",
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779536577400-hpe6uim",
+      "toolName": "run",
+      "confidence": 0.75,
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779536740769-njcm2s3",
+      "toolName": "run",
+      "confidence": 0.75,
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779537142026-5hp8yin",
+      "toolName": "run",
+      "confidence": 0.75,
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779537578408-bdccsyp",
+      "toolName": "run",
+      "confidence": 0.75,
       "categories": [
         "prompt-injection"
       ]

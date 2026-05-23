@@ -1,0 +1,167 @@
+'use client';
+
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from 'recharts';
+import type { ThreatDiscoveryStatus } from '@/lib/guardian-api';
+import { ExplainableStatCard } from './ExplainableStatCard';
+import { ThreatDiscoveryRunControls } from './ThreatDiscoveryRunControls';
+import { THREAT_DISCOVERY_EXPLAINERS } from '@/lib/threat-discovery-copy';
+
+const COLORS = ['#38bdf8', '#16a34a', '#f87171', '#ea580c', '#8b5cf6', '#64748b'];
+
+type Props = {
+  status: ThreatDiscoveryStatus | null;
+  loading: boolean;
+  loadError?: string;
+  roles?: string[];
+  onRunStarted?: (msg: string) => void;
+  onRefresh?: () => void;
+};
+
+function toChartData(record: Record<string, number> | undefined) {
+  if (!record) return [];
+  return Object.entries(record).map(([name, value]) => ({ name, value }));
+}
+
+export function ThreatDiscoveryOverview({
+  status,
+  loading,
+  loadError,
+  roles,
+  onRunStarted,
+  onRefresh,
+}: Props) {
+  if (loading && !status) {
+    return <p className="hint">Loading threat discovery status…</p>;
+  }
+  if (!status) {
+    return (
+      <p className="muted">
+        {loadError ||
+          'Threat Discovery status unavailable — ensure Pro license and dashboard API on port 4000.'}
+      </p>
+    );
+  }
+
+  const tl = status.threatLab.stats;
+  const ac = status.autoCorpus.stats;
+  const pipeline = status.pipeline;
+  const sourceChart = toChartData({
+    ...tl.bySource,
+    ...Object.fromEntries(
+      Object.entries(ac.bySource || {}).map(([k, v]) => [`auto:${k}`, v]),
+    ),
+  });
+  const reviewChart = toChartData(tl.byReviewStatus);
+
+  return (
+    <div className="threat-discovery-overview">
+      {!status.llm.ok ? (
+        <p className="status status-error banner-inline">
+          LLM unavailable: {status.llm.reason || 'Configure Ollama'}
+        </p>
+      ) : null}
+      {!status.features.threatLabEnabled && !status.features.autoResearchEnabled ? (
+        <p className="hint banner-inline">
+          Enable <code>SWARM_THREAT_LAB=true</code> and/or{' '}
+          <code>GUARDIAN_THREAT_RESEARCH_AUTO=true</code> +{' '}
+          <code>SWARM_THREAT_RESEARCH_AUTO=true</code> on the proxy server, or use Run buttons
+          below (sets env for child job only).
+        </p>
+      ) : null}
+
+      <div className="explainable-stat-grid">
+        <ExplainableStatCard
+          label="Pending review"
+          value={tl.pending}
+          sub={`${tl.total} total candidates`}
+          explanation={THREAT_DISCOVERY_EXPLAINERS.pendingReview}
+          variant={tl.pending > 0 ? 'warn' : 'default'}
+        />
+        <ExplainableStatCard
+          label="Auto fixtures"
+          value={ac.total}
+          sub={`${ac.last24h} in last 24h`}
+          explanation={THREAT_DISCOVERY_EXPLAINERS.autoFixtures}
+        />
+        <ExplainableStatCard
+          label="LLM"
+          value={status.llm.ok ? 'Healthy' : 'Offline'}
+          sub={status.llm.model || '—'}
+          explanation={THREAT_DISCOVERY_EXPLAINERS.llmStatus}
+          variant={status.llm.ok ? 'success' : 'danger'}
+        />
+        <ExplainableStatCard
+          label="Queue depth"
+          value={pipeline.queued}
+          sub={`${pipeline.writesThisHour}/${pipeline.maxPerHour} writes/hr`}
+          explanation={THREAT_DISCOVERY_EXPLAINERS.queueDepth}
+        />
+        <ExplainableStatCard
+          label="Dedupe store"
+          value={status.processedFingerprints}
+          explanation={THREAT_DISCOVERY_EXPLAINERS.processedFingerprints}
+        />
+        <ExplainableStatCard
+          label="Avg confidence"
+          value={tl.total > 0 ? `${(tl.avgConfidence * 100).toFixed(0)}%` : '—'}
+          sub="Threat Lab candidates"
+          explanation="Mean LLM confidence across pending and reviewed Threat Lab candidates."
+        />
+      </div>
+
+      <ThreatDiscoveryRunControls
+        roles={roles}
+        status={status}
+        onRunStarted={onRunStarted}
+        onRefresh={onRefresh}
+      />
+
+      <div className="infra-charts-grid">
+        <div className="infra-chart-card">
+          <h5>Detection sources</h5>
+          {sourceChart.length === 0 ? (
+            <p className="muted">No candidates or auto writes yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={sourceChart} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {sourceChart.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="infra-chart-card">
+          <h5>Review status (Threat Lab)</h5>
+          {reviewChart.length === 0 ? (
+            <p className="muted">No Threat Lab candidates.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={reviewChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#38bdf8" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

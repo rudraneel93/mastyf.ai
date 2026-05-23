@@ -121,6 +121,15 @@ export class ThreatIntel {
     if (allEntries.length > 0) {
       const newEntries = this.diffFeed(allEntries);
       Logger.info(`[ThreatIntel] Live poll: ${allEntries.length} total, ${newEntries.length} new threats`);
+      if (newEntries.length > 0 && process.env.GUARDIAN_THREAT_RESEARCH_THREAT_INTEL !== 'false') {
+        setImmediate(() => {
+          void import('./threat-research-pipeline.js').then(({ buildThreatIntelEvent, enqueueThreatResearch }) => {
+            for (const entry of newEntries) {
+              enqueueThreatResearch(buildThreatIntelEvent(entry));
+            }
+          });
+        });
+      }
       return newEntries;
     }
 
@@ -147,6 +156,22 @@ export class ThreatIntel {
       pollingActive: this.isPollingActive(),
       pollingDisabled: process.env.GUARDIAN_AI_DISABLE_THREAT_POLL === 'true',
     };
+  }
+
+  /** Recent catalog entries for Threat Lab / learning cycle (severity filter optional). */
+  getCatalogEntries(opts?: {
+    minSeverity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    limit?: number;
+  }): ThreatIntelEntry[] {
+    const order = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+    const minIdx = opts?.minSeverity ? order.indexOf(opts.minSeverity) : 0;
+    const limit = opts?.limit ?? 50;
+    return [...this.knownEntries.values()]
+      .filter((e) => !isDemoThreatId(e.id))
+      .filter((e) => order.indexOf(e.severity) >= minIdx)
+      .sort((a, b) => (b.firstSeenAt || '').localeCompare(a.firstSeenAt || ''))
+      .slice(0, limit)
+      .map(({ firstSeenAt: _fs, ...entry }) => entry);
   }
 
   /** Poll NVD API v2 for recent CVEs relevant to MCP ecosystem */

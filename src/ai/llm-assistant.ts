@@ -20,6 +20,8 @@ export interface LlmAssistantConfig {
   maxRetries: number;
   maxTokens: number;
   temperature: number;
+  /** When false, use full timeoutMs (Threat Lab / batch jobs, not proxy hot path). */
+  hotPath?: boolean;
 }
 
 function configFromEnv(): LlmAssistantConfig {
@@ -32,7 +34,14 @@ function configFromEnv(): LlmAssistantConfig {
     maxRetries: 2,
     maxTokens: llm.maxTokens,
     temperature: llm.temperature,
+    hotPath: true,
   };
+}
+
+function ollamaThinkEnabled(model: string): boolean {
+  if (process.env.GUARDIAN_LLM_OLLAMA_THINK === 'true') return true;
+  if (process.env.GUARDIAN_LLM_OLLAMA_THINK === 'false') return false;
+  return !/qwen3/i.test(model);
 }
 
 export interface LlmResponse {
@@ -89,29 +98,41 @@ export class LlmAssistant {
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
       try {
         const startTime = Date.now();
-        const hotPathBudgetMs = Math.min(this.config.timeoutMs, getSemanticTimeoutMs());
+        const budgetMs =
+          this.config.hotPath === false
+            ? this.config.timeoutMs
+            : Math.min(this.config.timeoutMs, getSemanticTimeoutMs());
+        const body: Record<string, unknown> = {
+          model: this.config.model,
+          prompt: `${systemPrompt}\n\n${userPrompt}`,
+          stream: false,
+          options: {
+            temperature: this.config.temperature,
+            num_predict: this.config.maxTokens,
+          },
+        };
+        if (!ollamaThinkEnabled(this.config.model)) {
+          body.think = false;
+        }
         const response = await fetch(`${this.config.ollamaUrl}/api/generate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: this.config.model,
-            prompt: `${systemPrompt}\n\n${userPrompt}`,
-            stream: false,
-            options: {
-              temperature: this.config.temperature,
-              num_predict: this.config.maxTokens,
-            },
-          }),
-          signal: AbortSignal.timeout(hotPathBudgetMs),
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(budgetMs),
         });
 
         if (!response.ok) {
           throw new Error(`Ollama returned ${response.status}`);
         }
 
-        const data = await response.json() as { response?: string; model?: string; eval_count?: number };
+        const data = await response.json() as {
+          response?: string;
+          thinking?: string;
+          model?: string;
+          eval_count?: number;
+        };
         const durationMs = Date.now() - startTime;
-        const text = (data.response || '').trim();
+        const text = (data.response || data.thinking || '').trim();
 
         await cache.set(cacheKey, text);
 

@@ -49,6 +49,7 @@ import {
   recordBlockLearningEvent,
   fingerprintArgs,
   redactArgSnippets,
+  redactArguments,
   ingestPolicyDecision,
 } from '../ai/block-learning.js';
 import { buildSemanticAuditJob, enqueueSemanticAudit } from '../ai/async-semantic-audit.js';
@@ -541,6 +542,7 @@ export class McpProxyServer {
       serverName: this.serverName,
       argsFingerprint: fingerprintArgs(requestArguments),
       argSnippets: redactArgSnippets(requestArguments),
+      arguments: redactArguments(requestArguments),
       tenantId: tid,
     };
     const learningOpts = { db: this.db as HistoryDatabase };

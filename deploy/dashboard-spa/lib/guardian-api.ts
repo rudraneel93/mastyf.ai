@@ -783,6 +783,203 @@ export async function fetchSwarmSummary(): Promise<string | null> {
   return res.text();
 }
 
+export type ThreatLabCandidate = {
+  id: string;
+  fingerprint: string;
+  attackClass: string;
+  hypothesis: string;
+  confidence: number;
+  path?: string;
+  branch?: string;
+  reviewStatus?: 'pending' | 'accepted' | 'rejected';
+  policyRule?: Record<string, unknown>;
+  corpusCandidate?: Record<string, unknown>;
+  provenance?: {
+    source?: string;
+    llmUsed?: boolean;
+    inputFingerprint?: string;
+  };
+  validation?: {
+    ok?: boolean;
+    errors?: string[];
+    replayBlocked?: boolean;
+  };
+  advWriteSkipped?: string;
+};
+
+export type ThreatDiscoveryJobStatus = {
+  jobId: string;
+  kind: 'threat-lab' | 'auto-research';
+  tenantId: string;
+  state: 'idle' | 'running' | 'done' | 'failed';
+  phase: string;
+  phaseLabel: string;
+  progressPct: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  exitCode: number | null;
+  error: string | null;
+  logTail: string;
+  pid: number | null;
+};
+
+export type ThreatDiscoveryStatus = {
+  timestamp: string;
+  license: { swarmFeature: boolean; bypass: boolean };
+  features: {
+    threatLabEnabled: boolean;
+    threatLabMode: 'reactive' | 'proactive';
+    threatLabMax: number;
+    threatLabSemantic: boolean;
+    autoResearchEnabled: boolean;
+    autoResearchConfig: Record<string, unknown>;
+  };
+  llm: { ok: boolean; reason?: string; model?: string };
+  pipeline: {
+    queued: number;
+    writesThisHour: number;
+    maxPerHour: number;
+    debounceMs: number;
+    enabled: boolean;
+    sources: { semantic: boolean; blocks: boolean; threatIntel: boolean };
+  };
+  processedFingerprints: number;
+  threatLab: {
+    manifest: {
+      timestamp?: string;
+      count?: number;
+      mode?: string;
+      llmModel?: string;
+      llmUsed?: boolean;
+      candidates?: ThreatLabCandidate[];
+    } | null;
+    stats: {
+      total: number;
+      pending: number;
+      accepted: number;
+      rejected: number;
+      byReviewStatus: Record<string, number>;
+      bySource: Record<string, number>;
+      byAttackClass: Record<string, number>;
+      avgConfidence: number;
+      confidenceBuckets: { bucket: string; count: number }[];
+    };
+  };
+  autoCorpus: {
+    manifest: {
+      timestamp: string;
+      count: number;
+      entries: AutoCorpusEntry[];
+    } | null;
+    stats: {
+      total: number;
+      last24h: number;
+      bySource: Record<string, number>;
+      byAttackClass: Record<string, number>;
+      timeline: { advId: string; timestamp: string; source: string; confidence: number }[];
+    };
+  };
+  jobs: {
+    threatLab: ThreatDiscoveryJobStatus;
+    autoResearch: ThreatDiscoveryJobStatus;
+  };
+};
+
+export async function fetchThreatDiscoveryStatus(): Promise<{
+  status: ThreatDiscoveryStatus | null;
+  error?: string;
+}> {
+  const res = await guardianFetch('/api/threat-discovery/status');
+  if (res.status === 404) {
+    return {
+      status: null,
+      error:
+        'Threat Discovery API not found — run `pnpm exec tsc && pnpm dashboard:build`, then restart `pnpm dashboard:proxy guardian-configs/filesystem.json`.',
+    };
+  }
+  if (res.status === 402) {
+    return { status: null, error: 'Pro license required (swarm feature).' };
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { status: null, error: body.error || `HTTP ${res.status}` };
+  }
+  return { status: (await res.json()) as ThreatDiscoveryStatus };
+}
+
+export async function runThreatLab(
+  mode: 'reactive' | 'proactive' = 'reactive',
+): Promise<{ ok: boolean; error?: string; jobId?: string }> {
+  const res = await guardianFetch('/api/threat-discovery/threat-lab/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode }),
+  });
+  const body = (await res.json()) as { error?: string; jobId?: string };
+  return { ok: res.ok, error: body.error, jobId: body.jobId };
+}
+
+export async function runAutoThreatResearch(): Promise<{ ok: boolean; error?: string; jobId?: string }> {
+  const res = await guardianFetch('/api/threat-discovery/auto-research/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  const body = (await res.json()) as { error?: string; jobId?: string };
+  return { ok: res.ok, error: body.error, jobId: body.jobId };
+}
+
+export async function fetchThreatLabCandidate(id: string): Promise<ThreatLabCandidate | null> {
+  const res = await guardianFetch(`/api/threat-discovery/candidates/${encodeURIComponent(id)}`);
+  if (!res.ok) return null;
+  return (await res.json()) as ThreatLabCandidate;
+}
+
+export async function fetchThreatLabCandidates(): Promise<ThreatLabCandidate[]> {
+  const res = await guardianFetch('/api/security-swarm/threat-lab-candidates');
+  if (!res.ok) return [];
+  const body = (await res.json()) as { candidates?: ThreatLabCandidate[] };
+  return body.candidates || [];
+}
+
+export async function acceptThreatLabCandidate(id: string): Promise<boolean> {
+  const res = await guardianFetch('/api/security-swarm/threat-lab-candidates/accept', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  return res.ok;
+}
+
+export async function rejectThreatLabCandidate(id: string): Promise<boolean> {
+  const res = await guardianFetch('/api/security-swarm/threat-lab-candidates/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  return res.ok;
+}
+
+export type AutoCorpusEntry = {
+  advId: string;
+  relPath: string;
+  fingerprint: string;
+  source: string;
+  attackClass: string;
+  hypothesis: string;
+  confidence: number;
+  timestamp: string;
+  toolName: string;
+  category: string;
+};
+
+export async function fetchAutoCorpusManifest(): Promise<AutoCorpusEntry[]> {
+  const res = await guardianFetch('/api/security-swarm/auto-corpus');
+  if (!res.ok) return [];
+  const body = (await res.json()) as { entries?: AutoCorpusEntry[] };
+  return body.entries || [];
+}
+
 export type LiveScenarioResult = {
   scenario: string;
   tool: string;

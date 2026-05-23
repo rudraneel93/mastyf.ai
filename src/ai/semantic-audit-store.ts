@@ -46,7 +46,7 @@ function appendJsonl(record: StoredSemanticAudit): void {
   trimStore(path);
 }
 
-export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id' | 'tenantId'>): void {
+export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id' | 'tenantId'>): StoredSemanticAudit {
   const tenantId = resolveTenantId();
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const line: StoredSemanticAudit = { id, tenantId, ...record };
@@ -55,6 +55,7 @@ export function appendSemanticAuditRecord(record: Omit<StoredSemanticAudit, 'id'
     if (!isSemanticAuditPostgresEnabled()) return;
     await pgAppendSemanticAuditRecord({ ...record, id, timestamp: record.timestamp });
   });
+  return line;
 }
 
 function trimStore(path: string): void {

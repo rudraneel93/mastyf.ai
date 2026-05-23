@@ -167,7 +167,62 @@ export class SuggestionEngine {
       }
     }
 
-    // Note: threat-intel requires a feed file; call processFeed() externally
+    // Threat intel — poll live feeds, optionally LLM-enrich before rule generation
+    if (this.config.enabledModules.includes('threat')) {
+      try {
+        await this.threatIntel.pollLiveFeeds();
+      } catch {
+        /* best-effort poll */
+      }
+      const catalog = this.threatIntel.getCatalogEntries({ minSeverity: 'MEDIUM', limit: 20 });
+      const llmEnrich = process.env.GUARDIAN_AI_THREAT_LLM !== 'false';
+      let llm: import('./llm-assistant.js').LlmAssistant | null = null;
+      if (llmEnrich) {
+        const { LlmAssistant } = await import('./llm-assistant.js');
+        const assistant = new LlmAssistant();
+        if (assistant.isAvailable() && (await assistant.healthCheck())) {
+          llm = assistant;
+        }
+      }
+      for (const entry of catalog) {
+        let suggestions = this.threatIntel.generateRules([entry]);
+        if (llm) {
+          const analysis = await llm.analyzeThreat({
+            cveId: entry.id.replace(/^nvd-/, ''),
+            severity: entry.severity,
+            description: entry.description,
+            affectedPackage: entry.affectedPackage || 'unknown',
+          });
+          if (analysis?.suggestedPatterns?.length) {
+            suggestions = [
+              {
+                rule: {
+                  name: `threat-llm-${entry.id}`,
+                  description: `[${entry.severity}] ${analysis.impact || entry.description.slice(0, 120)}`,
+                  action: analysis.action === 'pass' ? 'flag' : 'block',
+                  patterns: analysis.suggestedPatterns.slice(0, 3),
+                },
+                confidence:
+                  entry.severity === 'CRITICAL' ? 0.9 : entry.severity === 'HIGH' ? 0.85 : 0.75,
+                reason: `LLM-enriched ${entry.severity} threat from ${entry.source}`,
+                source: 'threat' as const,
+                entry,
+              },
+            ];
+          }
+        }
+        for (const s of suggestions) {
+          allSuggestions.push({
+            id: `threat-${suggestionCounter++}`,
+            rule: s.rule,
+            confidence: this.selfImprovement.adjustConfidence(s.confidence, 'threat'),
+            reason: s.reason,
+            source: 'threat',
+          });
+        }
+      }
+    }
+
     // Note: policy-assist requires NL goals; call generateRule() externally
 
     // ── 4. Pattern recognition ──────────────────────────

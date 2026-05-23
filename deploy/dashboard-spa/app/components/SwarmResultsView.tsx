@@ -10,9 +10,13 @@ import {
   fetchSwarmSummary,
   fetchTrafficSummary,
   fetchUserServersSession,
+  fetchThreatLabCandidates,
+  fetchAutoCorpusManifest,
   type PlainEnglishReport,
   type SwarmFigureEntry,
   type SwarmLatest,
+  type ThreatLabCandidate,
+  type AutoCorpusEntry,
   type TrafficSummary,
 } from '@/lib/guardian-api';
 import { InfrastructureVisualsPanel } from './InfrastructureVisualsPanel';
@@ -45,6 +49,8 @@ export function SwarmResultsView({
   const [plainReport, setPlainReport] = useState<PlainEnglishReport | null>(null);
   const [traffic, setTraffic] = useState<TrafficSummary | null>(null);
   const [userServers, setUserServers] = useState<Record<string, unknown> | null>(null);
+  const [threatLabCandidates, setThreatLabCandidates] = useState<ThreatLabCandidate[]>([]);
+  const [autoCorpusEntries, setAutoCorpusEntries] = useState<AutoCorpusEntry[]>([]);
   const [showFullReport, setShowFullReport] = useState(false);
   const [loadError, setLoadError] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
@@ -53,7 +59,7 @@ export function SwarmResultsView({
     setLoading(true);
     setLoadError('');
     try {
-      const [r, l, f, s, pr, tr, us] = await Promise.all([
+      const [r, l, f, s, pr, tr, us, tl, ac] = await Promise.all([
         showReport ? fetchSwarmReportPreview() : Promise.resolve(''),
         fetchSwarmLatest(),
         fetchSwarmFigures(),
@@ -61,6 +67,8 @@ export function SwarmResultsView({
         fetchPlainEnglishReport(),
         fetchTrafficSummary(),
         fetchUserServersSession(),
+        fetchThreatLabCandidates(),
+        fetchAutoCorpusManifest(),
       ]);
       setReport(r || '');
       setLatest(l);
@@ -69,6 +77,8 @@ export function SwarmResultsView({
       setPlainReport(pr);
       setTraffic(tr);
       setUserServers(us);
+      setThreatLabCandidates(tl);
+      setAutoCorpusEntries(ac);
       if (!pr && !l && !f.length && !s && !r) {
         setLoadError('No report yet. Run full security analysis from Agent flow above.');
       } else {
@@ -174,6 +184,25 @@ export function SwarmResultsView({
               ))}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {!loading && (threatLabCandidates.length > 0 || autoCorpusEntries.length > 0) ? (
+        <div className="threat-discovery-summary card">
+          <h4>Threat Discovery</h4>
+          <p>
+            {threatLabCandidates.length > 0
+              ? `${threatLabCandidates.filter((c) => !c.reviewStatus || c.reviewStatus === 'pending').length} Threat Lab candidate(s) pending review`
+              : null}
+            {threatLabCandidates.length > 0 && autoCorpusEntries.length > 0 ? ' · ' : null}
+            {autoCorpusEntries.length > 0
+              ? `${autoCorpusEntries.length} auto corpus fixture(s)`
+              : null}
+          </p>
+          <p className="hint">
+            Open the <strong>Threat Discovery</strong> tab for interactive architecture, run controls,
+            detailed statistics, and accept/reject workflow.
+          </p>
         </div>
       ) : null}
 

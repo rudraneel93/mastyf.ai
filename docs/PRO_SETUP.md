@@ -25,6 +25,7 @@ The open-source software is also available under MIT. **npm install is free** �
 | Security swarm / Analysis tab | No | Yes |
 | Multi-tenant JWT binding | No | Yes |
 | Semantic async audit (tier-2) | No | Yes |
+| Threat Lab / Threat Discovery / Auto Threat Research | No | Yes (requires LLM — see below) |
 
 ## Install Guardian
 
@@ -34,6 +35,54 @@ npm install -g @mcp-guardian/server
 ```
 
 See [README.md](../README.md) for proxy, dashboard, and policy setup.
+
+## LLM prerequisites
+
+Several Pro features — **Threat Lab**, **Threat Discovery**, **Auto Threat Research**, and **semantic async audit** — call an LLM at runtime. They are designed around **local Ollama + Qwen** by default. **Neither Ollama nor model weights are installed by `npm install` or `git clone`**; you must set them up on the host yourself.
+
+### Recommended: local Ollama + Qwen
+
+1. **Install Ollama** on the machine running Guardian ([ollama.com](https://ollama.com/download)).
+2. **Pull the default model** (not bundled with MCP Guardian):
+
+   ```bash
+   ollama pull qwen3:8b
+   ```
+
+3. **Start the Ollama server** (or use your OS service):
+
+   ```bash
+   ollama serve
+   ```
+
+4. **Enable LLM features** in your Guardian environment:
+
+   ```bash
+   export GUARDIAN_LLM_ENABLED=true
+   export OLLAMA_BASE_URL=http://localhost:11434
+   export GUARDIAN_LLM_MODEL=qwen3:8b   # default when provider is ollama
+   ```
+
+   For Threat Lab / Threat Discovery batch runs, also set `SWARM_THREAT_LAB=true` (see [THREAT_LAB.md](THREAT_LAB.md)).
+
+### What works without an LLM
+
+The **dashboard**, **proxy**, **policy editor**, and **Security Swarm** shell still run without Ollama. LLM-dependent paths **skip cleanly** — Threat Lab does not emit synthetic candidates when Ollama is offline.
+
+### Alternative: cloud LLM (Anthropic / OpenAI)
+
+If you prefer not to run Ollama locally, set API keys and provider instead:
+
+```bash
+export GUARDIAN_LLM_ENABLED=true
+export GUARDIAN_LLM_PROVIDER=anthropic   # or openai
+export ANTHROPIC_API_KEY=sk-ant-...
+export GUARDIAN_LLM_MODEL=claude-haiku-4-5-20251001
+```
+
+Or use another Ollama model you already have: `export GUARDIAN_LLM_MODEL=llama3.2` after `ollama pull llama3.2`.
+
+Further detail: [THREAT_LAB.md](THREAT_LAB.md) · [AI_LEARNING.md](AI_LEARNING.md).
 
 ## Activate your license
 

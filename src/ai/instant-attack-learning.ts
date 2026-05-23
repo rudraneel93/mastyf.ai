@@ -12,6 +12,7 @@ import {
   type AttackPatternSuggestion,
 } from './attack-pattern-learner.js';
 import { resolveAttackLearningStatePath, resolveAiPendingSuggestionsPath } from './ai-paths.js';
+import { attackClassFromBlockRule } from './threat-taxonomy.js';
 import { LlmAssistant } from './llm-assistant.js';
 import { isAiAutoApplyEnabled, isAiLearningEnabled } from '../utils/ai-enabled.js';
 import { Logger } from '../utils/logger.js';
@@ -28,6 +29,7 @@ export interface InstantBlockEvent {
   block_reason: string;
   argsFingerprint: string;
   argSnippets?: string[];
+  arguments?: Record<string, unknown>;
   tenantId?: string;
 }
 
@@ -38,6 +40,8 @@ interface RecentBlock {
   blockRule: string;
   blockReason: string;
   argsFingerprint: string;
+  argSnippets?: string[];
+  arguments?: Record<string, unknown>;
 }
 
 interface RuleToolStats {
@@ -63,15 +67,6 @@ const CRITICAL_RULES = new Set([
   'path-guard',
   'sensitive-path',
 ]);
-
-const RULE_TO_ATTACK_CLASS: Record<string, string> = {
-  'secret-scan': 'secret_exfil',
-  'path-guard': 'path_traversal',
-  'sensitive-path': 'path_traversal',
-  'semantic-shell-guard': 'prompt_injection',
-  'sql-exfil': 'sql_injection',
-  'arg-entropy': 'obfuscation',
-};
 
 let stateCacheByTenant = new Map<string, AttackLearningState>();
 let lastLlmInstantAt = 0;
@@ -247,10 +242,23 @@ function toProxyRecords(blocks: RecentBlock[]): ProxyCallRecord[] {
   }));
 }
 
+export function queuePendingAttackSuggestion(
+  suggestion: AttackPatternSuggestion,
+  opts?: { confidenceBoost?: number; tenantId?: string; source?: string },
+): boolean {
+  return mergePendingSuggestion(
+    suggestion,
+    opts?.confidenceBoost ?? 0,
+    opts?.tenantId,
+    opts?.source ?? 'attack',
+  );
+}
+
 function mergePendingSuggestion(
   suggestion: AttackPatternSuggestion,
   confidenceBoost = 0,
   tenantId?: string,
+  source = 'attack',
 ): boolean {
   const path = resolveAiPendingSuggestionsPath(tenantId);
   const dir = dirname(path);
@@ -288,7 +296,7 @@ function mergePendingSuggestion(
     rule: suggestion.rule,
     confidence,
     reason: `${suggestion.reason} (instant learning)`,
-    source: 'attack',
+    source,
   });
   pending.updatedAt = new Date().toISOString();
   try {
@@ -315,19 +323,26 @@ function mergePendingSuggestion(
   return true;
 }
 
+interface InstantLlmResult {
+  confidenceBoost: number;
+  argPatterns?: Array<{ field: string; patterns: string[] }>;
+}
+
 async function maybeRunInstantLlm(
   event: InstantBlockEvent,
   attackClass: string,
-): Promise<number> {
-  if (!instantLlmEnabled() || !CRITICAL_RULES.has(event.block_rule)) return 0;
+): Promise<InstantLlmResult> {
+  if (!instantLlmEnabled() || !CRITICAL_RULES.has(event.block_rule)) {
+    return { confidenceBoost: 0 };
+  }
   const now = Date.now();
-  if (now - lastLlmInstantAt < llmRateLimitMs()) return 0;
+  if (now - lastLlmInstantAt < llmRateLimitMs()) return { confidenceBoost: 0 };
   lastLlmInstantAt = now;
 
   const tid = attackLearningTenantId(event.tenantId);
   const assistant = new LlmAssistant();
   const systemPrompt =
-    'Classify MCP tool-call blocks. Reply ONLY JSON: {"attackClass":"...","confidence":0.0-1.0}';
+    'Classify MCP tool-call blocks and suggest argPatterns. Reply ONLY JSON: {"attackClass":"...","confidence":0.0-1.0,"argPatterns":[{"field":"*","patterns":["regex"]}]}';
   const userPrompt = JSON.stringify({
     block_rule: event.block_rule,
     tool: event.toolName,
@@ -341,24 +356,39 @@ async function maybeRunInstantLlm(
     null,
     getInstantLlmTimeoutMs(),
   );
-  if (!result?.text) return 0;
+  if (!result?.text) return { confidenceBoost: 0 };
 
   try {
-    const parsed = JSON.parse(result.text) as { attackClass?: string; confidence?: number };
+    const parsed = JSON.parse(result.text) as {
+      attackClass?: string;
+      confidence?: number;
+      argPatterns?: Array<{ field?: string; patterns?: string[] }>;
+    };
     const cls = parsed.attackClass || attackClass;
     const conf = typeof parsed.confidence === 'number' ? parsed.confidence : 0.5;
     const state = loadAttackLearningState(tid);
     state.knownClassConfidence[cls] = Math.max(state.knownClassConfidence[cls] || 0, conf);
     saveAttackLearningState(state, tid);
-    return conf > 0.7 ? 0.05 : 0;
+
+    const argPatterns = (parsed.argPatterns || [])
+      .filter((ap) => ap.patterns?.length)
+      .map((ap) => ({
+        field: ap.field || '*',
+        patterns: (ap.patterns || []).slice(0, 3),
+      }));
+
+    return {
+      confidenceBoost: conf > 0.7 ? 0.05 : 0,
+      argPatterns: argPatterns.length ? argPatterns : undefined,
+    };
   } catch {
     Logger.debug('[instant-learning] LLM classifier returned non-JSON');
-    return 0;
+    return { confidenceBoost: 0 };
   }
 }
 
 function bumpKnownClassConfidence(state: AttackLearningState, blockRule: string): number {
-  const cls = RULE_TO_ATTACK_CLASS[blockRule];
+  const cls = attackClassFromBlockRule(blockRule);
   if (!cls) return 0;
   const prev = state.knownClassConfidence[cls] || 0.4;
   const next = Math.min(prev + 0.06, 0.95);
@@ -407,6 +437,8 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
     blockRule: event.block_rule,
     blockReason: event.block_reason,
     argsFingerprint: event.argsFingerprint,
+    argSnippets: event.argSnippets,
+    arguments: event.arguments,
   });
 
   pruneWindow(state, now);
@@ -438,19 +470,53 @@ export function recordInstantBlockEvent(event: InstantBlockEvent): {
         Logger.info(
           `[instant-learning] Queued attack suggestion ${suggestion.rule.name} after ${windowBlocks.length} blocks (${groupKey})`,
         );
+        setImmediate(() => {
+          void import('./threat-research-pipeline.js').then(({ buildBlockRepeatEvent, enqueueThreatResearch }) => {
+            enqueueThreatResearch(
+              buildBlockRepeatEvent(
+                event.block_rule,
+                event.toolName,
+                event.block_reason,
+                event.argsFingerprint,
+                {
+                  arguments: event.arguments,
+                  argSnippets: event.argSnippets,
+                  windowBlocks,
+                },
+              ),
+            );
+          });
+        });
       }
     }
   }
 
   if (process.env.GUARDIAN_AI_INSTANT_LLM === 'true') {
-    void maybeRunInstantLlm(event, RULE_TO_ATTACK_CLASS[event.block_rule] || 'unknown').then((llmBoost) => {
-      if (llmBoost > 0 && windowBlocks.length >= minBlocks) {
+    void maybeRunInstantLlm(event, attackClassFromBlockRule(event.block_rule) || 'unknown').then((llm) => {
+      if (llm.argPatterns?.length) {
+        const slug = `${event.block_rule}-${event.toolName}`.replace(/[^a-z0-9-]+/gi, '-').slice(0, 40);
+        queuePendingAttackSuggestion(
+          {
+            rule: {
+              name: `threat-lab-instant-${slug}`,
+              description: `Instant LLM argPatterns from ${event.block_rule}`,
+              action: 'block',
+              argPatterns: llm.argPatterns,
+            },
+            confidence: 0.82,
+            reason: `LLM-proposed argPatterns for repeated ${event.block_rule} blocks`,
+            source: 'attack',
+          },
+          { source: 'threat-lab-instant', tenantId: tid },
+        );
+      }
+      if (llm.confidenceBoost > 0 && windowBlocks.length >= minBlocks) {
         const suggestion = suggestFromBlockedGroup(
           event.block_rule,
           event.toolName,
           toProxyRecords(windowBlocks),
         );
-        if (suggestion) mergePendingSuggestion(suggestion, llmBoost);
+        if (suggestion) mergePendingSuggestion(suggestion, llm.confidenceBoost, tid, 'threat-lab-instant');
       }
     });
   }

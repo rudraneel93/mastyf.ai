@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -87,6 +87,9 @@
     "security-swarm:calibrate": "tsx scripts/security-swarm/calibrate-semantic.ts",
     "security-swarm:seed-semantic": "GUARDIAN_SEMANTIC_STORE_CALIBRATION=true SWARM_CALIBRATE_CAPTURE=true node scenarios/real-life/run-official-filesystem-scenario.mjs && SWARM_CALIBRATE_AUTO_LABEL=true pnpm security-swarm:calibrate",
     "security-swarm:corpus-pr": "node security-swarm/scripts/open-corpus-pr.mjs",
+    "security-swarm:threat-lab": "SWARM_THREAT_LAB=true node security-swarm/agents/threat-lab.mjs",
+    "security-swarm:auto-threat-research": "GUARDIAN_THREAT_RESEARCH_AUTO=true SWARM_THREAT_RESEARCH_AUTO=true node security-swarm/agents/auto-threat-research.mjs",
+    "security-swarm:auto-threat-e2e": "tsx scripts/security-swarm/smoke-auto-threat-research-e2e.ts",
     "security-swarm:analyze": "node security-swarm/run-analysis.mjs",
     "security-swarm:schedule": "node scripts/security-swarm/schedule-analysis.mjs",
     "security-swarm:visuals-data": "node security-swarm/agents/visuals-data.mjs",
@@ -114,6 +117,7 @@
     "eval:attack-learning": "tsx scripts/simulate-attack-learning-stream.ts",
     "eval:attack-learning:long": "tsx scripts/long-attack-learning-eval.ts",
     "eval:attack-learning:charts": "tsx scripts/generate-attack-learning-charts.ts",
+    "ai:export-training-data": "tsx scripts/ai/export-training-data.ts",
     "benchmark:concurrent": "tsx benchmarks/concurrent-tool-calls.ts",
     "benchmark:concurrent-proxy": "tsx benchmarks/concurrent-proxy-tool-calls.ts",
     "benchmark:proxy-tiers": "tsx benchmarks/proxy-slo-by-concurrency.ts",
@@ -129,7 +133,7 @@
     "postinstall": "node scripts/postinstall-windows.cjs"
   },
   "dependencies": {
-    "@mcp-guardian/plugin-sdk": "workspace:^3.0.0",
+    "@mcp-guardian/plugin-sdk": "workspace:^3.1.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",

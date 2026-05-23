@@ -263,5 +263,20 @@ if (!latest.overall && existsSync(join(OUT_DIR, 'bypasses.json'))) {
   }
 }
 
+if (process.env.SWARM_THREAT_LAB === 'true') {
+  run('node', ['security-swarm/agents/threat-lab.mjs'], {
+    label: 'threat-lab',
+    totalSteps: totalSteps + 1,
+  });
+}
+
+if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
+  run('node', ['security-swarm/agents/auto-threat-research.mjs'], {
+    label: 'auto-threat-research',
+    totalSteps: totalSteps + 1,
+    allowFail: true,
+  });
+}
+
 printFinalSummary(latest);
 process.exit(latest.overall ? 0 : 1);

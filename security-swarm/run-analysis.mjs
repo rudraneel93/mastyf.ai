@@ -213,7 +213,7 @@ async function main() {
     run('pnpm', ['security-swarm:calibrate'], {
       allowFail: true,
       env: {
-        SWARM_CALIBRATE_AUTO_LABEL: process.env.SWARM_CALIBRATE_AUTO_LABEL ?? 'true',
+        SWARM_CALIBRATE_AUTO_LABEL: process.env.SWARM_CALIBRATE_AUTO_LABEL ?? 'false',
       },
     });
 
@@ -237,6 +237,14 @@ async function main() {
       swarmOk = latest?.overall ?? false;
       if (existsSync(LIVE_JSON)) {
         mergeRealLifeSummary(JSON.parse(readFileSync(LIVE_JSON, 'utf-8')));
+      }
+      if (process.env.SWARM_THREAT_LAB === 'true') {
+        run('node', ['security-swarm/agents/threat-lab.mjs'], { allowFail: true });
+        emitArtifact(['threat-lab-candidates.json']);
+      }
+      if (process.env.SWARM_THREAT_RESEARCH_AUTO === 'true') {
+        run('node', ['security-swarm/agents/auto-threat-research.mjs'], { allowFail: true });
+        emitArtifact(['auto-corpus-manifest.json']);
       }
     } else {
       log('Skipping swarm (--skip-swarm)');

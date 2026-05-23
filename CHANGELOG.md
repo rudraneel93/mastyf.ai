@@ -2,6 +2,22 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.1.0] - 2026-05-23
+
+### Added
+
+- **Threat Lab** — LLM-driven threat discovery via local Ollama (`threat-lab.mjs`, `src/ai/threat-lab.ts`); reactive (bypass-driven) and proactive (corpus-seeded) modes; no synthetic fallback when LLM is offline ([THREAT_LAB.md](docs/THREAT_LAB.md)).
+- **Auto Threat Research** — Runtime + batch pipeline (`threat-research-pipeline.ts`, `auto-threat-research.mjs`) writes validated `adv-*.json` corpus fixtures from semantic TPs, ThreatIntel, and instant-learning signals.
+- **Threat Discovery dashboard** — Dedicated Pro tab with architecture view, Threat Lab workbench, Auto Research monitor, run controls, candidate drawer, and live status APIs (`/api/threat-discovery/*`).
+- **Training data export** — `pnpm ai:export-training-data` → `exports/training-dataset.jsonl` for future LoRA fine-tune.
+- **LLM prerequisites docs** — [PRO_SETUP.md](docs/PRO_SETUP.md) and README Pro section document that Ollama + `qwen3:8b` are not bundled with npm/git clone.
+
+### Changed
+
+- **Swarm Analysis tab** — Threat Lab / auto-corpus tables replaced with summary cards linking to Threat Discovery.
+- **Semantic audit store** — Human-labeled TPs feed Threat Lab and auto research; calibrator seeds excluded by default.
+- **Instant attack learning** — Bridges argPatterns and threat taxonomy into suggestion engine and threat intel.
+
 ## [3.0.0] - 2026-05-24
 
 ### BREAKING — Pro paywall hardening

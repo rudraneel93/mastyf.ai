@@ -71,6 +71,30 @@ jobs:
           GUARDIAN_DISABLE_SEMANTIC: 'true'
           GUARDIAN_POLICY_TIMING_ENVELOPE: 'false'
 
+      - name: Install Ollama (Threat Lab)
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama and pull model
+        run: |
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:11434/api/tags && break
+            sleep 2
+          done
+          ollama pull qwen3:4b
+
+      - name: Threat Lab (nightly, requires Ollama)
+        run: node security-swarm/agents/threat-lab.mjs
+        env:
+          GUARDIAN_CI_BYPASS_LICENSE: 'true'
+          SWARM_THREAT_LAB: 'true'
+          SWARM_THREAT_LAB_MODE: reactive
+          SWARM_THREAT_LAB_REQUIRE_LLM: 'true'
+          GUARDIAN_LLM_ENABLED: 'true'
+          GUARDIAN_LLM_MODEL: qwen3:4b
+          OLLAMA_BASE_URL: http://127.0.0.1:11434
+        continue-on-error: true
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

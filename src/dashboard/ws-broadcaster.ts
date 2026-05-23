@@ -411,6 +411,7 @@ export class WsBroadcaster {
     if (type.startsWith('swarm:')) return 'swarm';
     if (type.startsWith('semantic:')) return 'flow';
     if (type.startsWith('analysis:')) return 'swarm';
+    if (type.startsWith('threat-discovery:')) return 'swarm';
     if (type.startsWith('ai:')) return 'ai';
     if (type.startsWith('audit:')) return 'audit';
     if (type.startsWith('metrics:')) return 'metrics';
@@ -458,6 +459,9 @@ export type DashboardEventType =
   | 'semantic:queued'
   | 'semantic:complete'
   | 'analysis:artifact'
+  | 'threat-discovery:started'
+  | 'threat-discovery:done'
+  | 'threat-discovery:failed'
   | 'snapshot';
 
 export interface DashboardEvent {

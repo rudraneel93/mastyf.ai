@@ -34,7 +34,9 @@ On every policy block the proxy calls `recordBlockLearningEvent`:
 2. **Sliding window** — after `GUARDIAN_AI_ATTACK_MIN_BLOCKS` (default **3**) of the same `(block_rule, tool)` within `GUARDIAN_AI_INSTANT_WINDOW_MS` (default **5 min**), queue an attack-pattern suggestion to `.ai-pending-suggestions.json`.
 3. **Debounced cycle** — optional full `SuggestionEngine` cycle via `GUARDIAN_AI_BLOCK_DEBOUNCE_MS` (set **`0`** for immediate).
 
-Optional: `GUARDIAN_AI_INSTANT_LLM=true` runs a rate-limited classifier on critical blocks (`semantic-shell-guard`, `secret-scan`, `path-guard`).
+Optional: `GUARDIAN_AI_INSTANT_LLM=true` runs a rate-limited classifier on critical blocks (`semantic-shell-guard`, `secret-scan`, `path-guard`). When enabled, the LLM may also propose **argPatterns** queued as `threat-lab-instant` suggestions.
+
+**Threat Lab (Phase 2):** human-labeled semantic true-positives (`POST /api/learning/label`) bridge to pending policy suggestions via `semantic-to-suggestion.ts` (TP-only, LLM required, replay validation). ThreatIntel entries are live-polled and optionally LLM-enriched in the batch learning cycle. See [THREAT_LAB.md](./THREAT_LAB.md).
 
 Observability: `mcp_guardian_instant_learning_events_total`, structured log `instant_learning_event`.
 

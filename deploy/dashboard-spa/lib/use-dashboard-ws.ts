@@ -30,9 +30,10 @@ export type DashboardWsState = {
   entries: FlowTimelineEntry[];
   pipeline: PipelineState;
   metricsPatch: AggregateMetrics | null;
-  auditPatch: AuditResponse | null;
+  auditPatch: Partial<AuditResponse> | null;
   swarmDoneTick: number;
   aiRefreshTick: number;
+  threatDiscoveryTick: number;
   pushEntry: (channel: string, summary: string, blocked: boolean) => void;
   /** Sync pipeline from HTTP status (SwarmRunControls poll + fallback timer) */
   syncSwarmJobStatus: (job: SwarmJobStatus) => void;
@@ -76,9 +77,10 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
   const [entries, setEntries] = useState<FlowTimelineEntry[]>([]);
   const [pipeline, setPipeline] = useState<PipelineState>(initialPipeline);
   const [metricsPatch, setMetricsPatch] = useState<AggregateMetrics | null>(null);
-  const [auditPatch, setAuditPatch] = useState<AuditResponse | null>(null);
+  const [auditPatch, setAuditPatch] = useState<Partial<AuditResponse> | null>(null);
   const [swarmDoneTick, setSwarmDoneTick] = useState(0);
   const [aiRefreshTick, setAiRefreshTick] = useState(0);
+  const [threatDiscoveryTick, setThreatDiscoveryTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const seqRef = useRef(0);
@@ -253,6 +255,27 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
         return;
       }
 
+      if (
+        type === 'threat-discovery:started'
+        || type === 'threat-discovery:done'
+        || type === 'threat-discovery:failed'
+      ) {
+        setThreatDiscoveryTick((t) => t + 1);
+        const kind = String(msg.payload?.kind || 'discovery');
+        appendEntry({
+          id: `td-${type}-${Date.now()}`,
+          kind: 'system',
+          title: type === 'threat-discovery:done' ? 'Threat discovery complete' : `Threat discovery ${kind}`,
+          summary: type === 'threat-discovery:failed'
+            ? String(msg.payload?.error || 'failed')
+            : String(msg.payload?.jobId || type),
+          severity: type === 'threat-discovery:failed' ? 'error' : type === 'threat-discovery:done' ? 'success' : 'info',
+          channel: 'swarm',
+          timestamp: msg.timestamp || Date.now(),
+        });
+        return;
+      }
+
       if (type.startsWith('ai:')) {
         setAiRefreshTick((t) => t + 1);
         const sug = msg.payload?.suggestions;
@@ -265,11 +288,8 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
         const evts = (msg.payload?.events as AuditEvent[]) || [];
         if (evts.length > 0) {
           setAuditPatch((prev) => ({
+            ...prev,
             events: evts,
-            total: prev?.total ?? evts.length,
-            blocked: prev?.blocked ?? 0,
-            passed: prev?.passed ?? 0,
-            flagged: prev?.flagged ?? 0,
           }));
         }
         pushEntry('audit', `${evts.length} audit event(s)`, false);
@@ -418,6 +438,7 @@ export function useDashboardWs(enabled: boolean, sessionKey: number): DashboardW
     auditPatch,
     swarmDoneTick,
     aiRefreshTick,
+    threatDiscoveryTick,
     pushEntry,
     syncSwarmJobStatus,
   };

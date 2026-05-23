@@ -127,10 +127,10 @@ async function persistSemanticAudit(
   job: SemanticAuditJob,
   result: SemanticAuditResult,
   meta?: { model?: string; durationMs?: number },
-): Promise<void> {
+): Promise<import('./semantic-audit-store.js').StoredSemanticAudit | null> {
   try {
     const { appendSemanticAuditRecord } = await import('./semantic-audit-store.js');
-    appendSemanticAuditRecord({
+    return appendSemanticAuditRecord({
       requestId: job.requestId,
       serverName: job.serverName,
       toolName: job.toolName,
@@ -144,6 +144,7 @@ async function persistSemanticAudit(
     Logger.debug(
       `[async-semantic] Failed to persist audit record: ${err instanceof Error ? err.message : String(err)}`,
     );
+    return null;
   }
 }
 
@@ -302,7 +303,14 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
     reasoning: score.reasoning,
   };
   if (score.risk >= MIN_CONFIDENCE || shouldStoreCalibrationRecord()) {
-    await persistSemanticAudit(job, result, { model: 'local-semantic' });
+    await persistSemanticAudit(job, result, { model: 'local-semantic' }).then((stored) => {
+      if (!stored || score.risk < MIN_CONFIDENCE) return;
+      setImmediate(() => {
+        void import('./threat-research-pipeline.js').then(({ buildSemanticFlagEvent, enqueueThreatResearch }) => {
+          enqueueThreatResearch(buildSemanticFlagEvent(stored));
+        });
+      });
+    });
   }
   broadcastSemanticComplete(job, result);
 }
@@ -424,6 +432,13 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   await persistSemanticAudit(job, result, {
     model: response.model,
     durationMs: response.durationMs,
+  }).then((stored) => {
+    if (!stored) return;
+    setImmediate(() => {
+      void import('./threat-research-pipeline.js').then(({ buildSemanticFlagEvent, enqueueThreatResearch }) => {
+        enqueueThreatResearch(buildSemanticFlagEvent(stored));
+      });
+    });
   });
   broadcastSemanticComplete(job, result);
 }

@@ -1,7 +1,7 @@
 /**
  * Read security-swarm report artifacts for dashboard API (per-tenant dirs).
  */
-import { existsSync, readFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,7 @@ import {
   LEGACY_SWARM_DIR,
   resolveTenantSwarmDir,
 } from '../tenant/swarm-tenant-paths.js';
+import { autoCorpusManifestPath } from '../ai/auto-corpus-writer.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(__dir, '..', '..');
@@ -31,6 +32,31 @@ export const LIVE_SESSION_PATH = join(
 
 function readDir(tenantId?: string): string {
   return getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID);
+}
+
+/** Tenant swarm dir first, then legacy global dir (shared pipeline artifacts). */
+function swarmArtifactCandidates(name: string, tenantId?: string): string[] {
+  const tenantPath = join(readDir(tenantId), name);
+  const legacyPath = join(LEGACY_SWARM_DIR, name);
+  if (tenantPath === legacyPath) return [tenantPath];
+  return [tenantPath, legacyPath];
+}
+
+function findSwarmArtifactPath(name: string, tenantId?: string): string | null {
+  for (const p of swarmArtifactCandidates(name, tenantId)) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+function readSwarmJsonFile<T>(name: string, tenantId?: string): T | null {
+  const p = findSwarmArtifactPath(name, tenantId);
+  if (!p) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf-8')) as T;
+  } catch {
+    return null;
+  }
 }
 
 function writeDir(tenantId: string): string {
@@ -235,4 +261,130 @@ export function ensureTenantSwarmDir(tenantId: string): string {
   mkdirSync(dir, { recursive: true });
   mkdirSync(join(dir, 'figures'), { recursive: true });
   return dir;
+}
+
+export type ThreatLabCandidateRecord = {
+  id: string;
+  fingerprint: string;
+  attackClass: string;
+  hypothesis: string;
+  confidence: number;
+  path?: string;
+  branch?: string;
+  reviewStatus?: 'pending' | 'accepted' | 'rejected';
+  policyRule?: Record<string, unknown>;
+  corpusCandidate?: Record<string, unknown>;
+  provenance?: {
+    source?: string;
+    llmUsed?: boolean;
+    inputFingerprint?: string;
+  };
+  validation?: {
+    ok?: boolean;
+    errors?: string[];
+    replayBlocked?: boolean;
+  };
+  advWriteSkipped?: string;
+};
+
+export function readThreatLabCandidates(tenantId?: string): {
+  timestamp?: string;
+  count?: number;
+  mode?: string;
+  llmModel?: string;
+  llmUsed?: boolean;
+  candidates: ThreatLabCandidateRecord[];
+} | null {
+  const data = readSwarmJsonFile<{
+    timestamp?: string;
+    count?: number;
+    mode?: string;
+    llmModel?: string;
+    llmUsed?: boolean;
+    candidates?: ThreatLabCandidateRecord[];
+  }>('threat-lab-candidates.json', tenantId);
+  if (!data) return null;
+  return {
+    timestamp: data.timestamp,
+    count: data.count,
+    mode: data.mode,
+    llmModel: data.llmModel,
+    llmUsed: data.llmUsed,
+    candidates: data.candidates || [],
+  };
+}
+
+export function readThreatLabCandidateById(
+  tenantId: string | undefined,
+  id: string,
+): ThreatLabCandidateRecord | null {
+  const manifest = readThreatLabCandidates(tenantId);
+  if (!manifest) return null;
+  return manifest.candidates.find((c) => c.id === id) ?? null;
+}
+
+export type AutoCorpusManifestEntry = {
+  advId: string;
+  relPath: string;
+  fingerprint: string;
+  source: string;
+  attackClass: string;
+  hypothesis: string;
+  confidence: number;
+  timestamp: string;
+  toolName: string;
+  category: string;
+};
+
+export function readAutoCorpusManifest(tenantId?: string): {
+  timestamp: string;
+  count: number;
+  entries: AutoCorpusManifestEntry[];
+} | null {
+  const fromSwarm = readSwarmJsonFile<{
+    timestamp: string;
+    count: number;
+    entries: AutoCorpusManifestEntry[];
+  }>('auto-corpus-manifest.json', tenantId);
+  if (fromSwarm) return fromSwarm;
+
+  const envPath = autoCorpusManifestPath();
+  if (existsSync(envPath)) {
+    try {
+      return JSON.parse(readFileSync(envPath, 'utf-8')) as {
+        timestamp: string;
+        count: number;
+        entries: AutoCorpusManifestEntry[];
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function markThreatLabCandidate(
+  tenantId: string | undefined,
+  id: string,
+  status: 'accepted' | 'rejected',
+): boolean {
+  const p = findSwarmArtifactPath('threat-lab-candidates.json', tenantId);
+  if (!p) return false;
+  try {
+    const data = JSON.parse(readFileSync(p, 'utf-8')) as {
+      candidates?: ThreatLabCandidateRecord[];
+    };
+    let found = false;
+    for (const c of data.candidates || []) {
+      if (c.id === id) {
+        c.reviewStatus = status;
+        found = true;
+      }
+    }
+    if (!found) return false;
+    writeFileSync(p, JSON.stringify(data, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
 }
