@@ -304,13 +304,13 @@ export async function buildVisualsData(opts: {
 
   const semanticRecords = await loadSemanticAuditRecordsAsync({
     tenantId,
-    sinceMs: windowDays * 24 * 60 * 60 * 1000,
+    sinceMs: Math.max(windowDays, 30) * 24 * 60 * 60 * 1000,
     limit: 2000,
   });
   const semanticSlice = buildSemanticVisualsFromRecords(semanticRecords);
   if (!semanticSlice.hasData) {
     emptyReasons.semantic =
-      'No live semantic audit outcomes — route MCP traffic through the proxy with semantic audit enabled.';
+      'No live semantic audit outcomes in the last 30 days — enable GUARDIAN_LLM_ENABLED + GUARDIAN_SEMANTIC_ASYNC on the proxy and route MCP traffic through Guardian.';
   }
 
   let latest: Record<string, unknown> | null = null;

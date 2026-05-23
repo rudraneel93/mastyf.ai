@@ -61,7 +61,10 @@ Several Pro features — **Threat Lab**, **Threat Discovery**, **Auto Threat Res
    export GUARDIAN_LLM_ENABLED=true
    export OLLAMA_BASE_URL=http://localhost:11434
    export GUARDIAN_LLM_MODEL=qwen3:8b   # default when provider is ollama
+   export GUARDIAN_SEMANTIC_ASYNC=true  # post-hoc LLM audit on allowed tool calls (Pro)
    ```
+
+   Semantic outcomes appear in **AI Learning → Semantic audit outcomes** and the **Infrastructure → Semantic** charts after MCP traffic flows through the wrapped proxy. Records are stored in `~/.mcp-guardian/semantic-audit-outcomes.jsonl` (default tenant).
 
    For Threat Lab / Threat Discovery batch runs, also set `SWARM_THREAT_LAB=true` (see [THREAT_LAB.md](THREAT_LAB.md)).
 

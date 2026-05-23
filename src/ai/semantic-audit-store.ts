@@ -8,7 +8,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import type { SemanticAuditResult } from './async-semantic-audit.js';
 import type { PolicyDecision } from '../policy/policy-types.js';
-import { resolveTenantId } from '../tenant/resolve-tenant.js';
+import { DEFAULT_TENANT_ID, resolveTenantId } from '../tenant/resolve-tenant.js';
 
 export interface StoredSemanticAudit {
   id: string;
@@ -75,7 +75,8 @@ function loadJsonlRecords(opts?: {
   sinceMs?: number;
   limit?: number;
 }): StoredSemanticAudit[] {
-  const path = storePath(opts?.tenantId);
+  const tid = opts?.tenantId || resolveTenantId();
+  const path = storePath(tid);
   if (!existsSync(path)) return [];
   const since = opts?.sinceMs ?? 7 * 24 * 60 * 60 * 1000;
   const cutoff = Date.now() - since;
@@ -85,6 +86,8 @@ function loadJsonlRecords(opts?: {
     const lines = readFileSync(path, 'utf-8').trim().split('\n').filter(Boolean);
     for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
       const rec = JSON.parse(lines[i]) as StoredSemanticAudit;
+      const recTenant = rec.tenantId || DEFAULT_TENANT_ID;
+      if (recTenant !== tid) continue;
       if (new Date(rec.timestamp).getTime() >= cutoff) out.push(rec);
     }
   } catch {

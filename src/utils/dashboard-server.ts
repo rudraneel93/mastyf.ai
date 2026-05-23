@@ -1275,6 +1275,7 @@ export async function startDashboardServer(
           let semanticAudit = { queued: 0, processed: 0, flagged: 0, enabled: false };
           try {
             const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+            const { isSemanticAsyncEnabledForTenant } = await import('../tenant/tenant-semantic-config.js');
             const sem = await loadSemanticAuditRecordsAsync({
               limit: 500,
               tenantId: requestTenantId,
@@ -1286,7 +1287,7 @@ export async function startDashboardServer(
               queued: sem.filter((r) => !r.label && !r.labeled).length,
               processed: sem.filter((r) => r.label || r.labeled).length,
               flagged,
-              enabled: process.env['GUARDIAN_SEMANTIC_ASYNC'] === 'true',
+              enabled: isSemanticAsyncEnabledForTenant(requestTenantId),
             };
           } catch {
             /* non-fatal */
@@ -1629,11 +1630,41 @@ export async function startDashboardServer(
       if (url === '/api/learning/semantic/outcomes' && method === 'GET') {
         setCors();
         const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+        const { isSemanticAsyncEnabledForTenant } = await import('../tenant/tenant-semantic-config.js');
+        const sinceMs = 30 * 24 * 60 * 60 * 1000;
         const records = await loadSemanticAuditRecordsAsync({
           limit: 200,
           tenantId: requestTenantId,
+          sinceMs,
         });
-        writeJson(res, 200, { records, total: records.length });
+        let defaultTenantRecords = 0;
+        if (records.length === 0 && requestTenantId !== DEFAULT_TENANT_ID) {
+          const fallback = await loadSemanticAuditRecordsAsync({
+            limit: 200,
+            tenantId: DEFAULT_TENANT_ID,
+            sinceMs,
+          });
+          defaultTenantRecords = fallback.length;
+        }
+        const asyncEnabled = isSemanticAsyncEnabledForTenant(requestTenantId);
+        writeJson(res, 200, {
+          records,
+          total: records.length,
+          meta: {
+            tenantId: requestTenantId,
+            asyncEnabled,
+            windowDays: 30,
+            defaultTenantRecords,
+            hint:
+              records.length > 0
+                ? undefined
+                : defaultTenantRecords > 0
+                  ? `No records for tenant "${requestTenantId}" — ${defaultTenantRecords} exist under "default". Switch tenant in the dashboard header.`
+                  : asyncEnabled
+                    ? 'No semantic audit records yet — route MCP tool calls through the Guardian proxy.'
+                    : 'Enable GUARDIAN_LLM_ENABLED=true and GUARDIAN_SEMANTIC_ASYNC=true on the proxy, then route MCP traffic through Guardian.',
+          },
+        });
         return;
       }
 

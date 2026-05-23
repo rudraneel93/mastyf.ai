@@ -219,6 +219,9 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
 
       {tab === 'semantic' ? (
         <div className="infra-charts-grid">
+          {!data?.semantic?.hasData && data?.meta?.emptyReasons?.semantic ? (
+            <p className="hint live-data-banner">{data.meta.emptyReasons.semantic}</p>
+          ) : null}
           <ChartCard title="Confidence buckets" empty={!confBuckets.length}>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={confBuckets}>

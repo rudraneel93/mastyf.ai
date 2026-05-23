@@ -36,6 +36,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
   const canMutate = hasPermission(roles, 'policy_mutate');
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
   const [semantic, setSemantic] = useState<SemanticOutcome[]>([]);
+  const [semanticHint, setSemanticHint] = useState<string | null>(null);
   const [aiInitialized, setAiInitialized] = useState(false);
   const [engineState, setEngineState] = useState<Record<string, unknown> | null>(null);
   const [baselines, setBaselines] = useState<unknown[]>([]);
@@ -45,7 +46,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
   const [reportStructured, setReportStructured] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async () => {
-    const [sug, sem, st, base, thr, rep] = await Promise.all([
+    const [sug, semResp, st, base, thr, rep] = await Promise.all([
       fetchAiSuggestions(),
       fetchSemanticOutcomes(),
       fetchAiState(),
@@ -54,7 +55,8 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
       fetchAiReport(),
     ]);
     setSuggestions(sug);
-    setSemantic(sem);
+    setSemantic(semResp.records);
+    setSemanticHint(semResp.meta?.hint ?? null);
     setAiInitialized(!!st?.initialized);
     setEngineState(st?.state ?? null);
     setBaselines(base);
@@ -281,7 +283,10 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
 
       <h3>Semantic audit outcomes</h3>
       {semantic.length === 0 ? (
-        <p className="muted">No semantic audit records (enable GUARDIAN_SEMANTIC_ASYNC).</p>
+        <p className="muted">
+          {semanticHint ||
+            'No semantic audit records yet. Set GUARDIAN_LLM_ENABLED=true and GUARDIAN_SEMANTIC_ASYNC=true on the proxy, route MCP traffic through Guardian, then refresh.'}
+        </p>
       ) : (
         <table className="data-table">
           <thead>

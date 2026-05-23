@@ -790,22 +790,42 @@ export async function rollbackAiLearning(): Promise<{ ok: boolean; error?: strin
   return { ok: true };
 }
 
-export async function fetchSemanticOutcomes(): Promise<SemanticOutcome[]> {
+export type SemanticOutcomesResponse = {
+  records: SemanticOutcome[];
+  meta?: {
+    tenantId?: string;
+    asyncEnabled?: boolean;
+    windowDays?: number;
+    defaultTenantRecords?: number;
+    hint?: string;
+  };
+};
+
+export async function fetchSemanticOutcomes(): Promise<SemanticOutcomesResponse> {
   const res = await guardianFetch('/api/learning/semantic/outcomes');
-  if (!res.ok) return [];
-  const body = (await res.json()) as { records?: Array<Record<string, unknown>> };
-  return (body.records || []).map((r) => {
-    const sync = r.syncDecision as { blockRule?: string } | undefined;
+  if (!res.ok) {
+    return {
+      records: [],
+      meta: { hint: 'Semantic outcomes API unavailable — check dashboard auth and Pro license.' },
+    };
+  }
+  const body = (await res.json()) as {
+    records?: Array<Record<string, unknown>>;
+    meta?: SemanticOutcomesResponse['meta'];
+  };
+  const records = (body.records || []).map((r) => {
+    const sync = r.syncDecision as { blockRule?: string; rule?: string } | undefined;
     const sem = r.semanticAudit as { suspicious?: boolean } | undefined;
     return {
       id: String(r.id ?? ''),
       toolName: String(r.toolName ?? ''),
-      ruleName: sync?.blockRule || String(r.ruleName ?? ''),
+      ruleName: sync?.blockRule || sync?.rule || String(r.ruleName ?? ''),
       label: (r.label as SemanticOutcome['label']) ?? null,
       flagged: !!sem?.suspicious,
       createdAt: String(r.timestamp ?? ''),
     };
   });
+  return { records, meta: body.meta };
 }
 
 export async function labelSemanticOutcome(payload: {
