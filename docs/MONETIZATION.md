@@ -8,7 +8,7 @@ Operator guide for selling a **one-time $4.99** lifetime Pro license without a s
 |------|--------|
 | **Product name** | MCP Guardian Pro — Lifetime |
 | **Price** | $4.99 USD one-time |
-| **What buyers get** | Unique license key (Lemon Squeezy) + email with setup link to [PRO_SETUP.md](./PRO_SETUP.md) |
+| **What buyers get** | Unique license key (Lemon Squeezy email) + [PRO_SETUP.md](./PRO_SETUP.md) with fixed control plane URL `https://mcp-guardian-cloud.vercel.app` |
 | **Technical use** | Map LS license key → `GUARDIAN_LICENSE_KEY` on self-hosted Guardian; optional cloud org for `gcp_...` API keys |
 | **Free tier** | **Community** on npm — proxy + CLI stay free (MIT) |
 | **Pro tier** | Paid license unlocks dashboard, swarm, multi-tenant, semantic async |
@@ -54,9 +54,9 @@ Set `GUARDIAN_OPEN_CORE=false` to restore pre-2.10 behavior (all features withou
 
 ## Fulfillment (webhook + manual fallback)
 
-1. Lemon Squeezy emails buyer a license key automatically.
+1. Lemon Squeezy emails buyer a **license key** automatically (not a per-buyer control plane URL).
 2. **Webhook** (`license_key_created`) inserts hashed key into `pro_license_keys` — [WEBHOOK_AUTOMATION.md](./WEBHOOK_AUTOMATION.md).
-3. Buyer sets `GUARDIAN_LICENSE_KEY` + `GUARDIAN_CONTROL_PLANE_URL` on their Guardian host.
+3. Buyer sets `GUARDIAN_LICENSE_KEY` (from email) and `GUARDIAN_CONTROL_PLANE_URL=https://mcp-guardian-cloud.vercel.app` on their Guardian host.
 4. **Manual fallback:** `pnpm cloud:register-pro-key -- --key "..." --email buyer@example.com`
 5. Alternatively email a `gcp_...` API key from cloud **Settings → Rotate API key**.
 

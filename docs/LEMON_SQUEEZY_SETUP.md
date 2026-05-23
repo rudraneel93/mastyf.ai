@@ -25,7 +25,7 @@ Complete after your Lemon Squeezy store application is **approved**.
 
 ### Product description (paste)
 
-Use the body from [templates/pro-purchase-email.md](./templates/pro-purchase-email.md) (HTML or plain text in LS product page).
+Use the body from [templates/pro-purchase-email.md](./templates/pro-purchase-email.md) (HTML or plain text in LS product page). Include the control plane URL `https://mcp-guardian-cloud.vercel.app` — LS does not generate it.
 
 ## 3. Policies
 

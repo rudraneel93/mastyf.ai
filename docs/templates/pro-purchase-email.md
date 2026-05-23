@@ -2,6 +2,8 @@
 
 Paste into **Lemon Squeezy → Product → Description** and/or customize the **receipt email** (LS sends the license key automatically).
 
+**Production control plane URL:** `https://mcp-guardian-cloud.vercel.app`
+
 ---
 
 **Subject:** Your MCP Guardian Pro license
@@ -10,6 +12,8 @@ Thank you for purchasing **MCP Guardian Pro — Lifetime** ($4.99 one-time).
 
 **Your license key:** `{license_key}`  
 (Lemon Squeezy inserts the key automatically — do not edit the `{license_key}` placeholder if LS provides it.)
+
+**Control plane URL (same for all buyers):** `https://mcp-guardian-cloud.vercel.app`
 
 ## Quick start
 
@@ -21,6 +25,7 @@ Thank you for purchasing **MCP Guardian Pro — Lifetime** ($4.99 one-time).
 2. **Set your license** in the environment where you run the proxy or dashboard:
    ```bash
    export GUARDIAN_LICENSE_KEY=<paste-your-key-here>
+   export GUARDIAN_CONTROL_PLANE_URL=https://mcp-guardian-cloud.vercel.app
    ```
 
 3. **Run the proxy** (example):
@@ -44,4 +49,4 @@ Reply to this email or open a discussion on GitHub: https://github.com/rudraneel
 
 ---
 
-**Seller note:** Replace the GitHub `master` branch link with your default branch if different. Add cloud URL when `apps/cloud` is deployed.
+**Seller note:** Update the control plane URL if you deploy `apps/cloud` to a custom domain.
