@@ -34,10 +34,10 @@ describe('open-core feature tiers', () => {
     expect(isOpenCoreEnabled()).toBe(true);
   });
 
-  it('dev unlock only in NODE_ENV=development', () => {
+  it('dev unlock always returns false (removed in v3.2.3)', () => {
     process.env.NODE_ENV = 'development';
     process.env.GUARDIAN_DEV_UNLOCK_ALL = 'true';
-    expect(isDevUnlockAllowed()).toBe(true);
+    expect(isDevUnlockAllowed()).toBe(false);
     process.env.NODE_ENV = 'production';
     expect(isDevUnlockAllowed()).toBe(false);
   });

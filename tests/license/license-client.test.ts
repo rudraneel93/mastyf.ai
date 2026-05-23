@@ -46,7 +46,7 @@ describe('LicenseClient', () => {
     expect(client.hasFeature('swarm')).toBe(false);
   });
 
-  it('unlocks all Pro features with dev unlock', () => {
+  it('does NOT unlock Pro features with dev unlock (removed in v3.2.3)', () => {
     process.env.NODE_ENV = 'development';
     process.env.GUARDIAN_DEV_UNLOCK_ALL = 'true';
 
@@ -55,8 +55,8 @@ describe('LicenseClient', () => {
       refreshSeconds: 300,
       graceSeconds: 900,
     });
-    expect(client.isLicensed()).toBe(true);
-    expect(client.hasFeature('swarm')).toBe(true);
+    expect(client.isLicensed()).toBe(false);
+    expect(client.hasFeature('swarm')).toBe(false);
   });
 
   it('caches active license from control plane', async () => {
