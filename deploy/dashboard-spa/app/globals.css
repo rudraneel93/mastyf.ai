@@ -1143,3 +1143,269 @@ a.tab.linkish {
   margin-top: 0.35rem;
   font-size: 0.8rem;
 }
+
+/* Enterprise dashboard layout */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.dash-grid-span-12 { grid-column: span 12; }
+.dash-grid-span-8 { grid-column: span 8; }
+.dash-grid-span-6 { grid-column: span 6; }
+.dash-grid-span-4 { grid-column: span 4; }
+.dash-grid-span-3 { grid-column: span 3; }
+
+@media (max-width: 960px) {
+  .dash-grid-span-8,
+  .dash-grid-span-6,
+  .dash-grid-span-4,
+  .dash-grid-span-3 {
+    grid-column: span 12;
+  }
+}
+
+.dash-section {
+  margin-bottom: 2rem;
+}
+
+.dash-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dash-section-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.dash-section-sub {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dash-section-updated {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.kpi-card {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  border: 1px solid #334155;
+}
+
+.kpi-card-success { border-left: 3px solid #22c55e; }
+.kpi-card-warn { border-left: 3px solid #fbbf24; }
+.kpi-card-danger { border-left: 3px solid var(--danger); }
+
+.kpi-card-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.kpi-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kpi-card-value {
+  font-size: 1.65rem;
+  font-weight: 600;
+  margin: 0.35rem 0 0;
+  color: var(--accent);
+}
+
+.kpi-card-unit {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 0.25rem;
+}
+
+.kpi-card-sub,
+.kpi-card-delta,
+.kpi-card-detail {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.kpi-card-info {
+  background: transparent;
+  border: 1px solid #475569;
+  border-radius: 50%;
+  width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chart-card {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+  border: 1px solid #334155;
+  height: 100%;
+}
+
+.chart-card-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.chart-card-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.chart-card-body {
+  margin-top: 0.75rem;
+}
+
+.insight-callout {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.25rem;
+}
+
+.insight-callout-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.insight-callout-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.insight-callout-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: #334155;
+  color: var(--muted);
+}
+
+.insight-callout-badge-measured {
+  background: rgba(22, 163, 74, 0.2);
+  color: #86efac;
+}
+
+.live-data-banner {
+  border-left: 3px solid #64748b;
+  padding-left: 0.75rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.live-data-banner-ok {
+  border-left-color: #16a34a;
+}
+
+.insight-callout-list {
+  margin: 0.75rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.insight-callout-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.budget-gauge {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #334155;
+}
+
+.budget-gauge-bar {
+  height: 10px;
+  background: #334155;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+
+.budget-gauge-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.budget-gauge-fill-warn { background: #fbbf24; }
+.budget-gauge-fill-danger { background: var(--danger); }
+
+.data-table-pro-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.th-sort {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.row-expand td {
+  background: #0f172a;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.data-table-pro-pager {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.heatmap-grid {
+  display: grid;
+  gap: 2px;
+  font-size: 0.75rem;
+}
+
+.heatmap-cell {
+  padding: 0.35rem;
+  border-radius: 3px;
+  text-align: center;
+  min-width: 2.5rem;
+}
+
+.fleet-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem;
+}

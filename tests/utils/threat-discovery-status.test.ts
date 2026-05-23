@@ -6,12 +6,25 @@ import {
   resetThreatDiscoveryStatusCacheForTests,
 } from '../../src/utils/threat-discovery-status.js';
 import { resetThreatResearchQueueForTests } from '../../src/ai/threat-research-pipeline.js';
+import { resetDashboardSessionForTests } from '../../src/utils/swarm-session.js';
 
 const TENANT = 'test-threat-status';
 const TENANT_DIR = join(process.cwd(), 'reports', 'tenants', TENANT, 'security-swarm');
 
+function writeSessionJob() {
+  writeFileSync(
+    join(TENANT_DIR, 'threat-lab-job.json'),
+    JSON.stringify({
+      jobId: 'session-test',
+      state: 'done',
+      startedAt: new Date().toISOString(),
+    }),
+  );
+}
+
 describe('buildThreatDiscoveryStatus', () => {
   beforeEach(() => {
+    resetDashboardSessionForTests(Date.now());
     resetThreatResearchQueueForTests();
     resetThreatDiscoveryStatusCacheForTests();
     mkdirSync(TENANT_DIR, { recursive: true });
@@ -25,6 +38,7 @@ describe('buildThreatDiscoveryStatus', () => {
   });
 
   it('aggregates threat lab and auto corpus manifests', async () => {
+    writeSessionJob();
     writeFileSync(
       join(TENANT_DIR, 'threat-lab-candidates.json'),
       JSON.stringify({
@@ -72,6 +86,21 @@ describe('buildThreatDiscoveryStatus', () => {
     expect(status.autoCorpus.stats.total).toBe(1);
     expect(status.pipeline).toBeDefined();
     expect(status.jobs.threatLab.state).toBeDefined();
+  });
+
+  it('hides stale manifests when no session job ran', async () => {
+    writeFileSync(
+      join(TENANT_DIR, 'threat-lab-candidates.json'),
+      JSON.stringify({
+        timestamp: new Date().toISOString(),
+        count: 1,
+        candidates: [{ id: 'adv-stale', fingerprint: 'x', attackClass: 'a', hypothesis: 'h', confidence: 0.9 }],
+      }),
+    );
+
+    const status = await buildThreatDiscoveryStatus(TENANT);
+    expect(status.threatLab.stats.total).toBe(0);
+    expect(status.provenance.sessionActive).toBe(false);
   });
 
   it('returns empty stats when no manifests exist', async () => {

@@ -80,7 +80,9 @@ export function SwarmResultsView({
       setThreatLabCandidates(tl);
       setAutoCorpusEntries(ac);
       if (!pr && !l && !f.length && !s && !r) {
-        setLoadError('No report yet. Run full security analysis from Agent flow above.');
+        setLoadError(
+          'No batch artifacts for this dashboard session. Run Security Swarm from Agent flow — committed CI reports are hidden until then.',
+        );
       } else {
         setLoadError('');
       }

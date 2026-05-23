@@ -42,8 +42,73 @@ export type CostResponse = {
   available?: boolean;
   totalCost: number | null;
   projectedMonthly?: number | null;
-  serverReports?: Array<{ name: string; cost: number; tokens: number }>;
+  burnRatePerHour?: number | null;
+  budgetUsd?: number | null;
+  pricingModel?: string;
+  serverReports?: Array<{
+    name: string;
+    cost: number;
+    tokens: number;
+    trend?: string;
+    unpriced?: number;
+  }>;
   budgetAlerts?: string[];
+  error?: string;
+};
+
+export type CostBreakdownResponse = {
+  available?: boolean;
+  windowDays?: number;
+  tools?: Array<{ server: string; tool: string; calls: number; costUsd: number }>;
+  error?: string;
+};
+
+export type CostTimeseriesResponse = {
+  available?: boolean;
+  windowDays?: number;
+  granularity?: 'hour' | 'day';
+  series?: Array<{ bucket: string; server: string; costUsd: number; calls: number }>;
+  totalsByServer?: Array<{ server: string; costUsd: number; calls: number }>;
+  error?: string;
+};
+
+export type ExecutiveSummaryResponse = {
+  available?: boolean;
+  timestamp?: string;
+  totalRequests?: number;
+  blockedRequests?: number;
+  passedRequests?: number;
+  passRatePct?: number;
+  blockRatePct?: number;
+  totalCostUsd?: number;
+  burnRatePerHour?: number;
+  projectedMonthlyUsd?: number;
+  avgLatencyMs?: number;
+  activeServers?: number;
+  budgetUsd?: number | null;
+  budgetUtilizationPct?: number | null;
+  runwayDays?: number | null;
+  topServersByCost?: Array<{ server: string; costUsd: number; calls: number }>;
+  topToolsByCalls?: Array<{ tool: string; calls: number }>;
+  error?: string;
+};
+
+export type DashboardInsightsResponse = {
+  available?: boolean;
+  scope?: string;
+  generatedAt?: string;
+  source?: 'measured' | 'llm' | 'deterministic';
+  provider?: string;
+  model?: string;
+  bullets?: string[];
+  narrative?: string;
+  error?: string;
+};
+
+export type AuditHeatmapResponse = {
+  available?: boolean;
+  windowDays?: number;
+  cells?: Array<{ rule: string; tool: string; count: number }>;
   error?: string;
 };
 
@@ -76,6 +141,7 @@ export type HealthResponse = {
     hasHealthData?: boolean;
   }>;
   atRisk?: string[];
+  totalTools?: number;
   error?: string;
 };
 
@@ -186,6 +252,14 @@ export type VisualsData = {
   meta?: {
     hasTraffic?: boolean;
     hasInstantLearning?: boolean;
+    hasSemantic?: boolean;
+    swarmSessionLive?: boolean;
+    dataSources?: {
+      traffic?: string;
+      semantic?: string;
+      regression?: string;
+      pipeline?: string;
+    };
     emptyReasons?: Record<string, string>;
   };
   traffic?: {
@@ -424,6 +498,45 @@ export async function fetchCost(): Promise<CostResponse | null> {
   return liveOrNull((await res.json()) as CostResponse);
 }
 
+export async function fetchCostBreakdown(windowDays = 7): Promise<CostBreakdownResponse | null> {
+  const res = await guardianFetch(`/api/cost/breakdown?window=${windowDays}`);
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as CostBreakdownResponse);
+}
+
+export async function fetchCostTimeseries(
+  windowDays = 30,
+  granularity: 'hour' | 'day' = 'day',
+): Promise<CostTimeseriesResponse | null> {
+  const res = await guardianFetch(
+    `/api/cost/timeseries?window=${windowDays}&granularity=${granularity}`,
+  );
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as CostTimeseriesResponse);
+}
+
+export async function fetchExecutiveSummary(): Promise<ExecutiveSummaryResponse | null> {
+  const res = await guardianFetch('/api/dashboard/executive-summary');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as ExecutiveSummaryResponse);
+}
+
+export async function fetchDashboardInsights(
+  scope: 'overview' | 'cost' | 'security' | 'audit' | 'ai',
+): Promise<DashboardInsightsResponse | null> {
+  const res = await guardianFetch(`/api/dashboard/insights?scope=${scope}`);
+  if (!res.ok) return null;
+  const body = (await res.json()) as DashboardInsightsResponse;
+  if (body.available === false && !body.bullets?.length) return null;
+  return body;
+}
+
+export async function fetchAuditHeatmap(windowDays = 7): Promise<AuditHeatmapResponse | null> {
+  const res = await guardianFetch(`/api/audit/heatmap?window=${windowDays}`);
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as AuditHeatmapResponse);
+}
+
 export async function fetchSecurity(): Promise<SecurityResponse | null> {
   const res = await guardianFetch('/api/security');
   if (!res.ok) return null;
@@ -548,6 +661,7 @@ export type SwarmJobStatus = {
   analysisPath: string;
   logTail: string;
   hasRun?: boolean;
+  sessionArtifactsVisible?: boolean;
 };
 
 export async function runSecuritySwarm(opts?: {
@@ -882,6 +996,12 @@ export type ThreatDiscoveryStatus = {
   jobs: {
     threatLab: ThreatDiscoveryJobStatus;
     autoResearch: ThreatDiscoveryJobStatus;
+  };
+  provenance?: {
+    strictLive: boolean;
+    sessionActive: boolean;
+    legacyAllowed: boolean;
+    source: 'session-swarm' | 'legacy-swarm' | 'none';
   };
 };
 

@@ -18,7 +18,7 @@ import {
   threatLabSemanticEnabled,
   ensureThreatLabLlmReady,
   loadCorpusSamples,
-  isCalibratorSeededRecord,
+  isAuthenticSemanticTp,
   type ThreatLabDiscovery,
   type ThreatLabCandidateProvenance,
 } from '../../src/ai/threat-lab.js';

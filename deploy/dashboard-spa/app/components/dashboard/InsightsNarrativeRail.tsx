@@ -1,0 +1,43 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { fetchDashboardInsights, type DashboardInsightsResponse } from '@/lib/guardian-api';
+import { InsightCallout } from './InsightCallout';
+
+type Scope = 'overview' | 'cost' | 'security' | 'audit' | 'ai';
+
+type Props = {
+  scope: Scope;
+  refreshKey?: number;
+};
+
+export function InsightsNarrativeRail({ scope, refreshKey = 0 }: Props) {
+  const [insights, setInsights] = useState<DashboardInsightsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const data = await fetchDashboardInsights(scope);
+    setInsights(data);
+    setLoading(false);
+  }, [scope]);
+
+  useEffect(() => {
+    void load();
+  }, [load, refreshKey]);
+
+  if (loading && !insights) {
+    return <p className="hint">Loading insights…</p>;
+  }
+  if (!insights?.bullets?.length) return null;
+
+  return (
+    <InsightCallout
+      bullets={insights.bullets}
+      source={insights.source ?? 'deterministic'}
+      provider={insights.provider}
+      model={insights.model}
+      generatedAt={insights.generatedAt}
+    />
+  );
+}

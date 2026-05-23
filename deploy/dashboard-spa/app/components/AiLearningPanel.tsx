@@ -17,7 +17,13 @@ import {
   type SemanticOutcome,
   type ThreatIntelStatus,
 } from '@/lib/guardian-api';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { hasPermission } from '@/lib/dashboard-roles';
+import { InsightsNarrativeRail } from './dashboard/InsightsNarrativeRail';
+import { DashboardSection } from './dashboard/DashboardSection';
+import { KpiCard } from './dashboard/KpiCard';
+import { ChartCard } from './dashboard/ChartCard';
+import { CHART_COLORS } from '@/lib/chartTheme';
 
 type Props = {
   roles?: string[];
@@ -36,6 +42,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
   const [threats, setThreats] = useState<ThreatIntelStatus | null>(null);
   const [threatPollBusy, setThreatPollBusy] = useState(false);
   const [reportSnippet, setReportSnippet] = useState('');
+  const [reportStructured, setReportStructured] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async () => {
     const [sug, sem, st, base, thr, rep] = await Promise.all([
@@ -54,6 +61,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
     setThreats(thr);
     const snippet = rep?.report ? JSON.stringify(rep.report, null, 2).slice(0, 1500) : '';
     setReportSnippet(snippet);
+    setReportStructured((rep?.report as Record<string, unknown>) ?? null);
   }, []);
 
   useEffect(() => {
@@ -134,10 +142,30 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
 
   const threatEntries = threats?.entries ?? [];
 
+  const confidenceChart = suggestions.map((s, i) => ({
+    name: (s.ruleName || s.id || `s${i}`).slice(0, 16),
+    confidence: Math.round((s.confidence ?? 0) * 100),
+  }));
+
+  const execSummary =
+    typeof reportStructured?.executiveSummary === 'string'
+      ? reportStructured.executiveSummary
+      : null;
+  const recommendations = Array.isArray(reportStructured?.recommendations)
+    ? (reportStructured.recommendations as string[])
+    : [];
+  const crossInsights = (
+    reportStructured?.patterns as { crossLayerInsights?: Array<{ description: string; severity: string }> }
+  )?.crossLayerInsights;
+
   return (
-    <section>
-      <h2>AI learning &amp; semantic audit</h2>
-      <p className="hint">Accept/reject suggestions, label semantic outcomes, rollback learning state.</p>
+    <div className="ai-learning-panel">
+      <InsightsNarrativeRail scope="ai" refreshKey={refreshTick} />
+
+      <DashboardSection
+        title="AI copilot & learning"
+        subtitle="Policy suggestions, semantic labels, and threat intel — closes the attack-learning loop"
+      >
 
       <div className="btn-row">
         <button type="button" className="secondary" onClick={() => void refresh()}>
@@ -151,33 +179,19 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
       </div>
 
       {aiInitialized && engineState ? (
-        <div className="cards">
-          <article className="card">
-            <h3>Engine state</h3>
-            <p className="metric-inline">
-              TP rate: {String(engineState.truePositiveRate ?? '—')} · FP rate:{' '}
-              {String(engineState.falsePositiveRate ?? '—')}
-            </p>
-            <p className="muted">Threshold: {String(engineState.adaptiveThreshold ?? '—')}</p>
-          </article>
-          <article className="card">
-            <h3>Threat intel</h3>
-            <p className="metric">{threats?.threats ?? 0} known IDs</p>
-            <p className="muted">
-              Updated {formatTs(threats?.updated)} · Last poll {formatTs(threats?.lastPollAt)}
-            </p>
-            <p className="muted">
-              {threats?.pollingDisabled
-                ? 'Live polling disabled (GUARDIAN_AI_DISABLE_THREAT_POLL=true)'
-                : threats?.pollingActive
-                  ? 'Live polling active (NVD, OSV, GitHub)'
-                  : 'Polling starts on first dashboard load'}
-            </p>
-          </article>
-          <article className="card">
-            <h3>Baselines</h3>
-            <p className="metric">{baselines.length}</p>
-          </article>
+        <div className="kpi-row">
+          <KpiCard
+            label="True positive rate"
+            value={String(engineState.truePositiveRate ?? '—')}
+            explanation="Share of operator-labeled semantic outcomes confirmed as attacks."
+          />
+          <KpiCard
+            label="False positive rate"
+            value={String(engineState.falsePositiveRate ?? '—')}
+            variant={Number(engineState.falsePositiveRate) > 0.2 ? 'warn' : 'default'}
+          />
+          <KpiCard label="Threat intel IDs" value={threats?.threats ?? 0} sub={`Updated ${formatTs(threats?.updated)}`} />
+          <KpiCard label="Baselines" value={baselines.length} />
         </div>
       ) : (
         <p className="muted">
@@ -227,6 +241,19 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
       )}
 
       <h3>Pending suggestions</h3>
+      {suggestions.length > 0 ? (
+        <ChartCard title="Suggestion confidence" subtitle="Higher confidence → prioritize review" empty={false} height={200}>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={confidenceChart.slice(0, 12)}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Bar dataKey="confidence" fill={CHART_COLORS[0]} name="Confidence %" />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartCard>
+      ) : null}
       {suggestions.length === 0 ? (
         <p className="muted">No pending suggestions.</p>
       ) : (
@@ -294,12 +321,34 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
         </table>
       )}
 
-      {reportSnippet ? (
+      {(execSummary || recommendations.length > 0 || crossInsights?.length) ? (
         <>
-          <h3>AI report (excerpt)</h3>
+          <h3>AI learning report</h3>
+          {execSummary ? <p className="insight-callout-list">{execSummary}</p> : null}
+          {recommendations.length > 0 ? (
+            <ul className="insight-callout-list">
+              {recommendations.slice(0, 6).map((r) => (
+                <li key={r.slice(0, 40)}>{r}</li>
+              ))}
+            </ul>
+          ) : null}
+          {crossInsights?.length ? (
+            <ul className="insight-callout-list">
+              {crossInsights.slice(0, 5).map((i) => (
+                <li key={i.description.slice(0, 40)}>
+                  [{i.severity}] {i.description}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : reportSnippet ? (
+        <>
+          <h3>AI report (raw excerpt)</h3>
           <pre className="code-block">{reportSnippet}</pre>
         </>
       ) : null}
-    </section>
+      </DashboardSection>
+    </div>
   );
 }

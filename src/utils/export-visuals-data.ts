@@ -13,6 +13,9 @@ import type { AttackLearningState } from '../ai/instant-attack-learning.js';
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { getEffectiveSwarmDir, resolveTenantSwarmDir } from '../tenant/swarm-tenant-paths.js';
 import { REPO_ROOT } from './swarm-artifacts.js';
+import { loadSemanticAuditRecordsAsync } from '../ai/semantic-audit-store.js';
+import { buildSemanticVisualsFromRecords } from './semantic-visuals.js';
+import { isSwarmSessionActiveForTenant, isStrictLiveDashboard } from './swarm-session.js';
 
 
 const RULE_GLOSSARY: Record<string, string> = {
@@ -46,6 +49,13 @@ export interface VisualsDataBundle {
     hasTraffic: boolean;
     hasInstantLearning: boolean;
     hasSemantic: boolean;
+    swarmSessionLive: boolean;
+    dataSources: {
+      traffic: 'history.db' | 'none';
+      semantic: 'semantic-audit-store' | 'none';
+      regression: 'session-swarm' | 'none';
+      pipeline: 'session-swarm' | 'none';
+    };
     emptyReasons: Record<string, string>;
   };
   traffic: {
@@ -181,6 +191,7 @@ export async function buildVisualsData(opts: {
   const windowDays = opts.windowDays ?? 7;
   const tenantId = opts.tenantId || DEFAULT_TENANT_ID;
   const swarmDir = getEffectiveSwarmDir(tenantId);
+  const swarmSessionLive = isSwarmSessionActiveForTenant(tenantId);
   const dbPath = opts.dbPath ?? resolveGuardianDbPath();
   const sinceMs = Date.now() - windowDays * 24 * 60 * 60 * 1000;
   const emptyReasons: Record<string, string> = {};
@@ -291,38 +302,37 @@ export async function buildVisualsData(opts: {
     emptyReasons.instantLearning = 'No live attack-learning state yet — blocks from the proxy will populate ~/.mcp-guardian/.attack-learning-state.json.';
   }
 
-  const cal = loadJsonSafe<{
-    totals?: Record<string, number>;
-    metrics?: { avgFlagConfidence?: number };
-    sampleFlagged?: Array<{ confidence?: number; label?: string | null }>;
-  }>(join(swarmDir, 'calibration.json'));
-
-  const confidenceBuckets = new Map<string, number>();
-  const labelMix = new Map<string, number>();
-  if (cal?.sampleFlagged?.length) {
-    for (const s of cal.sampleFlagged) {
-      const c = s.confidence ?? 0;
-      const bucket = c < 0.5 ? '0.0-0.5' : c < 0.7 ? '0.5-0.7' : c < 0.85 ? '0.7-0.85' : '0.85-1.0';
-      confidenceBuckets.set(bucket, (confidenceBuckets.get(bucket) || 0) + 1);
-      const lab = s.label || 'unlabeled';
-      labelMix.set(lab, (labelMix.get(lab) || 0) + 1);
-    }
+  const semanticRecords = await loadSemanticAuditRecordsAsync({
+    tenantId,
+    sinceMs: windowDays * 24 * 60 * 60 * 1000,
+    limit: 2000,
+  });
+  const semanticSlice = buildSemanticVisualsFromRecords(semanticRecords);
+  if (!semanticSlice.hasData) {
+    emptyReasons.semantic =
+      'No live semantic audit outcomes — route MCP traffic through the proxy with semantic audit enabled.';
   }
 
-  const semanticHas = !!(cal?.totals?.records);
-  if (!semanticHas) {
-    emptyReasons.semantic = 'No calibration.json or empty semantic outcomes.';
+  let latest: Record<string, unknown> | null = null;
+  let corpus: { byCategory?: Array<{ category: string; recall: number; total: number }> } | null = null;
+  let userSession: { servers?: Array<{ serverName: string; status: string; toolCount?: number }> } | null = null;
+  let job: { state?: string; phase?: string } | null = null;
+
+  if (swarmSessionLive || !isStrictLiveDashboard()) {
+    latest = loadJsonSafe<Record<string, unknown>>(join(swarmDir, 'latest.json'));
+    corpus = loadJsonSafe<{ byCategory?: Array<{ category: string; recall: number; total: number }> }>(
+      join(REPO_ROOT, 'corpus-eval-report.json'),
+    );
+    userSession = loadJsonSafe<{ servers?: Array<{ serverName: string; status: string; toolCount?: number }> }>(
+      join(swarmDir, 'user-servers-session.json'),
+    );
+    job = loadJsonSafe<{ state?: string; phase?: string }>(join(swarmDir, 'job.json'));
+  } else {
+    emptyReasons.regression =
+      'Batch regression data appears after you run Security Swarm in this dashboard session.';
+    emptyReasons.pipeline = emptyReasons.regression;
   }
 
-  const latest = loadJsonSafe<Record<string, unknown>>(join(swarmDir, 'latest.json'));
-  const corpus = loadJsonSafe<{ byCategory?: Array<{ category: string; recall: number; total: number }> }>(
-    join(REPO_ROOT, 'corpus-eval-report.json'),
-  );
-  const userSession = loadJsonSafe<{ servers?: Array<{ serverName: string; status: string; toolCount?: number }> }>(
-    join(swarmDir, 'user-servers-session.json'),
-  );
-
-  const job = loadJsonSafe<{ state?: string; phase?: string }>(join(swarmDir, 'job.json'));
   const phases = [
     { id: 'preflight', label: 'Preflight', progressPct: 5 },
     { id: 'live-mcp', label: 'Live MCP', progressPct: 25 },
@@ -340,7 +350,14 @@ export async function buildVisualsData(opts: {
       tenantId,
       hasTraffic: windowRecords.length > 0,
       hasInstantLearning: instantLearning.source === 'live',
-      hasSemantic: semanticHas,
+      hasSemantic: semanticSlice.hasData,
+      swarmSessionLive,
+      dataSources: {
+        traffic: windowRecords.length > 0 ? 'history.db' : 'none',
+        semantic: semanticSlice.hasData ? 'semantic-audit-store' : 'none',
+        regression: swarmSessionLive && latest ? 'session-swarm' : 'none',
+        pipeline: swarmSessionLive && job ? 'session-swarm' : 'none',
+      },
       emptyReasons,
     },
     traffic: {
@@ -364,11 +381,11 @@ export async function buildVisualsData(opts: {
     },
     instantLearning,
     semantic: {
-      hasData: semanticHas,
-      totals: cal?.totals ?? {},
-      confidenceBuckets: [...confidenceBuckets.entries()].map(([bucket, count]) => ({ bucket, count })),
-      labelMix: [...labelMix.entries()].map(([label, count]) => ({ label, count })),
-      avgFlagConfidence: cal?.metrics?.avgFlagConfidence ?? 0,
+      hasData: semanticSlice.hasData,
+      totals: semanticSlice.totals,
+      confidenceBuckets: semanticSlice.confidenceBuckets,
+      labelMix: semanticSlice.labelMix,
+      avgFlagConfidence: semanticSlice.avgFlagConfidence,
     },
     regression: {
       gates: (latest?.gates as Record<string, unknown>) ?? null,

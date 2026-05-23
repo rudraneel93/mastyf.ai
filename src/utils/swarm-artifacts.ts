@@ -14,7 +14,10 @@ import {
   LEGACY_SWARM_DIR,
   resolveTenantSwarmDir,
 } from '../tenant/swarm-tenant-paths.js';
-import { autoCorpusManifestPath } from '../ai/auto-corpus-writer.js';
+import {
+  isLegacyArtifactsAllowed,
+  isSwarmArtifactVisibleForSession,
+} from './swarm-session.js';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(__dir, '..', '..');
@@ -38,19 +41,23 @@ function resolvedTenantId(tenantId?: string): string {
   return validateTenantId(tenantId?.trim() || DEFAULT_TENANT_ID);
 }
 
-/** Tenant swarm dir first; legacy global dir only for the default tenant. */
+/** Tenant dir first; legacy global dir only when explicitly opted in. */
 function swarmArtifactCandidates(name: string, tenantId?: string): string[] {
   const tid = resolvedTenantId(tenantId);
-  const tenantPath = join(readDir(tid), name);
-  if (tid !== DEFAULT_TENANT_ID) return [tenantPath];
-  const legacyPath = join(LEGACY_SWARM_DIR, name);
-  if (tenantPath === legacyPath) return [tenantPath];
-  return [tenantPath, legacyPath];
+  const tenantPath = join(resolveTenantSwarmDir(tid), name);
+  const out = [tenantPath];
+  if (tid === DEFAULT_TENANT_ID && isLegacyArtifactsAllowed()) {
+    const legacyPath = join(LEGACY_SWARM_DIR, name);
+    if (legacyPath !== tenantPath) out.push(legacyPath);
+  }
+  return out;
 }
 
 function findSwarmArtifactPath(name: string, tenantId?: string): string | null {
   for (const p of swarmArtifactCandidates(name, tenantId)) {
-    if (existsSync(p)) return p;
+    if (!existsSync(p)) continue;
+    if (!isSwarmArtifactVisibleForSession(p, tenantId)) continue;
+    return p;
   }
   return null;
 }
@@ -114,7 +121,7 @@ export function readLiveFilesystemSession(tenantId?: string): Record<string, unk
 
 export function readSwarmLatest(tenantId?: string): Record<string, unknown> | null {
   const p = join(readDir(tenantId), 'latest.json');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
   } catch {
@@ -124,7 +131,7 @@ export function readSwarmLatest(tenantId?: string): Record<string, unknown> | nu
 
 export function readSwarmSummaryMd(tenantId?: string): string | null {
   const p = join(readDir(tenantId), 'summary.md');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   return readFileSync(p, 'utf-8');
 }
 
@@ -152,14 +159,21 @@ export function readFiguresManifest(tenantId?: string): {
   const tid = tenantId || DEFAULT_TENANT_ID;
   const manifestPath = join(figuresDir(tenantId), 'manifest.json');
   const urlPrefix = `${swarmReportUrlPrefix(tid)}/figures`;
-  if (!existsSync(manifestPath)) {
+  const manifestVisible =
+    existsSync(manifestPath) && isSwarmArtifactVisibleForSession(manifestPath, tenantId);
+  if (!manifestVisible) {
     return {
-      figures: listSwarmFigures(tenantId).map((name) => ({
-        name,
-        title: name.replace('.png', '').replace(/-/g, ' '),
-        category: 'other',
-        url: `${urlPrefix}/${name}`,
-      })),
+      figures: listSwarmFigures(tenantId)
+        .filter((name) => {
+          const p = join(figuresDir(tenantId), name);
+          return isSwarmArtifactVisibleForSession(p, tenantId);
+        })
+        .map((name) => ({
+          name,
+          title: name.replace('.png', '').replace(/-/g, ' '),
+          category: 'other',
+          url: `${urlPrefix}/${name}`,
+        })),
     };
   }
   try {
@@ -167,7 +181,12 @@ export function readFiguresManifest(tenantId?: string): {
       generatedAt?: string;
       figures?: SwarmFigureEntry[];
     };
-    const figures = (raw.figures ?? []).map((f) => ({
+    const figures = (raw.figures ?? [])
+      .filter((f) => {
+        const p = join(figuresDir(tenantId), f.name);
+        return isSwarmArtifactVisibleForSession(p, tenantId);
+      })
+      .map((f) => ({
       ...f,
       url: f.url?.startsWith('/') ? f.url : `${urlPrefix}/${f.name}`,
     }));
@@ -179,7 +198,7 @@ export function readFiguresManifest(tenantId?: string): {
 
 export function readVisualsData(tenantId?: string): Record<string, unknown> | null {
   const p = join(readDir(tenantId), 'visuals-data.json');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
   } catch {
@@ -194,13 +213,13 @@ export function visualsDataPath(tenantId: string): string {
 export function readSwarmFigure(name: string, tenantId?: string): Buffer | null {
   if (!name || name.includes('..') || !name.endsWith('.png')) return null;
   const p = join(figuresDir(tenantId), name);
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   return readFileSync(p);
 }
 
 export function readUserServersSession(tenantId?: string): Record<string, unknown> | null {
   const p = join(readDir(tenantId), 'user-servers-session.json');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
   } catch {
@@ -210,7 +229,7 @@ export function readUserServersSession(tenantId?: string): Record<string, unknow
 
 export function readTrafficSummary(tenantId?: string): Record<string, unknown> | null {
   const p = join(readDir(tenantId), 'traffic-summary.json');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
   } catch {
@@ -220,7 +239,7 @@ export function readTrafficSummary(tenantId?: string): Record<string, unknown> |
 
 export function readPlainEnglishReport(tenantId?: string): Record<string, unknown> | null {
   const p = join(readDir(tenantId), 'report.json');
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   try {
     return JSON.parse(readFileSync(p, 'utf-8')) as Record<string, unknown>;
   } catch {
@@ -258,7 +277,7 @@ export function readSwarmTextArtifact(name: string, tenantId?: string): string |
   const allowed = new Set(['summary.md', 'swarm-report.txt', 'analysis.txt', 'job.log']);
   if (!allowed.has(name)) return null;
   const p = join(readDir(tenantId), name);
-  if (!existsSync(p)) return null;
+  if (!existsSync(p) || !isSwarmArtifactVisibleForSession(p, tenantId)) return null;
   return readFileSync(p, 'utf-8');
 }
 
@@ -347,28 +366,11 @@ export function readAutoCorpusManifest(tenantId?: string): {
   count: number;
   entries: AutoCorpusManifestEntry[];
 } | null {
-  const fromSwarm = readSwarmJsonFile<{
+  return readSwarmJsonFile<{
     timestamp: string;
     count: number;
     entries: AutoCorpusManifestEntry[];
   }>('auto-corpus-manifest.json', tenantId);
-  if (fromSwarm) return fromSwarm;
-
-  if (resolvedTenantId(tenantId) !== DEFAULT_TENANT_ID) return null;
-
-  const envPath = autoCorpusManifestPath();
-  if (existsSync(envPath)) {
-    try {
-      return JSON.parse(readFileSync(envPath, 'utf-8')) as {
-        timestamp: string;
-        count: number;
-        entries: AutoCorpusManifestEntry[];
-      };
-    } catch {
-      return null;
-    }
-  }
-  return null;
 }
 
 export function markThreatLabCandidate(

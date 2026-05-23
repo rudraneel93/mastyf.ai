@@ -56,6 +56,7 @@ export function ThreatDiscoveryOverview({
   const tl = status.threatLab.stats;
   const ac = status.autoCorpus.stats;
   const pipeline = status.pipeline;
+  const sessionActive = status.provenance?.sessionActive ?? false;
   const sourceChart = toChartData({
     ...tl.bySource,
     ...Object.fromEntries(
@@ -71,6 +72,16 @@ export function ThreatDiscoveryOverview({
           LLM unavailable: {status.llm.reason || 'Configure Ollama'}
         </p>
       ) : null}
+      {!sessionActive ? (
+        <p className="hint banner-inline live-data-banner">
+          Batch Threat Lab / Auto Research results appear only after you run a job in this dashboard
+          session. Stale or committed swarm artifacts are hidden.
+        </p>
+      ) : (
+        <p className="hint banner-inline live-data-banner live-data-banner-ok">
+          Session batch data · Threat Lab / Auto Research outputs from this dashboard session
+        </p>
+      )}
       {!status.features.threatLabEnabled && !status.features.autoResearchEnabled ? (
         <p className="hint banner-inline">
           Enable <code>SWARM_THREAT_LAB=true</code> and/or{' '}

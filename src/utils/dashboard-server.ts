@@ -16,7 +16,7 @@ import {
   assertTenantAdminScope,
   canAccessRoute,
 } from '../auth/dashboard-rbac.js';
-import { resolveTenantContext, InvalidTenantIdError, isMultiTenantModeEnabled } from '../tenant/resolve-tenant.js';
+import { resolveTenantContext, InvalidTenantIdError, isMultiTenantModeEnabled, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { tenantRateLimitKey } from './redis-rate-limiter.js';
 import { Registry } from 'prom-client';
 import { WsBroadcaster } from '../dashboard/ws-broadcaster.js';
@@ -44,6 +44,15 @@ import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
 import { REPO_ROOT } from './security-swarm-runner.js';
 import { available, unavailable, defaultPolicyPath, parseCostBudgetUsd } from './dashboard-live-data.js';
 import { cachedDashboardQuery, dashboardQueryCacheKey } from './dashboard-query-cache.js';
+import { computeBurnRatePerHour, computeProjectedMonthly } from './cost-metrics.js';
+import { buildCostTimeseries, loadAllRecordsInWindow } from './cost-timeseries.js';
+import { buildExecutiveSummary } from './dashboard-executive-summary.js';
+import { buildDashboardInsights, type InsightScope } from './dashboard-insights.js';
+import { buildAuditHeatmap } from './audit-heatmap.js';
+import {
+  isLegacyArtifactsAllowed,
+  isSwarmArtifactVisibleForSession,
+} from './swarm-session.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -161,13 +170,16 @@ function tryServeDashboardSpa(
 function tryServeSwarmArtifact(url: string, res: ServerResponse, method: string = 'GET'): boolean {
   let root: string | null = null;
   let rel: string | null = null;
+  let tenantId = DEFAULT_TENANT_ID;
 
   const legacyPrefix = '/reports/security-swarm/';
   const tenantPrefixMatch = url.match(/^\/reports\/tenants\/([a-zA-Z0-9][a-zA-Z0-9-]*)\/security-swarm\/(.+)$/);
   if (tenantPrefixMatch) {
+    tenantId = tenantPrefixMatch[1];
     root = join(REPO_ROOT, 'reports', 'tenants', tenantPrefixMatch[1], 'security-swarm');
     rel = tenantPrefixMatch[2];
   } else if (url.startsWith(legacyPrefix)) {
+    if (!isLegacyArtifactsAllowed()) return false;
     root = join(REPO_ROOT, 'reports', 'security-swarm');
     rel = url.slice(legacyPrefix.length);
   }
@@ -175,6 +187,7 @@ function tryServeSwarmArtifact(url: string, res: ServerResponse, method: string 
 
   const filePath = join(root, rel);
   if (!existsSync(filePath)) return false;
+  if (!isSwarmArtifactVisibleForSession(filePath, tenantId)) return false;
 
   const mime = SPA_MIME[extname(filePath)] || 'application/octet-stream';
   res.writeHead(200, { 'Content-Type': mime });
@@ -1351,6 +1364,7 @@ export async function startDashboardServer(
           const srvs = await getAllActiveServerNames(db, requestTenantId);
           const reps: any[] = [];
           let totalCost = 0;
+          const allRecords = await loadAllCallRecords(db, srvs, requestTenantId);
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
@@ -1359,6 +1373,8 @@ export async function startDashboardServer(
             reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(recs), unpriced: sum.unpricedCalls });
             totalCost += sum.costUsd;
           }
+          const burnRatePerHour = computeBurnRatePerHour(totalCost, allRecords);
+          const projectedMonthly = computeProjectedMonthly(totalCost, allRecords);
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
@@ -1370,7 +1386,9 @@ export async function startDashboardServer(
           writeJson(res, 200, available({
             serverReports: reps,
             totalCost,
-            projectedMonthly: totalCost > 0 ? totalCost * 30 : null,
+            projectedMonthly: projectedMonthly > 0 ? projectedMonthly : (totalCost > 0 ? totalCost * 30 : null),
+            burnRatePerHour,
+            budgetUsd,
             budgetAlerts,
             pricingModel,
           }));
@@ -1423,6 +1441,86 @@ export async function startDashboardServer(
           writeJson(res, 200, payload);
         } catch {
           writeJson(res, 200, unavailable({ tools: [] }, 'Failed cost breakdown'));
+        }
+        return;
+      }
+
+      if (url === '/api/cost/timeseries' && method === 'GET') {
+        setCors();
+        try {
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ series: [], windowDays: 7 }, 'No history database'));
+            return;
+          }
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '30', 10)));
+          const gran = u.searchParams.get('granularity') === 'hour' ? 'hour' : 'day';
+          const result = await buildCostTimeseries(db, requestTenantId, windowDays, gran);
+          writeJson(res, 200, available(result));
+        } catch {
+          writeJson(res, 200, unavailable({ series: [] }, 'Failed cost timeseries'));
+        }
+        return;
+      }
+
+      if (url === '/api/dashboard/executive-summary' && method === 'GET') {
+        setCors();
+        try {
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ totalRequests: 0 }, 'No history database'));
+            return;
+          }
+          const summary = await buildExecutiveSummary(db, requestTenantId);
+          writeJson(res, 200, available(summary));
+        } catch {
+          writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed executive summary'));
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/dashboard/insights') && method === 'GET') {
+        setCors();
+        try {
+          const db = runtimeHistoryDb;
+          const u = new URL(req.url || url, 'http://localhost');
+          const scopeRaw = u.searchParams.get('scope') || 'overview';
+          const scope = (['overview', 'cost', 'security', 'audit', 'ai'].includes(scopeRaw)
+            ? scopeRaw
+            : 'overview') as InsightScope;
+          if (!db) {
+            writeJson(res, 200, unavailable({
+              scope,
+              generatedAt: new Date().toISOString(),
+              source: 'measured',
+              bullets: [],
+            }, 'No history database'));
+            return;
+          }
+          const insights = await buildDashboardInsights(db, requestTenantId, scope);
+          writeJson(res, 200, available(insights));
+        } catch {
+          writeJson(res, 200, unavailable({ bullets: [] }, 'Failed dashboard insights'));
+        }
+        return;
+      }
+
+      if (url === '/api/audit/heatmap' && method === 'GET') {
+        setCors();
+        try {
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ cells: [] }, 'No history database'));
+            return;
+          }
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '7', 10)));
+          const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
+          const cells = buildAuditHeatmap(records);
+          writeJson(res, 200, available({ windowDays, cells }));
+        } catch {
+          writeJson(res, 200, unavailable({ cells: [] }, 'Failed audit heatmap'));
         }
         return;
       }

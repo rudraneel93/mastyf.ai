@@ -88,10 +88,17 @@ export function InfrastructureVisualsPanel({ refreshKey = 0, pollMs = 30_000 }: 
       <div className="infra-visuals-head">
         <h4>Live infrastructure charts</h4>
         <p className="hint">
-          From <code>history.db</code> and AI learning state
+          Traffic from <code>history.db</code>
+          {data?.meta?.dataSources?.semantic === 'semantic-audit-store'
+            ? ' · semantic from live audit store'
+            : ''}
+          {data?.meta?.swarmSessionLive ? ' · regression from session swarm' : ''}
           {data?.instantLearning?.source ? ` · learning: ${data.instantLearning.source}` : ''}
           {data?.generatedAt ? ` · ${new Date(data.generatedAt).toLocaleString()}` : ''}
         </p>
+        {!data?.meta?.swarmSessionLive && data?.meta?.emptyReasons?.regression ? (
+          <p className="hint live-data-banner">{data.meta.emptyReasons.regression}</p>
+        ) : null}
       </div>
 
       <nav className="infra-visuals-tabs" aria-label="Chart categories">

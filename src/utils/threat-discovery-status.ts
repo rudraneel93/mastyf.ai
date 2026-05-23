@@ -23,6 +23,7 @@ import {
   type AutoCorpusManifestEntry,
 } from './swarm-artifacts.js';
 import { getThreatDiscoveryJobStatus, type ThreatDiscoveryJobStatus } from './threat-discovery-runner.js';
+import { isSwarmSessionActiveForTenant, swarmDataProvenance } from './swarm-session.js';
 
 let llmCache: { at: number; ok: boolean; reason?: string; model?: string } | null = null;
 const LLM_CACHE_MS = 30_000;
@@ -130,14 +131,16 @@ export interface ThreatDiscoveryStatus {
     threatLab: ThreatDiscoveryJobStatus;
     autoResearch: ThreatDiscoveryJobStatus;
   };
+  provenance: ReturnType<typeof swarmDataProvenance>;
 }
 
 export async function buildThreatDiscoveryStatus(
   tenantId: string,
 ): Promise<ThreatDiscoveryStatus> {
   const llm = await cachedLlmHealth();
-  const threatLabManifest = readThreatLabCandidates(tenantId);
-  const autoManifest = readAutoCorpusManifest(tenantId);
+  const sessionActive = isSwarmSessionActiveForTenant(tenantId);
+  const threatLabManifest = sessionActive ? readThreatLabCandidates(tenantId) : null;
+  const autoManifest = sessionActive ? readAutoCorpusManifest(tenantId) : null;
   const candidates = threatLabManifest?.candidates || [];
   const entries = autoManifest?.entries || [];
 
@@ -175,6 +178,7 @@ export async function buildThreatDiscoveryStatus(
       threatLab: getThreatDiscoveryJobStatus(tenantId, 'threat-lab'),
       autoResearch: getThreatDiscoveryJobStatus(tenantId, 'auto-research'),
     },
+    provenance: swarmDataProvenance(tenantId),
   };
 }
 

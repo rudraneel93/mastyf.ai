@@ -17,6 +17,7 @@ import {
   SWARM_DIR,
   ensureTenantSwarmDir,
 } from './swarm-artifacts.js';
+import { isSwarmSessionActiveForTenant, isSwarmArtifactVisibleForSession } from './swarm-session.js';
 
 const RUN_SCRIPT = join(REPO_ROOT, 'security-swarm', 'run-analysis.mjs');
 
@@ -34,6 +35,7 @@ export interface SwarmJobStatus {
   analysisPath: string;
   logTail: string;
   hasRun?: boolean;
+  sessionArtifactsVisible?: boolean;
 }
 
 const WATCHED_ARTIFACTS = [
@@ -112,6 +114,7 @@ export function getSwarmJobStatus(tenantId: string = DEFAULT_TENANT_ID): SwarmJo
     analysisPath: analysis,
     logTail: readLogTail(tenantId),
     hasRun,
+    sessionArtifactsVisible: isSwarmSessionActiveForTenant(tenantId),
   };
 }
 
@@ -325,6 +328,9 @@ export function readAnalysisReport(tenantId: string = DEFAULT_TENANT_ID): {
   const path = analysisPath(tenantId);
   if (!existsSync(path)) {
     return { ok: false, error: 'analysis.txt not ready — run analysis first' };
+  }
+  if (!isSwarmArtifactVisibleForSession(path, tenantId)) {
+    return { ok: false, error: 'No analysis from this dashboard session — run Security Swarm first' };
   }
   return { ok: true, text: readFileSync(path, 'utf-8') };
 }

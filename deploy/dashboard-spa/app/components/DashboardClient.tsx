@@ -30,6 +30,13 @@ import { PolicyPanel } from './PolicyPanel';
 import { AdminPanel } from './AdminPanel';
 import { TenantContextBar } from './TenantContextBar';
 import { ProUpgradeBanner } from './ProUpgradeBanner';
+import { ExecutiveOverviewPanel } from './dashboard/ExecutiveOverviewPanel';
+import { CostGovernancePanel } from './dashboard/CostGovernancePanel';
+import { SecurityPosturePanel } from './dashboard/SecurityPosturePanel';
+import { HealthReliabilityPanel } from './dashboard/HealthReliabilityPanel';
+import { AuditExplorerPanel } from './dashboard/AuditExplorerPanel';
+import { FleetOverviewPanel } from './dashboard/FleetOverviewPanel';
+import { AnalyticsChartsHub } from './dashboard/AnalyticsChartsHub';
 import { hasPermission } from '@/lib/dashboard-roles';
 import type { AuthStatus } from '@/lib/guardian-api';
 
@@ -87,6 +94,7 @@ export function DashboardClient() {
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [auditAction, setAuditAction] = useState('');
   const [auditServer, setAuditServer] = useState('');
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const pollFailuresRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
@@ -172,6 +180,7 @@ export function DashboardClient() {
       if (secRes) setSecurity(secRes);
       if (healthRes) setHealth(healthRes);
       setFleet(fleetRes);
+      setRefreshTick((t) => t + 1);
     } catch (e) {
       pollFailuresRef.current += 1;
       const message = e instanceof Error ? e.message : 'Network error';
@@ -244,11 +253,6 @@ export function DashboardClient() {
   const displayMetrics = metrics ?? ws.metricsPatch;
   const displayAudit = audit;
 
-  const blockedPct =
-    displayAudit && displayAudit.total > 0
-      ? Math.round((displayAudit.blocked / displayAudit.total) * 100)
-      : 0;
-
   const lastBlocked = (displayAudit?.events || []).find((e) => e.action === 'block');
 
   return (
@@ -285,208 +289,46 @@ export function DashboardClient() {
       {tab === 'flow' && <AgentFlowPanel ws={ws} roles={roles} />}
 
       {tab === 'overview' && (
-        <section className="cards" aria-label="Overview metrics">
-          <article className="card">
-            <h2>Total calls</h2>
-            <p className="metric">{displayMetrics?.totalRequests ?? displayAudit?.total ?? '—'}</p>
-          </article>
-          <article className="card">
-            <h2>Pass rate</h2>
-            <p className="metric">
-              {displayMetrics?.passRate != null
-                ? `${displayMetrics.passRate.toFixed(1)}%`
-                : displayAudit && displayAudit.total > 0
-                  ? `${(100 - blockedPct).toFixed(1)}%`
-                  : '—'}
-            </p>
-          </article>
-          <article className="card">
-            <h2>Avg latency</h2>
-            <p className="metric">
-              {displayMetrics?.avgLatencyMs != null
-                ? `${displayMetrics.avgLatencyMs.toFixed(0)} ms`
-                : '—'}
-            </p>
-          </article>
-          <article className="card">
-            <h2>Cost (USD)</h2>
-            <p className="metric">
-              {displayMetrics?.totalCost != null || cost?.totalCost != null
-                ? `$${(displayMetrics?.totalCost ?? cost?.totalCost ?? 0).toFixed(4)}`
-                : '—'}
-            </p>
-          </article>
-          <article className="card">
-            <h2>Burn rate / hr</h2>
-            <p className="metric">
-              {displayMetrics?.burnRatePerHour != null
-                ? `$${displayMetrics.burnRatePerHour.toFixed(4)}`
-                : '—'}
-            </p>
-          </article>
-          <article className="card">
-            <h2>Semantic flags</h2>
-            <p className="metric">
-              {displayAudit?.flagged ?? displayAudit?.semanticAudit?.flagged ?? 0}
-            </p>
-            {displayAudit?.semanticAudit?.enabled ? (
-              <p className="hint">
-                Queue {displayAudit.semanticAudit.queued} · processed{' '}
-                {displayAudit.semanticAudit.processed}
-              </p>
-            ) : null}
-          </article>
-          {displayMetrics?.lastUpdated ? (
-            <p className="hint overview-updated">Last updated {displayMetrics.lastUpdated}</p>
-          ) : null}
-        </section>
+        <>
+          <ExecutiveOverviewPanel
+            refreshKey={refreshTick}
+            metrics={displayMetrics}
+            semanticFlags={displayAudit?.flagged ?? displayAudit?.semanticAudit?.flagged ?? 0}
+          />
+          <AnalyticsChartsHub refreshKey={refreshTick} pollMs={REST_POLL_MS} />
+        </>
       )}
 
       {tab === 'audit' && (
-        <section>
-          <h2>Live audit trail</h2>
-          <p className="hint">Source: /api/aggregate/audit (history.db call_records)</p>
-          <div className="filter-row">
-            <label className="inline">
-              Action
-              <select
-                value={auditAction}
-                onChange={(e) => setAuditAction(e.target.value)}
-                aria-label="Filter by action"
-              >
-                <option value="">All</option>
-                <option value="block">block</option>
-                <option value="pass">pass</option>
-              </select>
-            </label>
-            <label className="inline">
-              Server
-              <input
-                type="text"
-                placeholder="server name"
-                value={auditServer}
-                onChange={(e) => setAuditServer(e.target.value)}
-              />
-            </label>
-            <button type="button" className="secondary" onClick={() => void refreshAll()}>
-              Apply filters
-            </button>
-          </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Server</th>
-                <th>Tool</th>
-                <th>Action</th>
-                <th>Rule</th>
-                <th>Reason</th>
-                <th>Cost</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(displayAudit?.events || []).slice(0, 50).map((e, i) => (
-                <tr key={`${e.timestamp}-${i}`} className={e.action === 'block' ? 'row-block' : undefined}>
-                  <td>{e.timestamp?.slice(11, 19) || '—'}</td>
-                  <td>{e.server_name || '—'}</td>
-                  <td>{e.tool_name}</td>
-                  <td>{e.action}</td>
-                  <td>{e.rule || '—'}</td>
-                  <td className="cell-reason" title={e.reason || ''}>
-                    {(e.reason || '—').slice(0, 48)}
-                    {(e.reason?.length ?? 0) > 48 ? '…' : ''}
-                  </td>
-                  <td>{e.cost_usd != null ? `$${e.cost_usd.toFixed(4)}` : '—'}</td>
-                  <td>
-                    {e.action === 'block' && e.rule ? (
-                      <button
-                        type="button"
-                        className="secondary btn-sm"
-                        title="FP whitelist (3-strike)"
-                        onClick={() =>
-                          void onFpReject(e.rule || '', e.reason || e.tool_name || '')
-                        }
-                      >
-                        FP reject
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hint">
-            Showing {(displayAudit?.events || []).length} of {displayAudit?.total ?? 0} · blocked{' '}
-            {displayAudit?.blocked ?? 0} · passed {displayAudit?.passed ?? 0}. Live stream on{' '}
-            <button type="button" className="linkish" onClick={() => setTab('flow')}>
-              Agent flow
-            </button>
-            .
-          </p>
-        </section>
+        <AuditExplorerPanel
+          audit={displayAudit}
+          refreshKey={refreshTick}
+          auditAction={auditAction}
+          auditServer={auditServer}
+          onFilterChange={(action, server) => {
+            setAuditAction(action);
+            setAuditServer(server);
+          }}
+          onApplyFilters={() => void refreshAll()}
+          onFpReject={(rule, pattern) => void onFpReject(rule, pattern)}
+          canMutate={hasPermission(roles, 'policy_mutate')}
+        />
       )}
 
       {tab === 'security' && (
-        <section>
-          <h2>Security scans</h2>
-          {!security ? (
-            <p className="muted">No security scan data — run scan via CLI or wait for proxy traffic.</p>
-          ) : (
-            <>
-              <p className="metric-inline">
-                Score: {security.overallScore != null ? `${security.overallScore} / 100` : '—'}
-              </p>
-              <ul className="list">
-                {(security.serverReports || []).map((s) => (
-                  <li key={s.name}>
-                    {s.scanned === false
-                      ? `${s.name}: no scan yet`
-                      : `${s.name}: score ${s.score ?? '—'}, critical ${s.critical ?? '—'}, high ${s.high ?? '—'}`}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
+        <SecurityPosturePanel
+          security={security}
+          refreshKey={refreshTick}
+          onOpenThreatDiscovery={() => setTab('threat-discovery')}
+        />
       )}
 
       {tab === 'cost' && (
-        <section>
-          <h2>Cost governance</h2>
-          {!cost ? (
-            <p className="muted">No cost data — connect proxy history DB.</p>
-          ) : (
-            <>
-              <p className="metric-inline">
-                Total: {cost.totalCost != null ? `$${cost.totalCost.toFixed(4)}` : '—'}
-              </p>
-              {(cost.budgetAlerts || []).map((a) => (
-                <p key={a} className="alert">
-                  {a}
-                </p>
-              ))}
-            </>
-          )}
-        </section>
+        <CostGovernancePanel refreshKey={refreshTick} initialCost={cost} />
       )}
 
       {tab === 'health' && (
-        <section>
-          <h2>Health</h2>
-          {!health ? (
-            <p className="muted">No health data — connect proxy history DB.</p>
-          ) : (
-            <ul className="list">
-              {(health.serverReports || []).map((h) => (
-                <li key={h.name}>
-                  {h.name}: {h.latency}ms, CB {h.circuitBreaker}, success{' '}
-                  {h.successRate != null ? `${h.successRate}%` : '—'}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <HealthReliabilityPanel health={health} refreshKey={refreshTick} />
       )}
 
       {tab === 'ai' && (
@@ -515,41 +357,17 @@ export function DashboardClient() {
       )}
 
       {tab === 'swarm' && (
-        <SwarmPanel pipeline={ws.pipeline} swarmDoneTick={ws.swarmDoneTick} />
+        <>
+          <SwarmPanel pipeline={ws.pipeline} swarmDoneTick={ws.swarmDoneTick} />
+          <AnalyticsChartsHub refreshKey={ws.swarmDoneTick || refreshTick} pollMs={0} />
+        </>
       )}
 
       {tab === 'admin' && (
         <AdminPanel roles={roles} tenantLocked={!!authStatus?.tenantLocked} />
       )}
 
-      {tab === 'fleet' && (
-        <section>
-          <h2>Fleet instances</h2>
-          <p className="hint">Postgres / GUARDIAN_FLEET_DB_PATHS / GUARDIAN_TELEMETRY_ENDPOINTS</p>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Instance</th>
-                <th>Status</th>
-                <th>Requests</th>
-                <th>Blocked</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fleet.map((i) => (
-                <tr key={i.instanceId}>
-                  <td>{i.instanceName || i.instanceId}</td>
-                  <td>{i.status || '—'}</td>
-                  <td>{i.totalRequests ?? '—'}</td>
-                  <td>{i.blockedRequests ?? '—'}</td>
-                  <td>{i.fleetSource || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      {tab === 'fleet' && <FleetOverviewPanel fleet={fleet} />}
 
     </main>
     </LoginGate>
