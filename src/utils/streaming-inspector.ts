@@ -28,6 +28,8 @@ export interface StreamingInspectResult {
   truncated?: boolean;
   redactedBody?: string;
   dlpMode?: string;
+  redactionReasons?: string[];
+  decodePasses?: string[];
 }
 
 export const STREAMING_INSPECTOR_MAX_CARRY_CHARS = 128 * 1024;
@@ -148,6 +150,8 @@ export function inspectFullResponse(
     ...out,
     redactedBody: dlp.redactedBody,
     dlpMode: dlp.mode,
+    redactionReasons: dlp.redactionReasons,
+    decodePasses: dlp.decodePasses,
     hasCritical: dlp.hasCritical || out.hasCritical,
     hasHigh: dlp.hasHigh || out.hasHigh,
     clean: dlp.clean && out.clean,

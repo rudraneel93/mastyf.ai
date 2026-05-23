@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bypassFingerprint } from '../lib/bypass-fingerprint.mjs';
+import { signEvasionManifest } from '../lib/evasion-sign.mjs';
 
 const __dir = dirname(fileURLToPath(import.meta.url));
 const REPO = join(__dir, '..', '..');
@@ -162,19 +163,15 @@ for (const b of bypasses.slice(0, 20)) {
   console.log(`[evasion-generate] wrote ${fx.id} (tool=${fx.toolName}, template=${fx.corpusTemplate})`);
 }
 
-writeFileSync(
-  MANIFEST,
-  JSON.stringify(
-    {
-      timestamp: new Date().toISOString(),
-      count: promotions.length,
-      promotions,
-      instructions:
-        'Run: node security-swarm/scripts/open-corpus-pr.mjs (local) or workflow_dispatch corpus-pr. Require corpus+parity pass before merge. No auto-merge.',
-    },
-    null,
-    2,
-  ),
+const manifest = signEvasionManifest(
+  {
+    timestamp: new Date().toISOString(),
+    count: promotions.length,
+    promotions,
+    instructions:
+      'Run: node security-swarm/scripts/open-corpus-pr.mjs (local) or workflow_dispatch corpus-pr. Require corpus+parity pass before merge. No auto-merge.',
+  },
 );
+writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2));
 
 process.exit(0);

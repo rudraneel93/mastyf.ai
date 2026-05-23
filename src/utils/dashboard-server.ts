@@ -1,5 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync } from 'fs';
+import { load } from 'js-yaml';
+import { parsePolicyConfig } from '../policy/policy-schema.js';
 import { resolve, dirname, join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
@@ -25,6 +27,7 @@ import {
   isLicenseEnforcementEnabled,
   loadLicenseClientConfig,
 } from '../license/license-client.js';
+import { getProCheckoutUrl, isOpenCoreEnabled } from '../license/feature-tiers.js';
 import { mapCloudRoles, verifyCloudSessionToken } from '../license/cloud-session.js';
 import {
   getAllActiveServerNames,
@@ -35,6 +38,7 @@ import {
 import { computeCostTrend, fetchCircuitBreakerStates } from './tui-sources.js';
 import { REPO_ROOT } from './security-swarm-runner.js';
 import { available, unavailable, defaultPolicyPath, parseCostBudgetUsd } from './dashboard-live-data.js';
+import { cachedDashboardQuery, dashboardQueryCacheKey } from './dashboard-query-cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -247,27 +251,37 @@ export async function startDashboardServer(
   }
 
   function licenseStatusPayload() {
-    const enforced = isLicenseEnforcementEnabled();
-    if (!enforced) {
+    const tier = licenseClient.getTier();
+    const upgradeUrl = getProCheckoutUrl() ?? licenseClient.getCloudBillingUrl() ?? null;
+    const openCore = isOpenCoreEnabled();
+
+    if (!openCore && !isLicenseEnforcementEnabled()) {
       return {
         licensed: true,
+        tier: 'pro' as const,
         licenseEnforced: false,
         licenseRequired: false,
+        openCore: false,
         tenantSlug: licenseClient.getTenantSlug() ?? null,
         licenseStatus: 'not_enforced',
         cloudBillingUrl: null,
+        upgradeUrl,
         features: [] as string[],
       };
     }
+
     const state = licenseClient.getState();
     const licensed = licenseClient.isLicensed();
     return {
       licensed,
-      licenseEnforced: true,
-      licenseRequired,
+      tier,
+      licenseEnforced: openCore || isLicenseEnforcementEnabled(),
+      licenseRequired: licenseRequired,
+      openCore,
       tenantSlug: licenseClient.getTenantSlug() ?? null,
-      licenseStatus: state?.status ?? 'unknown',
+      licenseStatus: state?.status ?? (licensed ? 'active' : 'community'),
       cloudBillingUrl: licenseClient.getCloudBillingUrl() ?? null,
+      upgradeUrl,
       features: state?.features ?? [],
     };
   }
@@ -282,20 +296,27 @@ export async function startDashboardServer(
   }
 
   function assertLicensedApi(path: string, res: ServerResponse, setCors: () => void): boolean {
-    if (!isLicenseEnforcementEnabled() || isLicenseExemptPath(path)) return true;
-    if (licenseClient.isLicensed()) return true;
+    if (isLicenseExemptPath(path)) return true;
+    if (!isOpenCoreEnabled()) {
+      if (!isLicenseEnforcementEnabled() || licenseClient.isLicensed()) return true;
+    } else if (licenseClient.hasFeature('dashboard')) {
+      return true;
+    }
     setCors();
     writeJson(res, 402, {
-      error: 'License required',
+      error: 'MCP Guardian Pro license required',
       ...licenseStatusPayload(),
     });
     return false;
   }
 
   function assertFeature(_path: string, feature: string, res: ServerResponse, setCors: () => void): boolean {
-    if (!isLicenseEnforcementEnabled() || licenseClient.hasFeature(feature)) return true;
+    if (licenseClient.hasFeature(feature)) return true;
     setCors();
-    writeJson(res, 402, { error: `Feature not licensed: ${feature}` });
+    writeJson(res, 402, {
+      error: `Feature not licensed: ${feature}`,
+      ...licenseStatusPayload(),
+    });
     return false;
   }
 
@@ -526,7 +547,10 @@ export async function startDashboardServer(
         }
 
         if (!auth.hasJwtSessionAuth()) {
-          writeJson(res, 503, { error: 'DASHBOARD_JWT_SECRET required for cloud exchange' });
+          writeJson(res, 503, {
+            error:
+              'Set DASHBOARD_JWT_SECRET or GUARDIAN_CLOUD_JWT_SECRET on this Guardian host (same value as cloud LICENSE_JWT_SECRET / AUTH_SECRET)',
+          });
           return;
         }
 
@@ -702,6 +726,23 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url.startsWith('/api/') && url !== '/api/login') {
+        const clientIp = getClientIp(req);
+        res.on('finish', () => {
+          void import('../audit/dashboard-access-log.js').then(({ appendDashboardAccessLog }) => {
+            appendDashboardAccessLog({
+              userId: authResult.identity || 'unknown',
+              tenantId: requestTenantId,
+              method,
+              path: url.split('?')[0] || url,
+              endpoint: url.split('?')[0] || url,
+              status: res.statusCode || 0,
+              ip: clientIp,
+            });
+          });
+        });
+      }
+
       if (
         url.startsWith('/api/')
         && url !== '/api/login'
@@ -732,6 +773,46 @@ export async function startDashboardServer(
           rules: yaml ? `${yaml.split('\n').length} lines` : 'No policy file',
           yaml,
           path: policyPath,
+        });
+        return;
+      }
+
+      if (url === '/api/policy' && method === 'PUT') {
+        setCors();
+        const body = (await readBody(req)) as { yaml?: string };
+        const yaml = String(body.yaml ?? '').trim();
+        if (!yaml) {
+          writeJson(res, 400, { error: 'yaml required' });
+          return;
+        }
+        let parsed: unknown;
+        try {
+          parsed = load(yaml);
+          parsePolicyConfig(parsed);
+        } catch (err) {
+          writeJson(res, 400, {
+            error: 'Invalid policy YAML',
+            details: err instanceof Error ? err.message : String(err),
+          });
+          return;
+        }
+        const policyPath = defaultPolicyPath();
+        try {
+          mkdirSync(dirname(policyPath), { recursive: true });
+          const tmpPath = `${policyPath}.dashboard-${process.pid}.tmp`;
+          writeFileSync(tmpPath, yaml.endsWith('\n') ? yaml : `${yaml}\n`, 'utf-8');
+          renameSync(tmpPath, policyPath);
+        } catch (err) {
+          writeJson(res, 500, {
+            error: 'Failed to write policy file',
+            details: err instanceof Error ? err.message : String(err),
+          });
+          return;
+        }
+        writeJson(res, 200, {
+          status: 'ok',
+          path: policyPath,
+          message: 'Policy saved; watcher reloads on file change',
         });
         return;
       }
@@ -776,26 +857,45 @@ export async function startDashboardServer(
 
       if (url === '/api/admin/audit-trail' && method === 'GET') {
         setCors();
-        const { readFileSync: rfs, existsSync: ex } = await import('fs');
-        const { resolveTenantPolicyAuditPath } = await import('../tenant/swarm-tenant-paths.js');
-        const tenantAuditPath = resolveTenantPolicyAuditPath(requestTenantId);
-        let entries: unknown[] = [];
-        if (ex(tenantAuditPath)) {
-          try {
-            entries = rfs(tenantAuditPath, 'utf-8')
-              .trim()
-              .split('\n')
-              .filter(Boolean)
-              .map((l) => JSON.parse(l));
-          } catch {
-            entries = [];
-          }
-        } else {
-          const { getPolicyAuditor } = await import('./enterprise-bootstrap.js');
-          const auditor = getPolicyAuditor();
-          entries = auditor?.readAuditTrail() || [];
-        }
+        const { readTenantAuditJsonl } = await import('../audit/dashboard-access-log.js');
+        const entries = readTenantAuditJsonl(requestTenantId, 'policy-audit.jsonl', { limit: 500 });
         writeJson(res, 200, { entries, tenantId: requestTenantId });
+        return;
+      }
+
+      if (url === '/api/admin/access-log' && method === 'GET') {
+        setCors();
+        const { readDashboardAccessLog } = await import('../audit/dashboard-access-log.js');
+        writeJson(res, 200, {
+          entries: readDashboardAccessLog(requestTenantId, 500),
+          tenantId: requestTenantId,
+        });
+        return;
+      }
+
+      if (url.startsWith('/api/audit') && method === 'GET') {
+        setCors();
+        const u = new URL(req.url || url, 'http://localhost');
+        const startTime = u.searchParams.get('startTime') || undefined;
+        const endTime = u.searchParams.get('endTime') || undefined;
+        const limit = parseInt(u.searchParams.get('limit') || '200', 10);
+        const kind = u.searchParams.get('kind') || 'policy';
+        const { readTenantAuditJsonl } = await import('../audit/dashboard-access-log.js');
+        const fileName =
+          kind === 'access'
+            ? 'dashboard-access.jsonl'
+            : kind === 'session'
+              ? 'session-audit.jsonl'
+              : 'policy-audit.jsonl';
+        writeJson(res, 200, {
+          tenantId: requestTenantId,
+          kind,
+          entries: readTenantAuditJsonl(requestTenantId, fileName, {
+            startTime,
+            endTime,
+            limit: Number.isFinite(limit) ? limit : 200,
+          }),
+        });
         return;
       }
 
@@ -1193,6 +1293,53 @@ export async function startDashboardServer(
           }));
         } catch {
           writeJson(res, 200, unavailable({ serverReports: [], totalCost: null, projectedMonthly: null }, 'Failed to read cost data'));
+        }
+        return;
+      }
+
+      if (url === '/api/cost/breakdown' && method === 'GET') {
+        setCors();
+        try {
+          const db = runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ tools: [], windowDays: 7 }, 'No history database'));
+            return;
+          }
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = Math.min(90, Math.max(1, parseInt(u.searchParams.get('window') || '7', 10)));
+          const cacheKey = dashboardQueryCacheKey({
+            route: 'cost-breakdown',
+            tenant: requestTenantId,
+            window: windowDays,
+          });
+          const payload = await cachedDashboardQuery(cacheKey, async () => {
+            const cutoff = Date.now() - windowDays * 86400000;
+            const srvs = await getAllActiveServerNames(db, requestTenantId);
+            const byTool = new Map<string, { calls: number; costUsd: number }>();
+            for (const srv of srvs) {
+              const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
+              for (const r of recs) {
+                const ts = Date.parse(String(r.timestamp || ''));
+                if (!Number.isFinite(ts) || ts < cutoff) continue;
+                const key = `${srv}:${r.toolName || 'unknown'}`;
+                const cur = byTool.get(key) || { calls: 0, costUsd: 0 };
+                cur.calls++;
+                cur.costUsd += Number(r.costUsd) || 0;
+                byTool.set(key, cur);
+              }
+            }
+            const tools = [...byTool.entries()]
+              .map(([key, v]) => {
+                const [server, tool] = key.split(':');
+                return { server, tool, calls: v.calls, costUsd: v.costUsd };
+              })
+              .sort((a, b) => b.costUsd - a.costUsd)
+              .slice(0, 50);
+            return available({ tenantId: requestTenantId, windowDays, tools });
+          });
+          writeJson(res, 200, payload);
+        } catch {
+          writeJson(res, 200, unavailable({ tools: [] }, 'Failed cost breakdown'));
         }
         return;
       }

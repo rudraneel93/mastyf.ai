@@ -59,9 +59,31 @@ a:hover {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 2rem;
-  max-width: 420px;
-  margin: 2rem auto;
   text-align: center;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  max-width: 880px;
+  margin: 2rem auto;
+}
+
+.price-card-pro {
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+.pro-features {
+  text-align: left;
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pro-features li {
+  margin-bottom: 0.35rem;
 }
 
 .price-card .amount {

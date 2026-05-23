@@ -27,6 +27,7 @@ import { AiLearningPanel } from './AiLearningPanel';
 import { PolicyPanel } from './PolicyPanel';
 import { AdminPanel } from './AdminPanel';
 import { TenantContextBar } from './TenantContextBar';
+import { ProUpgradeBanner } from './ProUpgradeBanner';
 import { hasPermission } from '@/lib/dashboard-roles';
 import type { AuthStatus } from '@/lib/guardian-api';
 
@@ -227,6 +228,7 @@ export function DashboardClient() {
         </p>
         <p className="subtitle">Data-authentic agentic SOC — metrics from real proxy call_records</p>
         <TenantContextBar authStatus={authStatus} />
+        <ProUpgradeBanner authStatus={authStatus} />
       </header>
 
       {apiUnreachable && <MotionlessBanner />}

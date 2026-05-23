@@ -150,6 +150,8 @@ Per-tenant spend caps:
 
 ```bash
 export GUARDIAN_TENANT_DAILY_BUDGET_JSON='{"acme-corp":100,"beta":25}'
+
+Per-tenant caps are enforced on the **proxy hot path** before async semantic LLM work (in-memory daily spend tracker + `call_records` cost attribution). Exceeded tenants fall back to local heuristics or skip LLM audit with metric `semantic_audit_skipped_total{reason="tenant_budget"}`.
 export GUARDIAN_TENANT_SEMANTIC_JSON='{"acme-corp":{"syncResponse":true,"asyncAudit":true},"beta":{"strict":true}}'
 ```
 

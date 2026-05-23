@@ -1,6 +1,12 @@
 import type { Issue, ToolDefinition } from "./types.js";
 import { getLlmConfig } from "./config/llm-config.js";
 import { getLlmCache } from "./ai/llm-cache.js";
+import {
+  isCoreSemanticCircuitOpen,
+  recordCoreSemanticFailure,
+  recordCoreSemanticSuccess,
+} from "./semantic-circuit-breaker.js";
+import { isCoreLocalSemanticEnabled, runLocalSemanticFallback } from "./local-semantic-fallback.js";
 
 export interface SemanticScanOptions {
   apiKey?: string;               // Falls back to ANTHROPIC_API_KEY env var
@@ -86,31 +92,54 @@ function parseVerdictFromText(rawText: string): SemanticVerdict {
   return JSON.parse(cleanJson) as SemanticVerdict;
 }
 
+async function runSemanticViaOllama(
+  userPrompt: string,
+  model: string,
+  timeoutMs: number,
+  temperature: number,
+): Promise<string> {
+  const llmConfig = getLlmConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${llmConfig.ollamaBaseUrl}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        prompt: `${SYSTEM_PROMPT}\n\n${userPrompt}\n\nRespond with JSON only.`,
+        stream: false,
+        options: { temperature },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Ollama ${res.status}`);
+    const data = (await res.json()) as { response?: string };
+    return data.response || "";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function runSemanticScan(
   tool: ToolDefinition,
   priorIssues: Issue[],
   options: SemanticScanOptions = {}
 ): Promise<Issue[]> {
   const llmConfig = getLlmConfig();
-  const apiKey = options.apiKey ?? llmConfig.anthropicApiKey;
-  if (!apiKey) {
-    return [{
-      id: "MCPG-META-001",
-      layer: "semantic",
-      severity: "info",
-      category: "configuration",
-      message: "Semantic scan skipped: ANTHROPIC_API_KEY not set",
-      evidence: "",
-      confidence: 1.0,
-    }];
-  }
-
   const model = options.model ?? llmConfig.model;
   const timeoutMs = options.timeoutMs ?? llmConfig.timeoutMs;
   const temperature = options.temperature ?? llmConfig.temperature;
   const userPrompt = buildUserPrompt(tool, priorIssues);
   const cache = getLlmCache();
-  const cacheKey = { model, prompt: userPrompt, system: SYSTEM_PROMPT, temperature };
+  const policyMode = process.env.GUARDIAN_POLICY_MODE || "block";
+  const cacheKey = {
+    model,
+    prompt: userPrompt,
+    system: SYSTEM_PROMPT,
+    temperature,
+    policyMode,
+  };
 
   const cachedResponse = await cache.get(cacheKey);
   if (cachedResponse) {
@@ -121,11 +150,51 @@ export async function runSemanticScan(
     }
   }
 
+  const apiKey = options.apiKey ?? llmConfig.anthropicApiKey;
+  const ollamaExplicit =
+    process.env.GUARDIAN_LLM_PROVIDER === "ollama"
+    || process.env.OLLAMA_ENABLED === "true";
+  const useOllama = ollamaExplicit && llmConfig.provider === "ollama";
+
+  if (!apiKey && !useOllama) {
+    if (isCoreLocalSemanticEnabled()) {
+      const localHits = runLocalSemanticFallback(tool);
+      if (localHits.length) return localHits;
+    }
+    return [{
+      id: "MCPG-META-001",
+      layer: "semantic",
+      severity: "info",
+      category: "configuration",
+      message: "Semantic scan skipped: no LLM API key and Ollama disabled",
+      evidence: "",
+      confidence: 1.0,
+    }];
+  }
+
+  if (isCoreSemanticCircuitOpen()) {
+    if (isCoreLocalSemanticEnabled()) {
+      const localHits = runLocalSemanticFallback(tool);
+      if (localHits.length) return localHits;
+    }
+    return [{
+      id: "MCPG-META-004",
+      layer: "semantic",
+      severity: "info",
+      category: "configuration",
+      message: "Semantic scan skipped: circuit breaker open",
+      evidence: "",
+      confidence: 1.0,
+    }];
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    let rawText = "";
+    if (apiKey && llmConfig.provider !== "ollama") {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -144,26 +213,48 @@ export async function runSemanticScan(
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Anthropic API error ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json() as {
+        content: Array<{ type: string; text?: string }>;
+      };
+
+      rawText = data.content
+        .filter(b => b.type === "text")
+        .map(b => b.text ?? "")
+        .join("");
+    } else {
+      rawText = await runSemanticViaOllama(userPrompt, model, timeoutMs, temperature);
     }
-
-    const data = await response.json() as {
-      content: Array<{ type: string; text?: string }>;
-    };
-
-    const rawText = data.content
-      .filter(b => b.type === "text")
-      .map(b => b.text ?? "")
-      .join("");
 
     await cache.set(cacheKey, rawText);
 
     const verdict = parseVerdictFromText(rawText);
+    recordCoreSemanticSuccess();
     return verdictToIssues(verdict);
 
   } catch (err) {
+    recordCoreSemanticFailure(err);
+    if (useOllama) {
+      try {
+        const rawText = await runSemanticViaOllama(userPrompt, model, timeoutMs, temperature);
+        await cache.set(cacheKey, rawText);
+        return verdictToIssues(parseVerdictFromText(rawText));
+      } catch (ollamaErr) {
+        return [{
+          id: "MCPG-META-003",
+          layer: "semantic",
+          severity: "info",
+          category: "error",
+          message: `Semantic scan failed (Ollama fallback): ${(ollamaErr as Error).message}`,
+          evidence: "",
+          confidence: 1.0,
+        }];
+      }
+    }
     if ((err as Error).name === "AbortError") {
       return [{
         id: "MCPG-META-002",

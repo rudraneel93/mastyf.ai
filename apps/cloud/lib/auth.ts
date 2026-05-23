@@ -19,5 +19,4 @@ function cloudAdapter() {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   adapter: process.env.DATABASE_URL ? cloudAdapter() : undefined,
-  session: { strategy: process.env.DATABASE_URL ? 'database' : 'jwt' },
 });

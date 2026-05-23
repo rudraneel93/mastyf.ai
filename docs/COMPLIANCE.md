@@ -11,6 +11,10 @@
 | Secrets | `GUARDIAN_SECRET_PROVIDER` (env, Vault, AWS) |
 | Data retention | 30-day TTL auto-purge of `call_records` (`history-db.ts` `purge()`) |
 | GDPR erasure | `HistoryDatabase.eraseAllAuditData()` + operator SIEM purge |
+| HIPAA PHI patterns (template) | `policy-templates/hipaa-compliance.yaml` — merge with base policy |
+| PCI cardholder masking (template) | `policy-templates/pci-dss-masking.yaml` |
+| Per-tenant audit isolation | `~/.mcp-guardian/tenants/{tenantId}/policy-audit.jsonl`; optional Postgres RLS (`006-tenant-rls.sql`) |
+| Dashboard access trail | `GET /api/admin/access-log` (admin / tenant-admin) |
 
 ## Data retention (default)
 

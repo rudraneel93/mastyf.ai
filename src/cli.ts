@@ -81,6 +81,7 @@ interface ProxyOptions {
   policy?: string;
   blockingMode?: string;
   dryRun?: boolean;
+  gateway?: boolean;
   authIssuer?: string;
   authAudience?: string;
   authRequired?: boolean;
@@ -510,6 +511,7 @@ program
   .option('--auth-audience <aud>', 'Expected audience claim in JWT')
   .option('--auth-required', 'Require authentication for all tool calls (fail-closed)', false)
   .option('--dry-run', 'Simulate policy against historical call_records without activating the proxy')
+  .option('--gateway', 'Shared ingress: SSE/WebSocket only (requires GUARDIAN_MULTI_TENANT_ENABLED)', false)
   .action(async (opts: ProxyOptions) => {
     const paths = opts.config ? [opts.config] : ConfigParser.findConfigPaths();
     if (paths.length === 0) { console.error(chalk.red('No MCP config files found. Use --config to specify a path.')); process.exit(1); }
@@ -517,8 +519,12 @@ program
     const servers = ConfigParser.parse(paths[0]);
     if (servers.length === 0) { console.error(chalk.yellow('No servers found in config.')); process.exit(0); }
 
+    if (opts.gateway) {
+      process.env['GUARDIAN_GATEWAY_MODE'] = 'true';
+    }
+
     const stdioServerCount = servers.filter((s) => s.command).length;
-    if (stdioServerCount > 1) {
+    if (!opts.gateway && stdioServerCount > 1) {
       console.error(chalk.red(
         'Multiple stdio MCP servers in one proxy process are not supported.\n' +
         `  Found ${stdioServerCount} servers with "command" in ${paths[0]}.\n` +

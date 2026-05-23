@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-05-22T12:53:59.125Z",
+  "timestamp": "2026-05-23T06:39:10.158Z",
   "windowDays": 7,
   "storage": "jsonl",
   "llmConfigured": true,
   "totals": {
-    "records": 13,
-    "flagged": 11,
-    "labeled": 11,
-    "truePositive": 10,
-    "falsePositive": 0
+    "records": 30,
+    "flagged": 28,
+    "labeled": 29,
+    "truePositive": 28,
+    "falsePositive": 1
   },
   "metrics": {
-    "avgFlagConfidence": 0.88,
-    "labeledFpRate": 0
+    "avgFlagConfidence": 0.801,
+    "labeledFpRate": 0.034
   },
   "thresholds": {
     "current": {
@@ -28,45 +28,45 @@
   "profile": "hybrid",
   "sampleFlagged": [
     {
-      "id": "1779451234100-co80wqq",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779464970927-lk1f1tp",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-llmvj3v",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779471654111-svti3de",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-jwnblso",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779471837833-enoh9zb",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-eviooji",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779476222455-ep018ey",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-lkhvxb5",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779515057712-6jtud3f",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
@@ -75,45 +75,45 @@
   ],
   "sampleLabeled": [
     {
-      "id": "1779451234100-co80wqq",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779464970927-lk1f1tp",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-llmvj3v",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779471654111-svti3de",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-jwnblso",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779471837833-enoh9zb",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-eviooji",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779476222455-ep018ey",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"
       ]
     },
     {
-      "id": "1779451234100-lkhvxb5",
-      "toolName": "read_text_file",
-      "confidence": 0.88,
+      "id": "1779515057712-6jtud3f",
+      "toolName": "run",
+      "confidence": 0.75,
       "label": "true_positive",
       "categories": [
         "prompt-injection"

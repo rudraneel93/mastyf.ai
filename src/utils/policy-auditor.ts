@@ -7,6 +7,7 @@
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { Logger } from './logger.js';
 import { appendChainedJsonlLine, isAuditHashChainEnabled } from './audit-hash-chain.js';
+import { resolveTenantPolicyAuditJsonl } from '../audit/tenant-audit-paths.js';
 
 export interface PolicyChangeRecord {
   timestamp: string;
@@ -22,9 +23,14 @@ export class PolicyAuditor {
   private enabled: boolean;
   private lastHash: string | null = null;
 
-  constructor(auditPath?: string) {
+  constructor(auditPath?: string, tenantId?: string) {
     this.enabled = process.env['POLICY_AUDIT_ENABLED'] === 'true';
-    this.auditPath = auditPath || process.env['POLICY_AUDIT_LOG'] || './policy-audit.jsonl';
+    this.auditPath =
+      auditPath
+      || process.env['POLICY_AUDIT_LOG']
+      || (process.env['GUARDIAN_TENANT_AUDIT_PATHS'] !== 'false'
+        ? resolveTenantPolicyAuditJsonl(tenantId)
+        : './policy-audit.jsonl');
   }
 
   record(change: PolicyChangeRecord): void {

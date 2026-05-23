@@ -2,7 +2,19 @@
 
 import { useState } from 'react';
 
+function isValidGuardianUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === 'null') return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function LaunchDashboard() {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [guardianUrl, setGuardianUrl] = useState(
     typeof window !== 'undefined'
       ? localStorage.getItem('mcp-guardian-url') ?? 'http://localhost:4000'
@@ -12,20 +24,26 @@ export function LaunchDashboard() {
   const [error, setError] = useState('');
 
   const onLaunch = async () => {
-    setLoading(true);
     setError('');
+    if (!isValidGuardianUrl(guardianUrl)) {
+      setError('Enter a valid http:// or https:// Guardian URL.');
+      return;
+    }
+    setLoading(true);
     try {
-      localStorage.setItem('mcp-guardian-url', guardianUrl);
+      const normalized = guardianUrl.trim();
+      localStorage.setItem('mcp-guardian-url', normalized);
       const res = await fetch('/api/dashboard/launch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guardianUrl }),
+        body: JSON.stringify({ guardianUrl: normalized }),
       });
       const data = (await res.json()) as { redirectUrl?: string; error?: string };
-      if (!res.ok || !data.redirectUrl) {
+      const redirectUrl = data.redirectUrl?.trim();
+      if (!res.ok || !redirectUrl || !isValidGuardianUrl(redirectUrl)) {
         throw new Error(data.error ?? 'Launch failed');
       }
-      window.location.href = data.redirectUrl;
+      window.location.href = redirectUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Launch failed');
       setLoading(false);
@@ -34,41 +52,58 @@ export function LaunchDashboard() {
 
   return (
     <div className="card">
-      <h2>Open live dashboard</h2>
-      <p className="muted">
-        Launch your self-hosted Guardian WebSocket ops dashboard with a one-time SSO token. Set{' '}
-        <code>GUARDIAN_CONTROL_PLANE_URL</code> and <code>DASHBOARD_JWT_SECRET</code> on your
-        Guardian host (see connect instructions above).
-      </p>
-      <label style={{ display: 'block', marginTop: '1rem' }}>
-        Guardian base URL
-        <input
-          type="url"
-          value={guardianUrl}
-          onChange={(e) => setGuardianUrl(e.target.value)}
-          placeholder="http://localhost:4000"
-          style={{
-            display: 'block',
-            width: '100%',
-            marginTop: '0.35rem',
-            padding: '0.5rem',
-            borderRadius: '6px',
-            border: '1px solid var(--border)',
-            background: '#0a0e13',
-            color: 'var(--text)',
-          }}
-        />
-      </label>
       <button
         type="button"
-        className="btn btn-primary"
-        style={{ marginTop: '1rem' }}
-        onClick={() => void onLaunch()}
-        disabled={loading}
+        className="btn"
+        style={{ marginBottom: advancedOpen ? '1rem' : 0 }}
+        onClick={() => setAdvancedOpen((open) => !open)}
+        aria-expanded={advancedOpen}
       >
-        {loading ? 'Redirecting…' : 'Open live dashboard'}
+        {advancedOpen ? 'Hide' : 'Show'} advanced: SSO into self-hosted dashboard
       </button>
-      {error && <p className="alert alert-warn" style={{ marginTop: '1rem' }}>{error}</p>}
+      {advancedOpen && (
+        <>
+          <p className="muted">
+            Launch your self-hosted Guardian ops dashboard with a one-time SSO token. Your Guardian
+            host must have <code>GUARDIAN_CONTROL_PLANE_URL</code>, <code>GUARDIAN_TENANT_ID</code>,
+            and <code>GUARDIAN_CLOUD_JWT_SECRET</code> (same as cloud <code>AUTH_SECRET</code>) — see
+            the env block above. Restart Guardian after changing env.
+          </p>
+          <label style={{ display: 'block', marginTop: '1rem' }}>
+            Guardian base URL
+            <input
+              type="url"
+              value={guardianUrl}
+              onChange={(e) => setGuardianUrl(e.target.value)}
+              placeholder="http://localhost:4000"
+              style={{
+                display: 'block',
+                width: '100%',
+                marginTop: '0.35rem',
+                padding: '0.5rem',
+                borderRadius: '6px',
+                border: '1px solid var(--border)',
+                background: '#0a0e13',
+                color: 'var(--text)',
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className="btn"
+            style={{ marginTop: '1rem' }}
+            onClick={() => void onLaunch()}
+            disabled={loading}
+          >
+            {loading ? 'Redirecting…' : 'Open live dashboard (SSO)'}
+          </button>
+          {error && (
+            <p className="alert alert-warn" style={{ marginTop: '1rem' }}>
+              {error}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }

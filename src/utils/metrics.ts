@@ -33,6 +33,59 @@ export const blockedRequestsTotal = new Counter({
   registers: [registry],
 });
 
+export const attacksBlockedTotal = new Counter({
+  name: 'mcp_guardian_attacks_blocked_total',
+  help: 'Policy blocks by attack category and rule',
+  labelNames: ['category', 'rule', 'tenant_id'],
+  registers: [registry],
+});
+
+export const costSpentUsdTotal = new Counter({
+  name: 'mcp_guardian_cost_spent_usd',
+  help: 'Cumulative estimated USD spend from proxied calls',
+  labelNames: ['tenant_id'],
+  registers: [registry],
+});
+
+/** Record attack block with category label for enterprise dashboards. */
+export function recordAttackBlocked(
+  rule: string,
+  tenantId?: string,
+  category = 'policy',
+): void {
+  attacksBlockedTotal.inc(
+    withTenantMetricLabels({ category, rule: rule || 'unknown' }, tenantId),
+  );
+}
+
+/** Increment blocked request counter and attack-by-category metric together. */
+export function recordProxyBlock(
+  labels: {
+    server_name: string;
+    block_reason: string;
+    rule: string;
+    tenant_id?: string;
+  },
+  category = 'policy',
+): void {
+  blockedRequestsTotal.inc(
+    withTenantMetricLabels(
+      {
+        server_name: labels.server_name,
+        block_reason: labels.block_reason,
+        rule: labels.rule,
+      },
+      labels.tenant_id,
+    ),
+  );
+  recordAttackBlocked(labels.rule, labels.tenant_id, category);
+}
+
+export function recordCostSpendUsd(amount: number, tenantId?: string): void {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  costSpentUsdTotal.inc(withTenantMetricLabels({}, tenantId), amount);
+}
+
 export const injectionDetectedTotal = new Counter({
   name: 'mcp_guardian_injection_detected_total',
   help: 'Total number of prompt injection attempts detected',

@@ -5,22 +5,24 @@ export const McpServerConfigSchema = z.object({
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
   url: z.string().url().optional(),
-  transport: z.enum(['stdio', 'sse']).optional(),
+  transport: z.enum(['stdio', 'sse', 'websocket']).optional(),
 }).refine(
   (config) => {
     const hasCommand = !!config.command;
     const hasUrl = !!config.url;
     return hasCommand !== hasUrl;
   },
-  { message: "Must specify either 'command' (for stdio) or 'url' (for sse), but not both" }
+  { message: "Must specify either 'command' (for stdio) or 'url' (for sse/websocket), but not both" }
 ).refine(
   (config) => {
     if (!config.transport) return true;
     if (config.transport === 'stdio') return !!config.command && !config.url;
-    if (config.transport === 'sse') return !!config.url && !config.command;
+    if (config.transport === 'sse' || config.transport === 'websocket') {
+      return !!config.url && !config.command;
+    }
     return true;
   },
-  { message: "Transport type must match connection method (stdio requires command, sse requires url)" }
+  { message: "Transport must match connection (stdio=command, sse/websocket=url)" }
 );
 
 export const PolicyRuleSchema = z.object({

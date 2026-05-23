@@ -101,6 +101,16 @@ export const policies = pgTable('policies', {
   updatedAt: timestamp('updated_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
 });
 
+export const proLicenseKeys = pgTable('pro_license_keys', {
+  id: text('id').primaryKey(),
+  keyHash: text('key_hash').notNull().unique(),
+  source: text('source').notNull().default('lemonsqueezy'),
+  purchaserEmail: text('purchaser_email'),
+  lsLicenseKeyId: text('ls_license_key_id').unique(),
+  lsOrderId: text('ls_order_id'),
+  createdAt: timestamp('created_at', { mode: 'date', withTimezone: true }).notNull().defaultNow(),
+});
+
 export const licenseExchangeTokens = pgTable('license_exchange_tokens', {
   id: text('id').primaryKey(),
   orgId: text('org_id')

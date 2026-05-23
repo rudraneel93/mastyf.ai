@@ -73,7 +73,13 @@ export class ConfigParser {
         args: Array.isArray(cfg.args) ? cfg.args as string[] : undefined,
         env: cfg.env && typeof cfg.env === 'object' ? cfg.env as Record<string, string> : undefined,
         url: typeof cfg.url === 'string' ? cfg.url : undefined,
-        transport: (cfg.transport === 'sse' ? 'sse' : 'stdio') as 'stdio' | 'sse',
+        transport: (
+          cfg.transport === 'sse'
+            ? 'sse'
+            : cfg.transport === 'websocket' || cfg.transport === 'ws'
+              ? 'websocket'
+              : 'stdio'
+        ) as 'stdio' | 'sse' | 'websocket',
         packageName: typeof cfg.packageName === 'string' ? cfg.packageName : undefined,
         version: typeof cfg.version === 'string' ? cfg.version : undefined,
       };

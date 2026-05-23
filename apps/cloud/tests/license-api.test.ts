@@ -1,0 +1,30 @@
+import { describe, expect, it, beforeEach } from 'vitest';
+import { hashProLicenseKey } from '../lib/pro-license-keys';
+import { GET } from '../app/api/v1/license/route';
+
+describe('GET /api/v1/license', () => {
+  beforeEach(() => {
+    process.env.AUTH_SECRET = 'test-license-api-secret';
+  });
+
+  it('rejects missing bearer', async () => {
+    const res = await GET(new Request('http://localhost/api/v1/license'));
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects unknown pro license key', async () => {
+    const res = await GET(
+      new Request('http://localhost/api/v1/license', {
+        headers: { Authorization: 'Bearer unknown-ls-key-12345' },
+      }),
+    );
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.licensed).toBe(false);
+  });
+
+  it('hashProLicenseKey is deterministic', () => {
+    expect(hashProLicenseKey('abc')).toBe(hashProLicenseKey('abc'));
+    expect(hashProLicenseKey('abc')).not.toBe(hashProLicenseKey('xyz'));
+  });
+});

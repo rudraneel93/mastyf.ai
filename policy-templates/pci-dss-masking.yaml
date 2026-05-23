@@ -1,0 +1,18 @@
+# PCI-DSS oriented overlay — block cardholder data in tool args; use response DLP redact mode in production.
+policy:
+  mode: block
+  response_dlp_mode: redact
+  rules:
+    - id: PCI-CARD-DATA
+      description: Block primary account numbers in tool calls
+      target: all_tools
+      patterns:
+        - '\\b(?:\\d{4}[- ]?){3}\\d{4}\\b'
+        - '(?i)card(?:holder)?\\s*(?:number|no|#)?\\s*[:=]?\\s*\\d'
+      action: block
+      reason: PCI cardholder data
+    - id: PCI-CVV
+      patterns:
+        - '(?i)cvv|cvc|security\\s*code\\s*[:=]?\\s*\\d{3,4}'
+      action: block
+      reason: PCI sensitive authentication data

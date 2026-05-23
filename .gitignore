@@ -26,3 +26,6 @@ assets/ml/prompt-injection/onnx/*.onnx
 .package.prepack-backup.json
 scripts/.agent-proxy-config.json
 scenarios/real-life/output/
+reports/tenants/
+.vercel
+.env*.local

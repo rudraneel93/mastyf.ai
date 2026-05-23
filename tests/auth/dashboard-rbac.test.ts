@@ -41,6 +41,12 @@ describe('dashboard-rbac', () => {
     expect(canAccessRoute(['viewer'], 'POST', '/api/policy/test').allowed).toBe(false);
   });
 
+  it('operator can save policy; viewer cannot', () => {
+    expect(canAccessRoute(['operator'], 'PUT', '/api/policy').allowed).toBe(true);
+    expect(canAccessRoute(['viewer'], 'PUT', '/api/policy').allowed).toBe(false);
+    expect(canAccessRoute(['admin'], 'PUT', '/api/policy').allowed).toBe(true);
+  });
+
   it('tenant-admin inherits admin capabilities', () => {
     expect(hasAtLeastRole('tenant-admin', 'admin')).toBe(true);
   });

@@ -8,6 +8,7 @@ import { IDatabase } from './database-interface.js';
 import { Logger } from '../utils/logger.js';
 import { loadPg, type PgPoolType } from './pg-loader.js';
 import { runMigrations } from './migration-runner.js';
+import { isPostgresRlsEnabled, withPostgresTenantSession } from './postgres-tenant-session.js';
 
 export class PostgresDatabase implements IDatabase {
   private pool!: PgPoolType;
@@ -16,6 +17,20 @@ export class PostgresDatabase implements IDatabase {
 
   constructor() {
     this.connectionString = process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mcp_guardian';
+  }
+
+  /** Run query under Postgres RLS session when enabled and tenantId is set. */
+  private async tenantQuery(
+    tenantId: string | undefined,
+    sql: string,
+    params: unknown[],
+  ): Promise<{ rows: Record<string, unknown>[] }> {
+    if (isPostgresRlsEnabled() && tenantId) {
+      return withPostgresTenantSession(this.pool, tenantId, (client) =>
+        client.query(sql, params),
+      ) as Promise<{ rows: Record<string, unknown>[] }>;
+    }
+    return this.pool.query(sql, params) as Promise<{ rows: Record<string, unknown>[] }>;
   }
 
   async initialize(): Promise<void> {
@@ -95,7 +110,8 @@ export class PostgresDatabase implements IDatabase {
 
   async getRecentSuccessRate(serverName: string, tenantId?: string): Promise<number | null> {
     const result = tenantId
-      ? await this.pool.query(
+      ? await this.tenantQuery(
+        tenantId,
         `SELECT AVG(success) as avg FROM (
            SELECT success FROM health_checks
            WHERE server_name = $1 AND tenant_id = $2
@@ -126,7 +142,8 @@ export class PostgresDatabase implements IDatabase {
     details: unknown,
     tenantId = 'default',
   ): Promise<void> {
-    await this.pool.query(
+    await this.tenantQuery(
+      tenantId,
       'INSERT INTO security_scans (server_name, score, cve_count, details, tenant_id) VALUES ($1, $2, $3, $4, $5)',
       [serverName, score, cveCount, JSON.stringify(details), tenantId],
     );
@@ -134,7 +151,8 @@ export class PostgresDatabase implements IDatabase {
 
   async getLatestSecurityScan(serverName: string, tenantId?: string): Promise<unknown | null> {
     const result = tenantId
-      ? await this.pool.query(
+      ? await this.tenantQuery(
+        tenantId,
         'SELECT * FROM security_scans WHERE server_name = $1 AND tenant_id = $2 ORDER BY id DESC LIMIT 1',
         [serverName, tenantId],
       )
@@ -147,19 +165,21 @@ export class PostgresDatabase implements IDatabase {
 
   async getDistinctScannedServers(tenantId?: string): Promise<string[]> {
     const result = tenantId
-      ? await this.pool.query(
+      ? await this.tenantQuery(
+        tenantId,
         'SELECT DISTINCT server_name FROM security_scans WHERE tenant_id = $1 ORDER BY server_name',
         [tenantId],
       )
       : await this.pool.query(
         'SELECT DISTINCT server_name FROM security_scans ORDER BY server_name',
       );
-    return result.rows.map((r: { server_name: string }) => r.server_name);
+    return result.rows.map((r) => String((r as { server_name: string }).server_name));
   }
 
   async getDistinctActiveServers(tenantId?: string): Promise<string[]> {
     const result = tenantId
-      ? await this.pool.query(
+      ? await this.tenantQuery(
+        tenantId,
         `SELECT DISTINCT server_name FROM (
            SELECT server_name FROM security_scans WHERE tenant_id = $1
            UNION
@@ -174,7 +194,7 @@ export class PostgresDatabase implements IDatabase {
            SELECT server_name FROM call_records
          ) AS active ORDER BY server_name`,
       );
-    return result.rows.map((r: { server_name: string }) => r.server_name);
+    return result.rows.map((r) => String((r as { server_name: string }).server_name));
   }
 
   async addCostRecord(
@@ -183,7 +203,8 @@ export class PostgresDatabase implements IDatabase {
     cost: number,
     tenantId = 'default',
   ): Promise<void> {
-    await this.pool.query(
+    await this.tenantQuery(
+      tenantId,
       'INSERT INTO cost_records (server_name, tokens_used, cost_usd, tenant_id) VALUES ($1, $2, $3, $4)',
       [serverName, tokens, cost, tenantId],
     );
@@ -196,14 +217,17 @@ export class PostgresDatabase implements IDatabase {
     toolCount: number,
     tenantId = 'default',
   ): Promise<void> {
-    await this.pool.query(
+    await this.tenantQuery(
+      tenantId,
       'INSERT INTO health_checks (server_name, latency_ms, success, tool_count, tenant_id) VALUES ($1, $2, $3, $4, $5)',
       [serverName, latency, success ? 1 : 0, toolCount, tenantId],
     );
   }
 
   async addCallRecord(record: ProxyCallRecord): Promise<void> {
-    await this.pool.query(
+    const tid = record.tenantId ?? 'default';
+    await this.tenantQuery(
+      tid,
       'INSERT INTO call_records (server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
       [
         record.serverName,
@@ -219,7 +243,7 @@ export class PostgresDatabase implements IDatabase {
         record.costUsd ?? null,
         record.pricingSource ?? null,
         record.tokenSource ?? null,
-        record.tenantId ?? 'default',
+        tid,
       ],
     );
   }
@@ -230,7 +254,8 @@ export class PostgresDatabase implements IDatabase {
     tenantId?: string,
   ): Promise<ProxyCallRecord[]> {
     const result = tenantId
-      ? await this.pool.query(
+      ? await this.tenantQuery(
+        tenantId,
         'SELECT server_name, tool_name, request_tokens, response_tokens, total_tokens, duration_ms, timestamp::text, blocked, block_rule, block_reason, model, cost_usd, pricing_source, token_source, tenant_id FROM call_records WHERE server_name = $1 AND tenant_id = $2',
         [serverName, tenantId],
       )

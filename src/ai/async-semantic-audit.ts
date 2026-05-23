@@ -20,8 +20,24 @@ import {
 } from './local-semantic-classifier.js';
 import { isSemanticAsyncEnabledForTenant } from '../tenant/tenant-semantic-config.js';
 import { withSemanticTimeout } from '../utils/semantic-timeout.js';
+import {
+  isSemanticCircuitOpen,
+  recordSemanticLlmFailure,
+  recordSemanticLlmSuccess,
+} from './semantic-circuit-breaker.js';
+import {
+  allowSemanticLlmCall,
+  reportSemanticAuditSkipped,
+} from './semantic-llm-rate-limit.js';
 import { broadcastDashboardEvent, emitFlowStep } from '../utils/dashboard-events.js';
 import type { CallContext, PolicyDecision } from '../policy/policy-types.js';
+import { getLicenseClient } from '../license/license-client.js';
+import { isOpenCoreEnabled } from '../license/feature-tiers.js';
+import {
+  getEstimatedSemanticCostUsd,
+  isTenantDailyBudgetExceeded,
+  recordTenantDailySpend,
+} from '../services/tenant-budget.js';
 
 export interface SemanticAuditJob {
   requestId: string | number;
@@ -154,16 +170,39 @@ function getLlm(): LlmAssistant {
 
 /** Enqueue async semantic audit (debounced batch drain). Never blocks the caller. */
 export function enqueueSemanticAudit(job: SemanticAuditJob): void {
+  if (isOpenCoreEnabled() && !getLicenseClient().hasFeature('semantic_async')) {
+    reportSemanticAuditSkipped('license', job.tenantId);
+    return;
+  }
   if (!isSemanticAsyncEnabled(job.tenantId)) return;
+
+  const budget = isTenantDailyBudgetExceeded(job.tenantId, getEstimatedSemanticCostUsd());
+  if (budget.exceeded) {
+    reportSemanticAuditSkipped('tenant_budget', job.tenantId);
+    if (isLocalSemanticEnabled(job.tenantId)) {
+      void runLocalSemanticAudit(job);
+    }
+    return;
+  }
+
   if (!getLlm().isAvailable() || !isSemanticLlmConfigured()) {
     if (isLocalSemanticEnabled(job.tenantId)) {
       void runLocalSemanticAudit(job);
       return;
     }
+    reportSemanticAuditSkipped('no_api_key', job.tenantId);
     reportSemanticDegradation('llm_unavailable', {
       serverName: job.serverName,
       toolName: job.toolName,
     });
+    return;
+  }
+
+  if (isSemanticCircuitOpen()) {
+    reportSemanticAuditSkipped('circuit_open', job.tenantId);
+    if (isLocalSemanticEnabled(job.tenantId)) {
+      void runLocalSemanticAudit(job);
+    }
     return;
   }
 
@@ -269,6 +308,15 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
 }
 
 async function runAudit(job: SemanticAuditJob): Promise<void> {
+  const allowed = await allowSemanticLlmCall(job.tenantId);
+  if (!allowed) {
+    reportSemanticAuditSkipped('rate_limited', job.tenantId);
+    if (isLocalSemanticEnabled(job.tenantId)) {
+      await runLocalSemanticAudit(job);
+    }
+    return;
+  }
+
   const argsPreview = JSON.stringify(job.arguments ?? {}).slice(0, 2000);
   const systemPrompt = `You are an MCP security analyst. Classify whether a tools/call is suspicious AFTER sync policy passed.
 Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":string[],"reasoning":"one sentence"}
@@ -286,6 +334,8 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       toolName: job.toolName,
       arguments: job.arguments,
       temperature: llmCfg.temperature,
+      tenantId: job.tenantId,
+      policyMode: job.syncDecision.action,
     },
     systemPrompt,
     userPrompt,
@@ -300,16 +350,31 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       durationMs: 0,
     };
   } else {
-    response = await withSemanticTimeout(
-      'async_semantic_audit',
-      () => getLlm().generate(systemPrompt, userPrompt),
-      null,
-    );
-    if (response?.text) await cache.set(cacheKey, response.text);
+    try {
+      response = await withSemanticTimeout(
+        'async_semantic_audit',
+        () => getLlm().generate(systemPrompt, userPrompt),
+        null,
+      );
+      if (response?.text) {
+        recordSemanticLlmSuccess();
+        recordTenantDailySpend(job.tenantId, getEstimatedSemanticCostUsd());
+        await cache.set(cacheKey, response.text);
+      } else {
+        recordSemanticLlmFailure();
+      }
+    } catch (err) {
+      recordSemanticLlmFailure(err);
+      response = null;
+    }
   }
   stats.processed++;
   if (!response) {
     semanticAuditProcessed.inc({ ...getGuardianRegionLabels(), outcome: 'no_llm' });
+    reportSemanticAuditSkipped('llm_failed', job.tenantId);
+    if (isLocalSemanticEnabled(job.tenantId)) {
+      await runLocalSemanticAudit(job);
+    }
     return;
   }
 

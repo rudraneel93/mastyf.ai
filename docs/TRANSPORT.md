@@ -30,7 +30,9 @@ For `tools/call` JSON responses: `gateToolResponseText` (DLP / sync semantic / i
 
 ## WebSocket (`WebSocketProxyServer`)
 
-Policy, OAuth/DPoP, circuit breaker, secret scan on args, rug-pull `tools/list` fingerprint, `gateToolResponseText` on tool results, session cache + rotation (`result._meta.sessionToken`), `persistCallRecord`, structured logging. Instantiate explicitly (not started by default `ProxyManager`).
+Policy, OAuth/DPoP, circuit breaker, secret scan on args, rug-pull `tools/list` fingerprint, `gateToolResponseText` on tool results, session cache + rotation (`result._meta.sessionToken`), `persistCallRecord`, structured logging.
+
+**v2.10.0:** Started from `ProxyManager` when `transport: "websocket"` in MCP config, or in **`GUARDIAN_GATEWAY_MODE`** / `mcp-guardian proxy --gateway`. Set `GUARDIAN_WS_PROXY_PORT` per server in `mcp.json` env.
 
 ## Streamable HTTP (`StreamableHttpProxyServer`)
 

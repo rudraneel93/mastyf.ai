@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-05-22T12:53:58.735Z",
+  "timestamp": "2026-05-23T06:39:09.756Z",
   "configsDir": "/Users/rudraneeldas/Desktop/mcp-guardian/guardian-configs",
   "summary": {
     "total": 5,
@@ -54,7 +54,7 @@
         }
       ],
       "error": null,
-      "latencyMs": 1235
+      "latencyMs": 5185
     },
     {
       "serverName": "fixture_echo",
@@ -119,7 +119,7 @@
         }
       ],
       "error": null,
-      "latencyMs": 1627
+      "latencyMs": 3621
     },
     {
       "serverName": "puppeteer",
@@ -144,7 +144,7 @@
         }
       ],
       "error": null,
-      "latencyMs": 1244
+      "latencyMs": 9558
     }
   ]
 }

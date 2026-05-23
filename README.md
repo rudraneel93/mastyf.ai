@@ -10,7 +10,15 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-## Proven under attack (v2.9.2)
+**Current release: [v2.10.0](CHANGELOG.md#2100---2026-05-23)** — enterprise production bundle (gateway, WebSocket, Postgres RLS, semantic rate limits, swarm hardening). Unreleased fixes on `main`: see [CHANGELOG.md#unreleased](CHANGELOG.md#unreleased).
+
+### Security Swarm architecture
+
+![Security Swarm — agentic architecture (CI agents + runtime learning loop)](docs/assets/security-swarm-architecture.png)
+
+*Closed-loop workflow: **CI track** (Scout → Corpus → Evasion → Parity → Proxy → Report) gates policy quality; **runtime track** (BlockGuard → InstantLearner → SemanticAuditor → PatternSynthesizer → Calibrator) runs on every proxied `tools/call`. **Solo analyze** (`pnpm security-swarm:analyze`) adds live MCP probes, personalized traffic from `history.db`, visuals, and plain-English `report.json` for the dashboard. Full agent table, gates, and env: [Security Swarm (CI + runtime learning loop)](#security-swarm-ci--runtime-learning-loop).*
+
+## Proven under attack (v2.10.0)
 
 Evidence is split into four layers — use the right source when quoting numbers:
 
@@ -23,9 +31,11 @@ Evidence is split into four layers — use the right source when quoting numbers
 
 **Enterprise findings (May 2026 sim)** — **17/17** items closed in **2.9.2** ([`reports/enterprise-findings-fixes/summary.md`](reports/enterprise-findings-fixes/summary.md)); original list in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md).
 
+**v2.10.0 (enterprise production bundle)** — **shared MCP gateway** (`GUARDIAN_GATEWAY_MODE`, Helm `gateway.*`, [GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md)); **WebSocket** in ProxyManager; **security swarm hardening** (step timeouts, HMAC evasion manifests); **per-tenant LLM budget** on the hot path; **`@mcp-guardian/core`** Ajv schema validation + offline TR39 confusables / `first…then` chaining; **§6 analysis closure**: semantic rate limit (10/min) + **24h LLM cache**, local semantic on LLM failure, Postgres **RLS** (`GUARDIAN_PG_RLS_ENABLED`), **DPoP lock-free** jti claim, HIPAA/PCI templates, `GET /api/audit`, dashboard SOC2-style access log, policy compile cache, Postgres backup CronJob + DR runbook, Grafana SLO JSON. Gap matrix: [reports/enterprise-mcp-tests-31/gap-matrix.md](reports/enterprise-mcp-tests-31/gap-matrix.md) · readiness: [docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md).
+
 **v2.9.4 (enterprise multi-tenant hardening)** — unified **response security gate** on all transports (stdio / HTTP / SSE / WebSocket / streamable HTTP), **JWT-bound multi-tenant** dashboard + proxy isolation, **OIDC introspection** + Redis **token revocation**, **audit hash chain**, **mTLS hot-reload**, mock-free **MCP echo fixtures** for integration tests, and CI **Enterprise Preflight** job (Redis + Postgres). Deploy: [docs/ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) · pilot: [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md).
 
-**Latest (main, post-2.9.6)** — dashboard serves **live data only** (APIs return `{ available: true/false }` — no fake zeros or committed report fallbacks); **ThreatIntel** polls live feeds into `~/.mcp-guardian/.threat-state.json` (SPA + `GET /api/ai/threats`); security-swarm artifacts are **tenant-scoped** at `reports/tenants/{tenantId}/security-swarm/` (opt-in legacy: `GUARDIAN_SWARM_USE_LEGACY_ARTIFACTS=true`); **`pnpm dashboard:proxy`** auto-picks a single-server config from `guardian-configs/`; **`pnpm real-life:continuous`** runs a long-lived Ollama/hybrid attack stream for block-rate validation; free OSS **cloud control plane** at `apps/cloud` ([docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)).
+**Also on main (2.9.5–2.9.7)** — dashboard **live data only** (no fake zeros); **ThreatIntel** polling; **tenant-scoped** security-swarm at `reports/tenants/{tenantId}/security-swarm/`; **dashboard policy editor** (`PUT /api/policy`); **open-core Pro** licensing; free OSS **cloud control plane** at `apps/cloud` ([docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)); response DLP HTML decode, semantic circuit breaker, enterprise remediation from May 2026 comprehensive analysis.
 
 **M-2 prompt injection** — sync regex path is the default; enable **`GUARDIAN_SEMANTIC_ASYNC`** for tier-2 LLM semantic audit on high-risk deployments ([`docs/AI_LEARNING.md`](docs/AI_LEARNING.md)).
 
@@ -103,7 +113,7 @@ pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts   # parity by f
 
 ### Security assessment (static review + sim)
 
-May 2026 enterprise package: **8.6/10** production readiness score ([`MCP_GUARDIAN_EXECUTIVE_SUMMARY.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md)) — **3 HIGH**, **5 MEDIUM**, **7 LOW** documented in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md). Several items are **addressed in v2.8.4+** (e.g. bounded `GUARDIAN_AUDIT_QUEUE_MAX`, DPoP Redis `SET NX` + lock, PgBouncer fail-fast); treat findings as a remediation checklist, not open CVEs. **No ROI / dollar-value charts** in README — those narratives were removed from primary docs in v2.8.3.
+May 2026 enterprise package: **8.6/10** production readiness score ([`MCP_GUARDIAN_EXECUTIVE_SUMMARY.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md)) — **3 HIGH**, **5 MEDIUM**, **7 LOW** in [`MCP_GUARDIAN_FINDINGS.md`](reports/enterprise-attack-sim/MCP_GUARDIAN_FINDINGS.md). The **comprehensive code analysis** (mcp tests 31) §6–§7 items are tracked in [`gap-matrix.md`](reports/enterprise-mcp-tests-31/gap-matrix.md) — **critical proxy gaps closed in v2.9.7+ / v2.10.0**; formal FIPS/SOC2/FedRAMP certification remains the customer’s compliance program. **No ROI / dollar-value charts** in README.
 
 ### Hero charts (repo eval + synthetic sims)
 
@@ -127,10 +137,10 @@ MCP Guardian sits between AI agents and MCP servers, enforcing **active security
 
 It works as a **transparent stdio proxy** (real-time enforcement for Cline, Cursor, Claude Code), a **standalone CLI**, an **interactive TUI**, an **MCP audit server** (agents can self-scan), and a **pnpm monorepo** — install only what you need.
 
-**Latest main** adds **live-only dashboard data**, **tenant-scoped security-swarm artifacts**, **ThreatIntel polling** in the SPA, a **continuous live attack runner** (`pnpm real-life:continuous`), and the free OSS **cloud control plane** (`apps/cloud`). **2.9.6** fixes publish workflow build order and npm tarball smoke. **2.9.5** adds staging docker-compose, migration script, and pilot JWT helper. **2.9.4** adds **enterprise multi-tenant hardening**: per-tenant JWT binding, response DLP gate on every transport, streamable HTTP upstream relay, session rotation, compliance/evidence scripts, and **54** integration tests with real echo upstreams (no mock MCP servers). **2.9.2** ships the **enterprise test package** (five-scenario attack sim, security assessment reports, adversarial harness), **dashboard RBAC**, **streaming response inspection**, **bounded audit queue**, and **distributed policy eval cache**. **2.8.1** added **per-block instant attack learning** (`GUARDIAN_AI_INSTANT_LEARNING`, `GUARDIAN_AI_ATTACK_MIN_BLOCKS`, `GUARDIAN_AI_INSTANT_WINDOW_MS`; optional `GUARDIAN_AI_INSTANT_LLM`). **2.8.0** is the **production hardening bundle** — all five production blockers in [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are **resolved** (PgBouncer fail-fast, LRU/session memory caps, DPoP `jti` + Redis distributed lock, honest cost audit defaults, npm `@mcp-guardian/plugin-sdk`). **2.7.11** separates **actual** proxy costs from **model-only** audit previews and opt-in **estimated** simulation (`GUARDIAN_COST_ALLOW_ESTIMATES`). **2.7.9** adds heap/RSS **memory monitor** on long-running proxies (`GUARDIAN_MEMORY_MONITOR=false` to disable). **2.7.6** ships enterprise cost governance, mandatory DPoP, Redis HA, Helm mTLS, and non-root Docker. **2.7.5** adds the enterprise corpus (226 fixtures), CI eval, benchmarks, and adversarial E2E. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+**v2.10.0** ships the **enterprise production bundle**: shared **gateway** ingress, **WebSocket** transport parity, swarm hardening, Postgres **RLS** + backup/DR, semantic **10/min** cap with **24h** LLM cache and **local fallback** when the API is exhausted, **DPoP lock-free** jti claims, dashboard **`PUT /api/policy`**, and **`@mcp-guardian/core`** offline confusables. Prior releases: **2.9.7** (live dashboard, policy editor, open-core Pro, cloud control plane), **2.9.4** (multi-tenant JWT + response gate on all transports), **2.9.2** (adversarial harness + enterprise sim), **2.8.0** (production blockers resolved). Full history: [CHANGELOG.md](CHANGELOG.md).
 
 > **Experimental vs shipped (honest)**  
-> **Shipped:** stdio proxy, YAML policy + semantic guards, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC**, **browser SPA** (`deploy/dashboard-spa/`) with **live-only metrics** (no demo/stale fallbacks), **ThreatIntel polling**, **tenant-scoped swarm artifacts**, **streaming response inspection**, **cost auditor** (`costSource`: `actual` | `model-only` | `estimated` | `none`), **enterprise cost template** (`GUARDIAN_DAILY_BUDGET_USD`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA** ([REDIS_HA.md](docs/REDIS_HA.md)), **PgBouncer enforcement** (`GUARDIAN_REQUIRE_PGBOUNCER`, `REPLICA_COUNT`), bounded **session/nonce/LLM LRU caches** + **audit write queue** (`GUARDIAN_AUDIT_QUEUE_MAX`), **memory monitor** on proxy, **DPoP + Redis jti lock** ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)), **Helm mTLS**, **non-root Docker** (uid 1001), **detector Plugin SDK** (`@mcp-guardian/plugin-sdk` on npm), fleet CLI, HTTP tools template, multi-region labeling (active-passive), async semantic audit + **local semantic fallback**, Redis LLM cache + `getLlmConfig()`, secret scanner DLP (150+ patterns), enterprise corpus + `pnpm eval`, pen-test + attack matrix, adversarial proxy E2E + **comprehensive harness**, **instant + batch AI learning** (quorum/drift/rollback), [enterprise attack sim](reports/enterprise-attack-sim/README.md) (synthetic), [production blockers doc](docs/PRODUCTION_BLOCKERS.md), Windows `guardian-proxy.ps1`.  
+> **Shipped:** stdio proxy + **shared gateway** (SSE/WS), YAML policy + semantic guards, **policy compile cache**, OPA block precedence (lazy when off), dashboard auth (fail-closed) + **RBAC** + **access audit JSONL** (`GET /api/audit`), **browser SPA** with **live-only metrics** and **policy editor**, **ThreatIntel polling**, **tenant-scoped swarm** (HMAC evasion manifests), **response DLP** (HTML/URL decode, `X-Guardian-Redaction-Reason`), **streaming response inspection**, **cost auditor** + `GET /api/cost/breakdown`, **per-tenant daily budget** (`GUARDIAN_TENANT_DAILY_BUDGET_JSON`), TUI + **Fleet tab**, **Redis Sentinel/Cluster HA**, **PgBouncer** + Postgres **RLS**, **Helm PDB / resources / NetworkPolicy** (enterprise overlay), **pg_basebackup** CronJob, bounded **session/nonce/LLM caches** (default **24h** TTL), **DPoP** (lock-free or legacy lock), **audit hash chain** ([HIPAA_AUDIT_TRAIL.md](docs/HIPAA_AUDIT_TRAIL.md)), **@mcp-guardian/core** (Ajv + TR39 offline regex), mTLS, non-root Docker, Plugin SDK, async semantic + **local/Ollama fallback**, secret scanner DLP, corpus + harness, instant/batch AI learning, [gap-matrix](reports/enterprise-mcp-tests-31/gap-matrix.md), Windows `guardian-proxy.ps1`.  
 > **Roadmap:** multi-region **active-active** SQLite/Postgres replication, signed plugin marketplace, production MSI code-signing pipeline.
 
 ### Production blockers (v2.8.0 — all resolved)
@@ -139,7 +149,7 @@ It works as a **transparent stdio proxy** (real-time enforcement for Cline, Curs
 |---|---------|--------|
 | 1 | PgBouncer pool exhaustion | **Resolved** — `checkPgBouncerAtStartup`, `GUARDIAN_REQUIRE_PGBOUNCER`, Helm `pgbouncer.requireGuardianEnforcement` |
 | 2 | Memory leak (8h+ IDE sessions) | **Resolved** — LRU `updateAgeOnGet: false`, bounded session cache, `GUARDIAN_MEMORY_MONITOR` |
-| 3 | DPoP multi-replica race | **Resolved** — Redis `SET NX` + distributed lock (`claimDpopJtiOnRedis`) |
+| 3 | DPoP multi-replica race | **Resolved** — Redis `SET NX`; **lock-free** jittered retry (`claimDpopJtiLockFree`, default) or legacy lock (`GUARDIAN_DPOP_LOCK_FREE=legacy`) |
 | 4 | Cost auditor audit mode | **Resolved** — default **model-only**; `actual` from proxy; estimates opt-in |
 | 5 | Plugin SDK npm publish | **Resolved** — `@mcp-guardian/plugin-sdk` with `prepublishOnly` build |
 
@@ -149,7 +159,8 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
 
 ## Table of Contents
 
-- [Proven under attack (v2.9.2)](#proven-under-attack-v290)
+- [Security Swarm architecture](#security-swarm-architecture)
+- [Proven under attack (v2.10.0)](#proven-under-attack-v2100)
   - [Adversarial test harness](#adversarial-test-harness-live-proxy--policy-parity--may-2026)
 - [Production blockers (v2.8.0)](#production-blockers-v280--all-resolved)
 - [Quick Start](#quick-start)
@@ -177,6 +188,7 @@ Details, verification commands, and Helm defaults: **[docs/PRODUCTION_BLOCKERS.m
   - [Performance & benchmarks](#performance--benchmarks)
 - [FAQ](#faq)
 - [Roadmap](#roadmap)
+- [MCP Guardian Pro — pricing & open-core](#mcp-guardian-pro--499-lifetime-open-core)
 - [License](#license)
 
 ---
@@ -327,8 +339,8 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Puppeteer / browser tools** — `puppeteer_navigate` and `puppeteer_screenshot` scan **all string leaves** for URLs, not only allowlisted tool names; blocks localhost/metadata/private targets while allowing benign public URLs (e.g. `https://example.com/`).
 - **Adversarial regression** — 34 tests in [`tests/policy/adversarial-scenarios.test.ts`](tests/policy/adversarial-scenarios.test.ts) exercise the 58-scenario report against `default-policy.yaml` (no mocks); `tests/policy/url-guard.test.ts` covers URL parsing edge cases. **Comprehensive harness** — 228 corpus fixtures + 85 evasion probes + 26 live Node integration tests ([`adversarial-harness/`](adversarial-harness/), [`reports/adversarial-harness/`](reports/adversarial-harness/)); **1** known bypass (**adv-066**, base64 in `search`).
 - **Honest limits (v2.6.8)** — Security depth improved, but orgs that add custom outbound tools (e.g. `http_request`) must add YAML URL/host rules or keep them off the allowlist. Built-in URL guard keys on `url` / `href` / `target` / `webhook` / `callback` plus full puppeteer argument trees — not every possible argument name.
-- **Unicode / TR39** — `unicode_strict: true` loads `assets/confusables.txt` and folds confusables before regex (disable for literal Unicode in i18n teams)
-- **Three-layer detection** — Regex → schema/shell tokenizer → optional async LLM semantic audit (not on the hot path)
+- **Unicode / TR39** — `unicode_strict: true` loads `assets/confusables.txt` and folds confusables before policy regex (disable for literal Unicode in i18n teams). **`@mcp-guardian/core`** offline scans use the same TR39 pass + `before…then` / `first…then` chaining (`MCPG-R-090`–`093`)
+- **Three-layer detection** — Regex → schema (Ajv + recursive depth) → optional async LLM semantic audit (not on the hot path); **local semantic** when LLM is rate-limited or unavailable
 - **YAML policy engine** — Allow/deny lists, regex, rate limits, token budgets, RBAC, argument field patterns
 - **Hot-reload** — File watcher builds pending engine off-thread, atomic swap (no “reload in progress” blocks)
 - **OPA/Rego precedence** — OPA **block** > YAML > `default_action`; OPA unavailable falls through to YAML ([POLICY.md](docs/POLICY.md))
@@ -346,7 +358,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **CSRF** — Double-submit cookie + `X-CSRF-Token` + Origin/Referer on mutating routes (skipped when auth disabled)
 - **Session regeneration** — Successful login issues a fresh session token (`jti`) and revokes the prior cookie (session fixation mitigation)
 - **OAuth 2.1 / OIDC** — JWT validation with algorithm pinning, audience/issuer checks (proxy path)
-- **DPoP (RFC 9449)** — Sender-constrained tokens; **`jti` replay cache** with Redis `SET NX` + short distributed lock for multi-replica HA (`claimDpopJtiOnRedis` in `src/auth/dpop-nonce-store.ts`). Set **`GUARDIAN_REQUIRE_DPOP=true`** + **`REDIS_URL`** (or Sentinel/Cluster) in production. Full setup: **[docs/PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)**; 100-way concurrent claim tests in `tests/auth/dpop-redis-lock.test.ts`.
+- **DPoP (RFC 9449)** — Sender-constrained tokens; **`jti` replay cache** with Redis `SET NX` — **lock-free jittered retry** by default (`claimDpopJtiLockFree`; set `GUARDIAN_DPOP_LOCK_FREE=legacy` for the short distributed-lock path). Set **`GUARDIAN_REQUIRE_DPOP=true`** + **`REDIS_URL`** in production. **[docs/PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)** · tests: `tests/auth/dpop-lock-free.test.ts`, `tests/auth/dpop-redis-lock.test.ts`.
 - **RBAC** — Scope and client-ID rules in policy YAML
 - **mTLS** — Mutual TLS for proxy ↔ upstream via `MCP_TLS_*` env vars; Helm `mtls.enabled` + `mtls.existingSecret` mounts certs at `/etc/mcp-guardian/tls/` ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md), [MTLS.md](docs/MTLS.md))
 
@@ -357,8 +369,9 @@ Verify integration: `./scripts/verify-live-integration.sh`
 - **Rollback** — `mcp-guardian ai rollback` and `POST /api/ai/rollback` restore the last learning snapshot; auto-rollback if precision proxy drops >10%
 - **Human accept → policy** — TUI (`a` accept) or dashboard accept writes suggested rules to policy YAML (auto-apply off unless `GUARDIAN_AI_AUTO_APPLY=true`)
 - **Centralized LLM config** — `getLlmConfig()` / `resolveModelId()` in [`src/config/llm-config.ts`](src/config/llm-config.ts) unify provider, model, token cap, timeout, and temperature for semantic scan, Ollama assistant, proxy cost path, and suggestion engine ([AI_LEARNING.md](docs/AI_LEARNING.md))
-- **LLM response cache** — Deduplicates identical prompts across replicas (semantic scan + Ollama assistant). Enabled when `REDIS_URL` is set or `GUARDIAN_LLM_CACHE=true`; disable with `GUARDIAN_LLM_CACHE=false`. **Redis** backend when `REDIS_URL` is set (region-prefixed keys, configurable TTL); **in-memory LRU** fallback (500 entries) for single-replica or Redis outages. Cache key: SHA-256 of `model`, `system`, `prompt`, and `temperature`. Metrics: `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total` (label `backend`: `redis` | `lru`). Implementation: [`src/ai/llm-cache.ts`](src/ai/llm-cache.ts)
-- **Async semantic audit** — Post-hoc LLM queue when `GUARDIAN_LLM_ENABLED` + `GUARDIAN_SEMANTIC_ASYNC` (default on); sync path stays regex + semantic guards (&lt;50ms target)
+- **LLM response cache** — Deduplicates semantic audit prompts across replicas. Default TTL **24h** (`GUARDIAN_LLM_CACHE_TTL_SEC=86400`). Enabled when `REDIS_URL` or `GUARDIAN_LLM_CACHE=true`. Metrics: `mcp_guardian_llm_cache_hits_total` / `misses_total`. [`src/ai/llm-cache.ts`](src/ai/llm-cache.ts)
+- **Semantic LLM rate limit** — `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN` (default **10**) per tenant; on limit or LLM failure → **local semantic** (not regex-only). Circuit breaker: `src/ai/semantic-circuit-breaker.ts`
+- **Async semantic audit** — Post-hoc LLM queue when `GUARDIAN_SEMANTIC_ASYNC=true` (enterprise Helm default); sync path stays regex + semantic guards
 
 ### Cost governance
 - **Provider-aware token counting** — OpenAI via `tiktoken`; Anthropic via optional `@anthropic-ai/tokenizer` or chars÷3.5; **counts are approximate unless the upstream response includes API `usage`** (`tokenSource: api | estimated`)
@@ -395,7 +408,7 @@ Verify integration: `./scripts/verify-live-integration.sh`
 
 ### Enterprise readiness
 
-See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for an honest production vs pilot scorecard (dashboard RBAC, streaming response scan, local semantic fallback, multi-replica policy cache, integration fixtures).
+See **[docs/ENTERPRISE_READINESS.md](docs/ENTERPRISE_READINESS.md)** for the production vs pilot scorecard. May 2026 **comprehensive analysis** remediation: [gap-matrix.md](reports/enterprise-mcp-tests-31/gap-matrix.md) · [enterprise-analysis-remediation/summary.md](reports/enterprise-analysis-remediation/summary.md).
 
 **Verify before staging / production:**
 
@@ -410,11 +423,19 @@ pnpm enterprise:cutover                # full cutover checklist (build, tests, H
 pnpm enterprise:compliance-report      # auditor evidence JSON
 ```
 
-Helm overlay: [`deploy/helm/mcp-guardian/values-enterprise.yaml`](deploy/helm/mcp-guardian/values-enterprise.yaml). Apply Postgres migrations **004** (tenant scoping) and **005** (tenant cost/security/health) before multi-tenant traffic.
+Helm overlay: [`deploy/helm/mcp-guardian/values-enterprise.yaml`](deploy/helm/mcp-guardian/values-enterprise.yaml) — enables **PDB**, **NetworkPolicy**, **gateway**, `GUARDIAN_PG_RLS_ENABLED`, `GUARDIAN_AUDIT_HASH_CHAIN`, semantic caps, and Postgres backup CronJob. Migrations **004–008** (tenant scoping, indexes, RLS, partitioning index). Ops: [DATABASE_OPERATIONS.md](docs/DATABASE_OPERATIONS.md) · [HIPAA_AUDIT_TRAIL.md](docs/HIPAA_AUDIT_TRAIL.md).
 
 ### Cloud control plane (v3.0 MVP)
 
-Optional **cloud control plane** at **`apps/cloud`** — free, open source; Google/GitHub OAuth, tenant provisioning, policy editor, and API keys for connecting **self-hosted** Guardian. Does not host Guardian proxies.
+Optional **cloud control plane** at **`apps/cloud`** — free, open source; does **not** host Guardian proxies.
+
+**Production:** [mcp-guardian-cloud.vercel.app](https://mcp-guardian-cloud.vercel.app)
+
+| Flow | Destination |
+|------|-------------|
+| **Sign in (free)** (Google/GitHub) | This repo via `/post-login` → [github.com/rudraneel93/mcp-guardian](https://github.com/rudraneel93/mcp-guardian) |
+| **Cloud console** (`/dashboard`) | Policy editor, tenant env snippet, API keys, optional advanced SSO into a **running** self-hosted Guardian |
+| **Buy Pro** | Lemon Squeezy checkout; webhook auto-registers `GUARDIAN_LICENSE_KEY` |
 
 ```bash
 pnpm cloud:dev          # http://localhost:3001
@@ -422,10 +443,22 @@ pnpm cloud:migrate      # requires DATABASE_URL → mcp_guardian_cloud
 pnpm cloud:test
 ```
 
-See **[docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)** · export bundle: `node scripts/export-tenant-bundle.mjs`
+Docs: [SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md) · [OAUTH_CLOUD_SETUP.md](docs/OAUTH_CLOUD_SETUP.md) · [CLOUD_VERCEL_DEPLOY.md](docs/CLOUD_VERCEL_DEPLOY.md) · [MONETIZATION.md](docs/MONETIZATION.md) · export bundle: `node scripts/export-tenant-bundle.mjs`
 
 ### Enterprise (v2.5+)
-- **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview
+
+#### v2.10.0 production bundle
+- **Shared MCP gateway** — `GUARDIAN_GATEWAY_MODE` / `mcp-guardian proxy --gateway`; Helm `gateway.*` ingress; [GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md)
+- **WebSocket transport** — `transport: "websocket"` in MCP config; ProxyManager hot-reload
+- **Security swarm** — per-step timeouts, stderr redaction, HMAC-signed evasion manifests (`GUARDIAN_SWARM_EVASION_SIGNING_KEY`)
+- **Per-tenant LLM budget** — `GUARDIAN_TENANT_DAILY_BUDGET_JSON` enforced before async semantic
+- **`@mcp-guardian/core`** — Ajv `MCPG-S-005`, TR39 offline regex (`MCPG-R-092`/`093`), semantic circuit breaker + local fallback
+- **Postgres enterprise ops** — RLS (`006`/`008`), query indexes (`006-query-indexes`), backup CronJob, PgBouncer transaction mode, DR restore runbook
+- **Compliance templates** — [hipaa-compliance.yaml](policy-templates/hipaa-compliance.yaml), [pci-dss-masking.yaml](policy-templates/pci-dss-masking.yaml); immutable audit via `GUARDIAN_AUDIT_HASH_CHAIN`
+- **Observability** — Grafana SLO JSON (`deploy/grafana/mcp-guardian-slo.json`); business metrics (`attacks_blocked`, `cost_spent`, `semantic_audit_skipped`)
+
+#### Earlier enterprise features
+- **Dashboard SPA (v2.7)** — `deploy/dashboard-spa/` served at `/` when the proxy runs with `DASHBOARD_ENABLED=true`; policy FP reject, AI accept/reject, fleet overview; **v2.9.7+** editable policy (`PUT /api/policy`)
 - **Fleet aggregation (v2.7)** — `mcp-guardian fleet status` over Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS`; TUI **Fleet** tab (key `9`)
 - **Detector Plugin SDK (v2.8)** — [`@mcp-guardian/plugin-sdk`](https://www.npmjs.com/package/@mcp-guardian/plugin-sdk) on npm (`PLUGIN_SDK_VERSION` 3.0.0); `createDetectorPlugin` + lifecycle hooks; monorepo `workspace:*` — [PLUGIN_SDK.md](docs/PLUGIN_SDK.md), [packages/plugin-sdk/](packages/plugin-sdk/)
 - **Tenant isolation** — per-tenant circuit breakers, rate limits, sessions, attack learning, and audit scoping; JWT-authoritative binding when `GUARDIAN_MULTI_TENANT_ENABLED=true`; see [docs/MULTI_TENANCY.md](docs/MULTI_TENANCY.md)
@@ -434,7 +467,7 @@ See **[docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md)** · export bundl
 - **Audit hash chain (v2.9.3)** — tamper-evident policy audit JSONL (`GUARDIAN_AUDIT_HASH_CHAIN`)
 - **Policy audit trail** — `POLICY_AUDIT_ENABLED` JSONL change log
 - **Compliance pack** — [docs/COMPLIANCE.md](docs/COMPLIANCE.md), [docs/PEN_TEST_SCOPE.md](docs/PEN_TEST_SCOPE.md)
-- **Helm chart** — Redis subchart, ServiceMonitor, ExternalSecrets, PDB, backup CronJob
+- **Helm chart** — Redis subchart, ServiceMonitor, ExternalSecrets, **PDB**, **NetworkPolicy** (enterprise), **gateway** service/ingress, Postgres **backup** CronJob, PgBouncer ConfigMap
 - **Docker Compose** — Guardian + Redis reference stack
 - **Supply chain** — `better-sqlite3` **12.10+** (bundled SQLite 3.53.x), `jose` **6.x**, CI `pnpm audit --audit-level=high`, CycloneDX SBOM, cosign on GHCR — [SUPPLY_CHAIN.md](docs/SUPPLY_CHAIN.md)
 - **Non-root Docker** — Production image runs as **`USER 1001`**; [`scripts/verify-docker-prebuilds.sh`](scripts/verify-docker-prebuilds.sh) validates `better-sqlite3` bindings and uid 1001 in docker-publish CI
@@ -854,11 +887,17 @@ Volumes: `guardian-data` → `/data/history.db`. Config: `./mcp.json`, `./defaul
 ## Kubernetes (Helm)
 
 ```bash
+# Developer / single-replica
 helm install guardian ./deploy/helm/mcp-guardian \
   -f deploy/helm/mcp-guardian/examples/developer-cline-values.yaml
+
+# Enterprise production (3+ replicas, gateway, RLS, backups)
+helm upgrade --install mcp-guardian ./deploy/helm/mcp-guardian \
+  -f deploy/helm/mcp-guardian/values.yaml \
+  -f deploy/helm/mcp-guardian/values-enterprise.yaml
 ```
 
-Includes: Redis subchart, ServiceMonitor, ExternalSecrets, PDB, backup CronJob, `fsGroup: 1001`, `/readyz` probes, optional **`mtls.enabled`** + `templates/mtls-secret.yaml`, **`GUARDIAN_REQUIRE_DPOP`** via values, and `templates/redis-sentinel-notes.yaml` for external Sentinel.
+Includes: Redis subchart, ServiceMonitor, ExternalSecrets, **PDB**, **NetworkPolicy** (enterprise), **gateway** ingress/service, Postgres **backup** CronJob, PgBouncer ConfigMap, `fsGroup: 1001`, `/readyz` probes, optional **`mtls.enabled`**, **`GUARDIAN_REQUIRE_DPOP`**, and `templates/redis-sentinel-notes.yaml` for external Sentinel. See [ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md) and [GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md).
 
 ```bash
 # Team example values
@@ -896,9 +935,12 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `GUARDIAN_PLUGIN_PATH` | — | Directory of `*.js` plugins |
 | `GUARDIAN_HTTP_TOOLS_POLICY` | `false` | Merge `policy-templates/http-tools-policy.yaml` |
 | `GUARDIAN_HTTP_TOOLS_POLICY_PATH` | — | Override template path |
-| `GUARDIAN_SEMANTIC_ASYNC` | on w/ LLM | Post-hoc LLM audit (non-blocking) |
+| `GUARDIAN_SEMANTIC_ASYNC` | on w/ LLM | Post-hoc LLM audit (non-blocking); **on** in enterprise Helm |
+| `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN` | `10` | Per-tenant LLM calls/minute (rate limit → local semantic) |
 | `GUARDIAN_SEMANTIC_DEBOUNCE_MS` | `500` | Async semantic queue debounce |
 | `GUARDIAN_SEMANTIC_ASYNC_MAX_QUEUE` | `200` | Max queued async audits |
+| `GUARDIAN_TENANT_DAILY_BUDGET_JSON` | — | Per-tenant USD caps before semantic LLM, e.g. `{"acme":50}` |
+| `GUARDIAN_GATEWAY_MODE` | `false` | Shared SSE/WS gateway (no stdio children) |
 | `GUARDIAN_SEMANTIC_MIN_CONFIDENCE` | `0.6` | Flag threshold for async semantic |
 | `GUARDIAN_SEMANTIC_SYNC_RESPONSE` | `false` | Sync semantic gate on tool **responses** (stdio/SSE/WS) |
 | `GUARDIAN_SEMANTIC_SYNC_RESPONSE_LLM` | `false` | LLM tier for sync response gate (adds latency) |
@@ -927,7 +969,10 @@ Grouped by concern. Full behavior: linked docs and `src/` defaults.
 | `DASHBOARD_ALLOWED_ORIGINS` | localhost | CORS allowlist |
 | `GUARDIAN_TENANT_ID` | `default` | Default tenant when no `X-Guardian-Tenant` / `X-Tenant-Id` header |
 | `GUARDIAN_MULTI_TENANT_ENABLED` | `false` | Shared gateway mode — clients send tenant headers |
-| `GUARDIAN_REQUIRE_DPOP` | `false` | Reject requests without valid DPoP proof (RFC 9449) |
+| `GUARDIAN_REQUIRE_DPOP` | `false` | Reject requests without valid DPoP proof (RFC 9449); **on** in enterprise Helm |
+| `GUARDIAN_DPOP_LOCK_FREE` | on (not `legacy`) | Jittered `SET NX` jti claim; `legacy` = short distributed lock |
+| `GUARDIAN_AUDIT_HASH_CHAIN` | `false` | Tamper-evident SIEM JSONL (`prev_hash` / `record_hash`) |
+| `GUARDIAN_AUDIT_HASH_CHAIN_SIEM` | on w/ chain | Write chained events to SIEM log file |
 | `GUARDIAN_OIDC_INTROSPECTION` | `false` | RFC 7662 token introspection after JWT validation |
 | `GUARDIAN_OIDC_INTROSPECTION_FAIL_OPEN` | `false` | `true` = skip deny when introspection errors |
 | `GUARDIAN_OIDC_CLIENT_ID` | — | OAuth client id for introspection |
@@ -970,7 +1015,8 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 | `GUARDIAN_LLM_TEMPERATURE` | `0.1` | Sampling temperature (included in cache key) |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API base (`OLLAMA_URL` alias) |
 | `GUARDIAN_LLM_CACHE` | on w/ `REDIS_URL` | `true` / `false` to force; otherwise on when `REDIS_URL` set. Redis + in-process LRU (500 entries); metrics `mcp_guardian_llm_cache_hits_total` / `mcp_guardian_llm_cache_misses_total` |
-| `GUARDIAN_LLM_CACHE_TTL_SEC` | `3600` | Redis + LRU entry TTL (seconds) |
+| `GUARDIAN_LLM_CACHE_TTL_SEC` | `86400` | Redis + LRU entry TTL (seconds); **24h** default |
+| `GUARDIAN_LOCAL_SEMANTIC` | on | Heuristic semantic when LLM absent or rate-limited |
 
 ### Cost & observability
 
@@ -996,6 +1042,8 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 | `REPLICA_COUNT` | `1` | Replica count for PgBouncer strict-mode check (`GUARDIAN_STRICT_MODE` + `>50` + direct `:5432` → fail startup) |
 | `GUARDIAN_MEMORY_MONITOR` | on | `false` disables periodic heap/RSS warnings on proxy |
 | `GUARDIAN_PG_POOL_MAX` | `10` | Postgres pool max per replica (Helm sets `4` with PgBouncer) |
+| `GUARDIAN_PG_RLS_ENABLED` | `false` | Row-level security via `app.tenant_id` session var |
+| `GUARDIAN_DASHBOARD_QUERY_CACHE` | on w/ Redis | TTL cache for `GET /api/cost/breakdown` |
 | `REDIS_URL` | — | Single Redis instance (multi-replica rate limits, DPoP jti, LLM cache) |
 | `REDIS_SENTINELS` | — | Comma-separated `host:port` Sentinel endpoints |
 | `REDIS_SENTINEL_MASTER_NAME` | `mymaster` | Sentinel master name |
@@ -1027,7 +1075,7 @@ Full LLM cache and config reference: [AI_LEARNING.md](docs/AI_LEARNING.md) · im
 
 **Ops:** [Disaster recovery runbook](docs/DISASTER_RECOVERY.md) · [Encryption at rest](docs/ENCRYPTION_AT_REST.md) · [Redis HA](docs/REDIS_HA.md)
 
-Short list before `default-policy.yaml` + block mode in production. All five blockers from [docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md) are resolved in **v2.8.0** — use this checklist to configure them:
+Short list before `default-policy.yaml` + block mode in production. Production blockers are resolved in **v2.8.0+** ([docs/PRODUCTION_BLOCKERS.md](docs/PRODUCTION_BLOCKERS.md)). Enterprise overlay: [values-enterprise.yaml](deploy/helm/mcp-guardian/values-enterprise.yaml) · [ENTERPRISE_DEPLOY.md](docs/ENTERPRISE_DEPLOY.md).
 
 1. **Policy** — Roll out `policy-audit.yaml` → `policy-warn.yaml` → `default-policy.yaml`; run `mcp-guardian policy test` on risky tools; set `GUARDIAN_WORKSPACE` or path prefixes ([POLICY.md](docs/POLICY.md)).
 2. **SSRF / browser tools** — Default policy blocks metadata IPs, dangerous schemes, and private/localhost URLs in `url`/`href`/`webhook`/`callback`; puppeteer tools get full-argument URL scan. If you add `http_request` or similar, add explicit YAML host/URL rules — allowlist alone is not enough.
@@ -1039,13 +1087,16 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 8. **Cost** — Merge `policy-templates/enterprise-cost-governance.yaml`; set `GUARDIAN_DAILY_BUDGET_USD`; do **not** set `GUARDIAN_COST_ALLOW_ESTIMATES` unless you need legacy simulation — default audit is **model-only** ($0 measured without proxy traffic).
 9. **CVE** — Decide explicitly: `GUARDIAN_BLOCK_ON_CVE=true` or leave off (default).
 10. **AI** — Keep `GUARDIAN_AI_AUTO_APPLY=false`; configure quorum env vars if multiple operators label suggestions.
-11. **Verify** — `pnpm test` (**1005** tests); `pnpm eval` before deploy; `./adversarial-harness/run-all.sh` for full adversarial harness; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`; adversarial scenarios after policy changes.
-12. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only).
-13. **Plugins** — Use published `@mcp-guardian/plugin-sdk`; audit `GUARDIAN_PLUGIN_PATH`; `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
-14. **HTTP tools** — `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools.
-15. **Dashboard SPA** — `DASHBOARD_ENABLED=true` with auth credentials.
-16. **mTLS** — `MCP_TLS_*` + Helm `mtls.enabled` ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)).
-17. **Docker** — GHCR image with **`USER 1001`**; `scripts/verify-docker-prebuilds.sh` in CI.
+11. **Verify** — `pnpm build && pnpm test`; `pnpm enterprise:preflight` (Redis + Postgres in staging); `pnpm eval`; `./adversarial-harness/run-all.sh`; `mcp-guardian doctor`, `mcp-guardian proxy --dry-run`.
+12. **Enterprise DB** — Postgres migrations **004–008**; `GUARDIAN_PG_RLS_ENABLED=true` for tenant isolation; [DATABASE_OPERATIONS.md](docs/DATABASE_OPERATIONS.md) for backups/restore.
+13. **Semantic** — `GUARDIAN_SEMANTIC_ASYNC=true` + `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN=10` + `GUARDIAN_LOCAL_SEMANTIC=true`; `GUARDIAN_LLM_CACHE_TTL_SEC=86400` when using Redis.
+14. **Fleet** — Postgres `guardian_instances` or `GUARDIAN_FLEET_DB_PATHS` for `mcp-guardian fleet status` / TUI Fleet tab (aggregate only).
+15. **Plugins** — Use published `@mcp-guardian/plugin-sdk`; audit `GUARDIAN_PLUGIN_PATH`; `GUARDIAN_PLUGINS_ENABLED=false` on hosts that must not load third-party detectors.
+16. **HTTP tools** — `GUARDIAN_HTTP_TOOLS_POLICY=true` when MCP servers expose outbound HTTP tools.
+17. **Dashboard SPA** — `DASHBOARD_ENABLED=true` with auth credentials; `GUARDIAN_AUDIT_HASH_CHAIN=true` for SOC2-style access logs.
+18. **mTLS** — `MCP_TLS_*` + Helm `mtls.enabled` ([PRODUCTION_AUTH.md](docs/PRODUCTION_AUTH.md)).
+19. **Gateway** — `GUARDIAN_GATEWAY_MODE=true` for shared SSE/WS ingress ([GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md)).
+20. **Docker** — GHCR image with **`USER 1001`**; `scripts/verify-docker-prebuilds.sh` in CI.
 
 ---
 
@@ -1075,7 +1126,7 @@ Short list before `default-policy.yaml` + block mode in production. All five blo
 
 ## Attack learning evaluation
 
-See **[Proven under attack (v2.9.2)](#proven-under-attack-v290)** for headline metrics and hero charts. Adversarial harness (corpus + live proxy): [summary.md](reports/adversarial-harness/summary.md). Below: embedded figures with captions; full galleries in collapsible blocks.
+See **[Proven under attack (v2.10.0)](#proven-under-attack-v2100)** for headline metrics and hero charts. Adversarial harness (corpus + live proxy): [summary.md](reports/adversarial-harness/summary.md). Below: embedded figures with captions; full galleries in collapsible blocks.
 
 ### Repo evaluation (reproducible CI)
 
@@ -1109,7 +1160,7 @@ Regenerate: `pnpm eval:attack-learning:long` then `pnpm eval:attack-learning:cha
 
 ### Adversarial test harness (live proxy + policy parity — May 2026)
 
-**CI-gated** corpus + evasion + live stdio proxy validation — full metrics in [Proven under attack (v2.9.2)](#adversarial-test-harness-live-proxy--policy-parity--may-2026) above. Key numbers: **154/154** corpus attacks blocked, **0** FP on **74** benign + edge fixtures (**228** JSON evaluated; **151** attack + **55** benign on disk), **84/85** evasion blocked (**adv-066** base64-in-`search` bypass documented), **26/26** Node integration, **400/402** (99.5%) Python/TS parity with **0** corpus mismatches, streaming **3/3**, secret scanner **14/14**. Reports: [`reports/adversarial-harness/`](reports/adversarial-harness/). Python port caveats: [`POLICY_PORT_GAPS.md`](adversarial-harness/python/POLICY_PORT_GAPS.md).
+**CI-gated** corpus + evasion + live stdio proxy validation — full metrics in [Proven under attack (v2.10.0)](#adversarial-test-harness-live-proxy--policy-parity--may-2026) above. Key numbers: **154/154** corpus attacks blocked, **0** FP on **74** benign + edge fixtures (**228** JSON evaluated; **151** attack + **55** benign on disk), **84/85** evasion blocked (**adv-066** base64-in-`search` bypass documented), **26/26** Node integration, **400/402** (99.5%) Python/TS parity with **0** corpus mismatches, streaming **3/3**, secret scanner **14/14**. Reports: [`reports/adversarial-harness/`](reports/adversarial-harness/). Python port caveats: [`POLICY_PORT_GAPS.md`](adversarial-harness/python/POLICY_PORT_GAPS.md).
 
 ```bash
 ./adversarial-harness/run-all.sh
@@ -1119,11 +1170,7 @@ pnpm exec tsx adversarial-harness/scripts/compare-node-python.ts
 
 ### Security Swarm (CI + runtime learning loop)
 
-Closed-loop **agentic** workflow for MCP Guardian: CI agents discover and gate policy quality; the production proxy runs the same learning loop on every real `tools/call`.
-
-![Security Swarm — agentic architecture (CI agents + runtime learning loop)](docs/assets/security-swarm-architecture.png)
-
-*Diagram: **CI track** (Scout → Corpus → Evasion → Parity → Proxy → Report) feeds `latest.json` and harness evidence; **runtime track** (BlockGuard → InstantLearner → SemanticAuditor → PatternSynthesizer → Calibrator) runs in-process on the proxy. **Solo analyze** (`pnpm security-swarm:analyze`) adds live filesystem MCP, personalized traffic from `history.db`, visuals, and plain-English `report.json` for the dashboard.*
+Architecture diagram: [Security Swarm architecture](#security-swarm-architecture) (top of README). Closed-loop **agentic** workflow: CI agents discover and gate policy quality; the production proxy runs the same learning loop on every real `tools/call`.
 
 | Track | Components | Output |
 |-------|------------|--------|
@@ -1398,6 +1445,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 
 ## Roadmap
 
+### Shipped in v2.10.0
+- **Shared MCP gateway** — `GUARDIAN_GATEWAY_MODE`, Helm gateway ingress, [GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md)
+- **WebSocket in ProxyManager** — config `transport: "websocket"`
+- **Security swarm hardening** — `run-step.mjs` timeouts, HMAC evasion signing, agent circuit breaker
+- **Per-tenant budget** — `tenant-budget.ts` on semantic hot path
+- **Core package** — Ajv schema validation, TR39 offline regex, semantic circuit breaker
+- **Enterprise §6 closure** — 24h LLM cache, 10/min semantic cap, local fallback on LLM failure, Postgres RLS, DPoP lock-free, policy compile cache, dashboard query cache, HIPAA audit doc, DR runbook
+- **Helm enterprise overlay** — PDB, resources, NetworkPolicy, backup CronJob, semantic/sync defaults
+
 ### Shipped in v2.9.3
 - **Enterprise multi-tenant hardening** — JWT-bound tenant isolation, per-tenant semantic JSON, tenant-scoped audit/cost/security/health (Postgres migrations 004/005)
 - **Unified response security gate** — `gateToolResponseText()` on stdio, HTTP, SSE, WebSocket, streamable HTTP; `GUARDIAN_RESPONSE_DLP_MODE=redact|block`
@@ -1482,18 +1538,73 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pnpm install && pnpm build && pnpm 
 - **Multi-region active-active** — SQLite/Postgres replication across regions (today: labels + active-passive Redis only)
 - **Signed plugin marketplace** — curated third-party detector distribution
 - **Production MSI pipeline** — org code-signing and CI for Windows installers (script ships in v2.7)
-- **Inbound HTTP/SSE gateway** — non-stdio MCP ingress
+- **Enhanced gateway auth** — per-tenant gateway JWT at ingress (basic gateway shipped in v2.10)
 - **Enhanced SIEM templates** — richer export mappings
 - **v3.0** — Cloud control plane MVP shipped (`apps/cloud`); managed proxy hosting + gRPC transport remain planned
 
 ---
 
-## License
+## MCP Guardian Pro — $4.99 lifetime (open-core)
 
-MIT — see [LICENSE](LICENSE).
+**npm install stays free (MIT).** You pay for a **lifetime Pro license** that unlocks runtime features on **self-hosted** Guardian — not for the public tarball. Checkout is hosted by **[Lemon Squeezy](https://www.lemonsqueezy.com/)** (Merchant of Record; global VAT handled). No in-repo payment tables.
+
+### Product structure
+
+| Item | Detail |
+|------|--------|
+| **Product** | MCP Guardian Pro — Lifetime |
+| **Price** | **$4.99 USD** one-time (no subscription) |
+| **What buyers get** | License key in receipt email + [PRO_SETUP.md](docs/PRO_SETUP.md) |
+| **Fulfillment** | Key → `GUARDIAN_LICENSE_KEY` on your Guardian host; cloud webhook auto-registers keys; validated via `GET /api/v1/license` |
+| **Free OSS** | Community proxy + CLI + YAML policy (MIT) |
+| **Paid** | Dashboard, WebSocket feed, security swarm, AI learning APIs, multi-tenant JWT, semantic async tier-2 |
+
+### Community vs Pro
+
+| | Community (free) | Pro (license) |
+|--|------------------|---------------|
+| `npm install` / MIT source | Yes | Yes |
+| `mcp-guardian proxy` + block policy | Yes | Yes |
+| CLI `scan`, `policy test` | Yes | Yes |
+| Dashboard SPA + live APIs | No | Yes |
+| `PUT /api/policy` editor | No | Yes |
+| Security swarm / Analysis tab | No | Yes |
+| `GUARDIAN_MULTI_TENANT_ENABLED` | No | Yes |
+| `GUARDIAN_SEMANTIC_ASYNC` (tier-2 LLM audit) | No | Yes |
+
+**Default (v2.10+):** `GUARDIAN_OPEN_CORE=true` — Pro features return **402** until a valid license is configured. Set `GUARDIAN_OPEN_CORE=false` for legacy “all features without a key” (internal/dev only).
+
+### Purchase & setup
+
+| Step | Link |
+|------|------|
+| **Buy Pro** | [MCP Guardian Pro — $4.99 lifetime](https://mcp-guardian.lemonsqueezy.com/checkout/buy/f725abfe-93c0-4bd7-8add-d15af13958fb) (override with `GUARDIAN_PRO_CHECKOUT_URL` / `NEXT_PUBLIC_PRO_CHECKOUT_URL`) |
+| **After purchase** | [docs/PRO_SETUP.md](docs/PRO_SETUP.md) — install Guardian, set license env vars |
+| **Operators / vendors** | [docs/MONETIZATION.md](docs/MONETIZATION.md) · [docs/LEMON_SQUEEZY_SETUP.md](docs/LEMON_SQUEEZY_SETUP.md) · [docs/SAAS_CONTROL_PLANE.md](docs/SAAS_CONTROL_PLANE.md) (free `apps/cloud` for org keys) |
+
+### License environment variables
+
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| `GUARDIAN_LICENSE_KEY` | Self-hosted Guardian | Buyer license key from Lemon Squeezy |
+| `GUARDIAN_CONTROL_PLANE_URL` | Self-hosted Guardian | Cloud base URL for license validation |
+| `GUARDIAN_OPEN_CORE` | Self-hosted Guardian | `true` (default) = Pro gates on; `false` = disable gates |
+| `GUARDIAN_PRO_CHECKOUT_URL` | Guardian / cloud | Checkout link in 402 responses + upgrade banner |
+| `GUARDIAN_REQUIRE_LICENSE` | Self-hosted Guardian | `true` = fail dashboard startup without valid license |
+| `NEXT_PUBLIC_PRO_CHECKOUT_URL` | `apps/cloud` | “Buy Pro” on cloud homepage |
+
+**What is not paywalled:** the public npm package (MIT). Forks may remove runtime checks; the commercial product is the **license + support path**, not withholding source code.
+
+**Enterprise self-hosted** (Postgres HA, gateway, RLS, Helm) uses the same Pro license model for dashboard/swarm/multi-tenant; formal SOC2/FedRAMP programs are separate from the $4.99 SKU.
 
 ---
 
-**Docs:** [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Enterprise deploy](docs/ENTERPRISE_DEPLOY.md) · [SaaS control plane](docs/SAAS_CONTROL_PLANE.md) · [Enterprise evidence pack](docs/ENTERPRISE_EVIDENCE_PACK.md) · [Enterprise roadmap](docs/ENTERPRISE_ROADMAP.md) · [Real-world integration](docs/REAL_WORLD_INTEGRATION.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [Multi-region](docs/MULTI_REGION.md) · [AI learning](docs/AI_LEARNING.md) · [Attack learning eval](reports/attack-learning-eval/summary.md) · [Adversarial harness](reports/adversarial-harness/summary.md) · [Adversarial harness README](adversarial-harness/README.md) · [Python port gaps](adversarial-harness/python/POLICY_PORT_GAPS.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Security assessment](reports/enterprise-attack-sim/MCP_GUARDIAN_EXECUTIVE_SUMMARY.md) · [SCA collateral](sca/README.md) · [Adversarial scenarios](tests/policy/adversarial-scenarios.test.ts) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Windows](docs/WINDOWS.md) · [Windows installer](installer/windows/) · [Remote SSH](docs/REMOTE_SSH.md) · [Dev containers](docs/DEVCONTAINERS.md) · [Extensibility](docs/EXTENSIBILITY.md) · [Supply chain](docs/SUPPLY_CHAIN.md) · [Production](deploy/PRODUCTION.md) · [Compliance](docs/COMPLIANCE.md) · [Threat model](docs/THREAT_MODEL.md) · [Security](SECURITY.md)
+## License
+
+MIT — see [LICENSE](LICENSE). Pro is an optional paid lifetime license; see [docs/MONETIZATION.md](docs/MONETIZATION.md).
+
+---
+
+**Docs:** [Monetization / Pro](docs/MONETIZATION.md) · [Production blockers](docs/PRODUCTION_BLOCKERS.md) · [Enterprise deploy](docs/ENTERPRISE_DEPLOY.md) · [Enterprise readiness](docs/ENTERPRISE_READINESS.md) · [Gap matrix (mcp tests 31)](reports/enterprise-mcp-tests-31/gap-matrix.md) · [Gateway deploy](docs/GATEWAY_DEPLOY.md) · [Database ops](docs/DATABASE_OPERATIONS.md) · [HIPAA audit trail](docs/HIPAA_AUDIT_TRAIL.md) · [SaaS control plane](docs/SAAS_CONTROL_PLANE.md) · [Enterprise evidence pack](docs/ENTERPRISE_EVIDENCE_PACK.md) · [Enterprise roadmap](docs/ENTERPRISE_ROADMAP.md) · [Multi-tenancy](docs/MULTI_TENANCY.md) · [Security swarm](security-swarm/README.md) · [Policy](docs/POLICY.md) · [Production auth](docs/PRODUCTION_AUTH.md) · [Redis HA](docs/REDIS_HA.md) · [Policy templates](policy-templates/README.md) · [Corpus](corpus/README.md) · [Pen-test report](docs/PEN_TEST_REPORT.md) · [Attack matrix](security/ATTACK_MATRIX.md) · [Benchmarks](benchmarks/README.md) · [Plugin SDK](docs/PLUGIN_SDK.md) · [AI learning](docs/AI_LEARNING.md) · [Adversarial harness](adversarial-harness/README.md) · [Enterprise attack sim](reports/enterprise-attack-sim/README.md) · [Cost governance](docs/COST_GOVERNANCE.md) · [Scale & resilience](docs/SCALE_AND_RESILIENCE.md) · [Compliance](docs/COMPLIANCE.md) · [Security](SECURITY.md) · [CHANGELOG](CHANGELOG.md)
 
 **Built with** TypeScript, better-sqlite3 12.10+, pino, prom-client, jose 6.x, commander, chalk, tiktoken, and the MCP SDK.

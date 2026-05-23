@@ -1,11 +1,6 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { DEFAULT_POLICY_YAML } from './default-policy-embedded';
 
-let cached: string | null = null;
-
+/** Default tenant policy YAML (bundled for Vercel serverless — no filesystem read). */
 export function getDefaultPolicyYaml(): string {
-  if (cached) return cached;
-  const path = join(process.cwd(), 'seeds', 'default-policy.yaml');
-  cached = readFileSync(path, 'utf8');
-  return cached;
+  return DEFAULT_POLICY_YAML;
 }

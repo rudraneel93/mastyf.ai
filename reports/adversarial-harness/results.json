@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-22T12:59:51.904Z",
+  "generatedAt": "2026-05-23T06:03:20.877Z",
   "harnessRoot": "/Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness",
   "corpus": {
     "totalEntries": 228,
@@ -45,16 +45,16 @@
     "concurrency": {
       "component": "AsyncSerialQueue",
       "samples": 50,
-      "p50Ms": 2.344416000000024,
-      "p95Ms": 2.4322089999999434,
-      "maxMs": 2.5687500000000227,
+      "p50Ms": 2.293124999999975,
+      "p95Ms": 2.366000000000099,
+      "maxMs": 2.486666000000014,
       "note": "Serial queue — tasks run one at a time; latency includes prior queue depth",
       "proxy": {
         "component": "McpProxyServer.handleClientInput",
         "samples": 20,
-        "p50Ms": 22.81162500000005,
-        "p95Ms": 37.79783400000008,
-        "maxMs": 167.270666,
+        "p50Ms": 22.557292000000075,
+        "p95Ms": 146.56104199999993,
+        "maxMs": 253.236042,
         "integration": "real-mock-mcp-stdio"
       }
     },
@@ -73,56 +73,56 @@
       "ok": true,
       "status": 0,
       "stdout": "Exported 78 injection rules and 268 secret rule metadata to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/exported\n",
-      "stderr": ""
+      "stderr": "(node:58536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58539) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58545) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58545) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-custom-attacks",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 120 custom adversarial fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/custom-attacks\n",
-      "stderr": ""
+      "stderr": "(node:58565) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-uploaded-bypass",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 83 uploaded-bypass fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/uploaded-bypass\n",
-      "stderr": ""
+      "stderr": "(node:58578) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "export-harness-rules-pre-python",
       "ok": true,
       "status": 0,
       "stdout": "Exported 78 injection rules and 268 secret rule metadata to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/exported\n",
-      "stderr": ""
+      "stderr": "(node:58590) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58591) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58597) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:58597) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-comprehensive-generated",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 38 generated fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/generated\n",
-      "stderr": ""
+      "stderr": "(node:58605) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-mcpg-catalog",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 100 MCPG catalog fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/mcpg-catalog\n",
-      "stderr": ""
+      "stderr": "(node:58613) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-matrix-fixtures",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 89 matrix fixtures to /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/fixtures/matrix\n",
-      "stderr": ""
+      "stderr": "(node:58621) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "export-evasion-attacks",
       "ok": true,
       "status": 0,
       "stdout": "Wrote 120 evasion attacks → /Users/rudraneeldas/Desktop/mcp-guardian/adversarial-harness/evasion-attacks.json\n",
-      "stderr": ""
+      "stderr": "(node:58629) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "setup-python-venv",
@@ -135,7 +135,7 @@
       "label": "python-comprehensive-eval",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"passed\": true,\n  \"python\": \"437/437 passed \\u2192 100.0%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 120,\n    \"blocked\": 120,\n    \"bypassed\": 0\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 32.36\n}\n",
+      "stdout": "{\n  \"passed\": true,\n  \"python\": \"437/437 passed \\u2192 100.0%\",\n  \"corpus\": {\n    \"attacks\": 151,\n    \"benign\": 55,\n    \"loaded\": 228,\n    \"tp\": 154,\n    \"fp\": 0,\n    \"tn\": 74,\n    \"fn\": 0,\n    \"passed\": true\n  },\n  \"evasion\": {\n    \"total\": 120,\n    \"blocked\": 120,\n    \"bypassed\": 0\n  },\n  \"matrix\": {\n    \"total\": 89,\n    \"passed\": 89,\n    \"failed\": 0\n  },\n  \"elapsed\": 33.11\n}\n",
       "stderr": ""
     },
     {
@@ -149,15 +149,15 @@
       "label": "python-corpus-only",
       "ok": true,
       "status": 0,
-      "stdout": "{\n  \"timestamp\": \"2026-05-22T10:28:54.909308+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
+      "stdout": "{\n  \"timestamp\": \"2026-05-22T18:50:50.317714+00:00\",\n  \"semanticDisabled\": true,\n  \"attacksBlocked\": 154,\n  \"attacksTotal\": 154,\n  \"benignPassed\": 74,\n  \"benignTotal\": 74,\n  \"falsePositives\": 0,\n  \"missed\": 0,\n  \"passed\": true,\n  \"failures\": []\n}\n",
       "stderr": ""
     },
     {
       "label": "pnpm-build",
       "ok": true,
       "status": 0,
-      "stdout": "\n> @mcp-guardian/server@2.9.2 build /Users/rudraneeldas/Desktop/mcp-guardian\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 4 packages\n   • Remote caching disabled\n\n\u001b[35m@mcp-guardian/core:build: \u001b[0mcache hit, replaying logs \u001b[2ma619c430f9e70733\u001b[0m\n\u001b[35m@mcp-guardian/core:build: \u001b[0m\r\n\u001b[35m@mcp-guardian/core:build: \u001b[0m\u0004\r\n\u001b[35m@mcp-guardian/core:build: \u001b[0m> @mcp-guardian/core@2.9.2 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/core\r\n\u001b[35m@mcp-guardian/core:build: \u001b[0m> tsc\r\n\u001b[35m@mcp-guardian/core:build: \u001b[0m\r\n\u001b[32m@mcp-guardian/server:build: \u001b[0mcache hit, replaying logs \u001b[2m60ad73d4c5447f82\u001b[0m\n\u001b[32m@mcp-guardian/server:build: \u001b[0m\r\n\u001b[32m@mcp-guardian/server:build: \u001b[0m\u0004\r\n\u001b[32m@mcp-guardian/server:build: \u001b[0m> @mcp-guardian/server@2.9.2 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/server\r\n\u001b[32m@mcp-guardian/server:build: \u001b[0m> tsc\r\n\u001b[32m@mcp-guardian/server:build: \u001b[0m\r\n\u001b[33m@mcp-guardian/cli:build: \u001b[0mcache hit, replaying logs \u001b[2m81fd5cdea6b83973\u001b[0m\n\u001b[33m@mcp-guardian/cli:build: \u001b[0m\r\n\u001b[33m@mcp-guardian/cli:build: \u001b[0m\u0004\r\n\u001b[33m@mcp-guardian/cli:build: \u001b[0m> @mcp-guardian/cli@2.9.2 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/cli\r\n\u001b[33m@mcp-guardian/cli:build: \u001b[0m> tsc\r\n\u001b[33m@mcp-guardian/cli:build: \u001b[0m\r\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0mcache hit, replaying logs \u001b[2m6e28f0bef4fbe0f0\u001b[0m\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0m\r\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0m\u0004\r\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0m> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\r\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0m> tsc --project tsconfig.json\r\n\u001b[36m@mcp-guardian/plugin-sdk:build: \u001b[0m\r\n\n\u001b[1m Tasks:    \u001b[32m\u001b[1m4 successful\u001b[0m, 4 total\u001b[0m\n\u001b[1mCached:    \u001b[1m4 cached\u001b[0m, 4 total\u001b[0m\n\u001b[1m  Time:    \u001b[1m20ms\u001b[0m \u001b[1m\u001b[38;2;18;45;128m>\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;4;45;162m>\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;1;45;194m>\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;6;45;221m \u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;21;45;241mF\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;44;45;252mU\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;73;45;254mL\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;106;45;247mL\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;141;45;230m \u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;175;45;206mT\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;205;45;176mU\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;229;45;142mR\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;246;45;107mB\u001b[0m\u001b[0;1m\u001b[1m\u001b[38;2;254;45;74mO\u001b[0m\u001b[0;1m\u001b[0m\u001b[0m\n\n",
-      "stderr": "• turbo 2.9.12\n"
+      "stdout": "\n> @mcp-guardian/server@2.9.6 build /Users/rudraneeldas/Desktop/mcp-guardian\n> pnpm --filter @mcp-guardian/plugin-sdk run build && tsc --project tsconfig.json && turbo run build\n\n\n> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n> tsc --project tsconfig.json\n\n\n   • Packages in scope: @mcp-guardian/cli, @mcp-guardian/cloud, @mcp-guardian/core, @mcp-guardian/plugin-sdk, @mcp-guardian/server\n   • Running build in 5 packages\n   • Remote caching disabled\n\n\u001b[36m@mcp-guardian/core:build: \u001b[0mcache hit, replaying logs \u001b[2m17b32301e60fa474\u001b[0m\n\u001b[32m@mcp-guardian/plugin-sdk:build: \u001b[0mcache hit, replaying logs \u001b[2mf662a07b4b3706cb\u001b[0m\n\u001b[36m@mcp-guardian/core:build: \u001b[0m\n\u001b[36m@mcp-guardian/core:build: \u001b[0m> @mcp-guardian/core@2.9.6 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/core\n\u001b[36m@mcp-guardian/core:build: \u001b[0m> tsc\n\u001b[36m@mcp-guardian/core:build: \u001b[0m\n\u001b[32m@mcp-guardian/plugin-sdk:build: \u001b[0m\n\u001b[32m@mcp-guardian/plugin-sdk:build: \u001b[0m> @mcp-guardian/plugin-sdk@3.0.0 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/plugin-sdk\n\u001b[32m@mcp-guardian/plugin-sdk:build: \u001b[0m> tsc --project tsconfig.json\n\u001b[32m@mcp-guardian/plugin-sdk:build: \u001b[0m\n\u001b[33m@mcp-guardian/server:build: \u001b[0mcache hit, replaying logs \u001b[2m2ee4ed7559b1b2d9\u001b[0m\n\u001b[33m@mcp-guardian/server:build: \u001b[0m\n\u001b[33m@mcp-guardian/server:build: \u001b[0m> @mcp-guardian/server@2.9.6 build /Users/rudraneeldas/Desktop/mcp-guardian/packages/server\n\u001b[33m@mcp-guardian/server:build: \u001b[0m> tsc\n\u001b[33m@mcp-guardian/server:build: \u001b[0m\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0mcache hit, replaying logs \u001b[2m55ac6030e1061366\u001b[0m\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7378) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m> @mcp-guardian/cloud@0.1.0 build /Users/rudraneeldas/Desktop/mcp-guardian/apps/cloud\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m> next build\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7403) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m   ▲ Next.js 15.5.18\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m   Creating an optimized production build ...\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7437) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7479) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7493) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m ✓ Compiled successfully in 2.4s\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m   Skipping linting\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m   Checking validity of types ...\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m   Collecting page data ...\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7536) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(node:7534) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m(Use `node --trace-warnings ...` to show where the warning was created)\n\u001b[35m@mcp-guardian/cloud:build: \u001b[0m",
+      "stderr": "(node:63040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:63061) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n• turbo 2.9.12\n"
     },
     {
       "label": "node-harness-tests",
@@ -171,21 +171,21 @@
       "ok": true,
       "status": 0,
       "stdout": "Running corpus evaluation (228 entries) against /Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml\n\n  ✓ attacks/credential-exfil/cred-001.json\n  ✓ attacks/credential-exfil/cred-002.json\n  ✓ attacks/credential-exfil/cred-003.json\n  ✓ attacks/credential-exfil/cred-004.json\n  ✓ attacks/credential-exfil/cred-005.json\n  ✓ attacks/credential-exfil/cred-006.json\n  ✓ attacks/credential-exfil/cred-007.json\n  ✓ attacks/credential-exfil/cred-008.json\n  ✓ attacks/credential-exfil/cred-009.json\n  ✓ attacks/credential-exfil/cred-010.json\n  ✓ attacks/credential-exfil/cred-011.json\n  ✓ attacks/credential-exfil/cred-012.json\n  ✓ attacks/credential-exfil/cred-013.json\n  ✓ attacks/credential-exfil/cred-014.json\n  ✓ attacks/credential-exfil/cred-015.json\n  ✓ attacks/credential-exfil/cred-016.json\n  ✓ attacks/credential-exfil/cred-017.json\n  ✓ attacks/credential-exfil/cred-018.json\n  ✓ attacks/credential-exfil/cred-019.json\n  ✓ attacks/credential-exfil/cred-020.json\n  ✓ attacks/credential-exfil/cred-021.json\n  ✓ attacks/credential-exfil/cred-022.json\n  ✓ attacks/credential-exfil/cred-024.json\n  ✓ attacks/credential-exfil/cred-027.json\n  ✓ attacks/cross-tool-chain/chain-001.json\n  ✓ attacks/cross-tool-chain/chain-002.json\n  ✓ attacks/cross-tool-chain/chain-003.json\n  ✓ attacks/cross-tool-chain/chain-004.json\n  ✓ attacks/cross-tool-chain/chain-005.json\n  ✓ attacks/cross-tool-chain/chain-006.json\n  ✓ attacks/cross-tool-chain/chain-007.json\n  ✓ attacks/cross-tool-chain/chain-008.json\n  ✓ attacks/cross-tool-chain/chain-009.json\n  ✓ attacks/cross-tool-chain/chain-010.json\n  ✓ attacks/cross-tool-chain/chain-011.json\n  ✓ attacks/cross-tool-chain/chain-012.json\n  ✓ attacks/cross-tool-chain/chain-013.json\n  ✓ attacks/cross-tool-chain/chain-014.json\n  ✓ attacks/cross-tool-chain/chain-015.json\n  ✓ attacks/cross-tool-chain/chain-016.json\n  ✓ attacks/prompt-injection/pi-001.json\n  ✓ attacks/prompt-injection/pi-002.json\n  ✓ attacks/prompt-injection/pi-003.json\n  ✓ attacks/prompt-injection/pi-004.json\n  ✓ attacks/prompt-injection/pi-005.json\n  ✓ attacks/prompt-injection/pi-006.json\n  ✓ attacks/prompt-injection/pi-007.json\n  ✓ attacks/prompt-injection/pi-008.json\n  ✓ attacks/prompt-injection/pi-009.json\n  ✓ attacks/prompt-injection/pi-010.json\n  ✓ attacks/prompt-injection/pi-011.json\n  ✓ attacks/prompt-injection/pi-012.json\n  ✓ attacks/prompt-injection/pi-013.json\n  ✓ attacks/prompt-injection/pi-014.json\n  ✓ attacks/prompt-injection/pi-015.json\n  ✓ attacks/prompt-injection/pi-016.json\n  ✓ attacks/prompt-injection/pi-017.json\n  ✓ attacks/prompt-injection/pi-018.json\n  ✓ attacks/prompt-injection/pi-019.json\n  ✓ attacks/prompt-injection/pi-020.json\n  ✓ attacks/prompt-injection/pi-021.json\n  ✓ attacks/prompt-injection/pi-022.json\n  ✓ attacks/prompt-injection/pi-023.json\n  ✓ attacks/prompt-injection/pi-024.json\n  ✓ attacks/prompt-injection/pi-025.json\n  ✓ attacks/prompt-injection/pi-026.json\n  ✓ attacks/prompt-injection/pi-027.json\n  ✓ attacks/prompt-injection/pi-028.json\n  ✓ attacks/prompt-injection/pi-029.json\n  ✓ attacks/prompt-injection/pi-030.json\n  ✓ attacks/prompt-injection/pi-031.json\n  ✓ attacks/prompt-injection/pi-032.json\n  ✓ attacks/shell-obfuscation/shell-001.json\n  ✓ attacks/shell-obfuscation/shell-002.json\n  ✓ attacks/shell-obfuscation/shell-003.json\n  ✓ attacks/shell-obfuscation/shell-004.json\n  ✓ attacks/shell-obfuscation/shell-005.json\n  ✓ attacks/shell-obfuscation/shell-006.json\n  ✓ attacks/shell-obfuscation/shell-007.json\n  ✓ attacks/shell-obfuscation/shell-008.json\n  ✓ attacks/shell-obfuscation/shell-009.json\n  ✓ attacks/shell-obfuscation/shell-010.json\n  ✓ attacks/shell-obfuscation/shell-011.json\n  ✓ attacks/shell-obfuscation/shell-012.json\n  ✓ attacks/shell-obfuscation/shell-013.json\n  ✓ attacks/shell-obfuscation/shell-014.json\n  ✓ attacks/shell-obfuscation/shell-015.json\n  ✓ attacks/shell-obfuscation/shell-016.json\n  ✓ attacks/shell-obfuscation/shell-017.json\n  ✓ attacks/shell-obfuscation/shell-018.json\n  ✓ attacks/shell-obfuscation/sh",
-      "stderr": ""
+      "stderr": "(node:64732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64739) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64739) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "node-python-parity",
       "ok": true,
       "status": 0,
       "stdout": "Parity: 437/437 (100.0%) mismatches=0\n",
-      "stderr": ""
+      "stderr": "(node:64771) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64772) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64778) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:64778) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     },
     {
       "label": "generate-adversarial-report",
       "ok": true,
       "status": 0,
       "stdout": "Wrote /Users/rudraneeldas/Desktop/mcp-guardian/reports/adversarial-harness/{results.json,summary.md,analysis.md}\n",
-      "stderr": ""
+      "stderr": "(node:65800) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
     }
   ]
 }

@@ -21,6 +21,8 @@ export interface SemanticLlmCacheKeyInput {
   toolName: string;
   arguments?: Record<string, unknown>;
   temperature: number;
+  tenantId?: string;
+  policyMode?: string;
 }
 
 const cacheHits = new Counter({
@@ -78,7 +80,9 @@ function normalizeArgLeaves(args?: Record<string, unknown>): string {
 
 export function hashSemanticAuditKey(input: SemanticLlmCacheKeyInput): string {
   const argNorm = normalizeArgLeaves(input.arguments);
-  const payload = `${input.model}\0${input.serverName}\0${input.toolName}\0${argNorm}\0${input.temperature}`;
+  const tenant = input.tenantId?.trim() || 'default';
+  const mode = input.policyMode?.trim() || 'block';
+  const payload = `${tenant}\0${mode}\0${input.model}\0${input.serverName}\0${input.toolName}\0${argNorm}\0${input.temperature}`;
   return createHash('sha256').update(payload).digest('hex');
 }
 
@@ -97,8 +101,8 @@ export function semanticToLlmCacheKey(
 }
 
 function ttlSec(): number {
-  const parsed = parseInt(process.env.GUARDIAN_LLM_CACHE_TTL_SEC || '3600', 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3600;
+  const parsed = parseInt(process.env.GUARDIAN_LLM_CACHE_TTL_SEC || '86400', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
 }
 
 const LRU_MAX = 500;

@@ -91,6 +91,20 @@ networkPolicy:
   enabled: false
   allowedNamespace: default
 
+# Shared HTTP/SSE ingress (no stdio children). Requires multiTenant.enabled.
+gateway:
+  enabled: false
+  websocketPort: 0
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    enabled: false
+    host: guardian.local
+    tls: false
+    tlsSecret: ""
+    annotations: {}
+
 secrets:
   mode: external
   existingSecret: ""

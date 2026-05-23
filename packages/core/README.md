@@ -40,7 +40,7 @@ mcp-guardian       # stdio transport, auto-starts MCP server
 ## Features
 
 ### Security
-- **Three-layer detection engine** — Regex triage (38 patterns, 8 attack categories) → Schema analysis (parameters, defaults, enum injection) → LLM semantic verdict (Anthropic Claude), with semantic layer defaulting to run on **all** tools for comprehensive coverage
+- **Three-layer detection engine** — Regex triage (TR39 confusables offline, `before…then` / `first…then` chaining) → Schema analysis (Ajv validation, recursive depth, `maxLength`) → LLM semantic verdict (Anthropic/OpenAI/Ollama) with **circuit breaker**, **per-tenant queue caps**, and **local heuristic fallback** when no API key or rate-limited (**v2.10.0**)
 - **YAML policy engine** — Tool allowlists/denylists, regex patterns, rate limits, token budgets, RBAC, argument-level field patterns, destructive category detection, and **default-deny** (fail-closed) catch-all
 - **Hot-reload policies** — File watcher atomically swaps policy engine on YAML changes — zero-downtime policy updates
 - **50+ secret patterns** — OpenAI, Anthropic, GitHub, AWS, GCP, Azure, Stripe, Slack, Twilio, SendGrid, Datadog, CircleCI, Jenkins, Firebase, Cloudflare, HuggingFace, GitLab, NPM, Vercel, Heroku, database connection strings, RSA/PEM private keys, JWT secrets, and URI credentials

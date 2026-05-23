@@ -266,10 +266,13 @@ export type AuthStatus = {
   multiTenantMode?: boolean;
   tenantLocked?: boolean;
   licensed?: boolean;
+  tier?: 'community' | 'pro';
   licenseEnforced?: boolean;
   licenseRequired?: boolean;
+  openCore?: boolean;
   licenseStatus?: string;
   cloudBillingUrl?: string | null;
+  upgradeUrl?: string | null;
   features?: string[];
 };
 
@@ -512,6 +515,24 @@ export async function reloadPolicy(): Promise<boolean> {
   const headers = await buildMutatingHeaders();
   const res = await guardianFetch('/api/policy/reload', { method: 'POST', headers });
   return res.ok;
+}
+
+export async function savePolicy(yaml: string): Promise<{ ok: boolean; error?: string; details?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/policy', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({ yaml }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; details?: string };
+    return {
+      ok: false,
+      error: data.error || res.statusText,
+      details: data.details,
+    };
+  }
+  return { ok: true };
 }
 
 export type SwarmJobStatus = {

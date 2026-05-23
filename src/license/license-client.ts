@@ -1,4 +1,10 @@
 import { Logger } from '../utils/logger.js';
+import {
+  getProCheckoutUrl,
+  isOpenCoreEnabled,
+  isProFeature,
+  licenseTier,
+} from './feature-tiers.js';
 
 export type LicenseState = {
   licensed: boolean;
@@ -89,17 +95,31 @@ export class LicenseClient {
   }
 
   isLicensed(): boolean {
-    if (!this.isEnabled()) return true;
+    if (!isOpenCoreEnabled()) {
+      if (!this.isEnabled()) return true;
+      if (this.state?.licensed) return true;
+      if (this.lastGoodState && this.isWithinGrace()) return true;
+      return false;
+    }
+    if (!this.isEnabled()) return false;
     if (this.state?.licensed) return true;
     if (this.lastGoodState && this.isWithinGrace()) return true;
     return false;
   }
 
+  getTier(): 'community' | 'pro' {
+    return licenseTier(this.isLicensed());
+  }
+
   hasFeature(feature: string): boolean {
-    if (!this.isEnabled()) return true;
-    if (!this.isLicensed()) return false;
-    const features = this.state?.features ?? this.lastGoodState?.features ?? [];
-    return features.includes(feature);
+    if (!isOpenCoreEnabled()) {
+      if (!this.isEnabled()) return true;
+      if (!this.isLicensed()) return false;
+      const features = this.state?.features ?? this.lastGoodState?.features ?? [];
+      return features.length === 0 || features.includes(feature);
+    }
+    if (!isProFeature(feature)) return true;
+    return this.isLicensed();
   }
 
   getTenantSlug(): string | undefined {
@@ -192,6 +212,11 @@ export class LicenseClient {
           '[license] GUARDIAN_REQUIRE_LICENSE=true but GUARDIAN_CONTROL_PLANE_URL/GUARDIAN_LICENSE_KEY missing',
         );
         return false;
+      }
+      if (isOpenCoreEnabled()) {
+        Logger.info(
+          '[license] Community tier — Pro features (dashboard, swarm, multi-tenant, semantic async) require GUARDIAN_LICENSE_KEY',
+        );
       }
       return true;
     }

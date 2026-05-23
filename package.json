@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "2.9.6",
+  "version": "2.10.0",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
@@ -61,6 +61,7 @@
     "test": "vitest run && turbo run test",
     "test:policy-proxy-utils": "vitest run tests/policy/ tests/proxy/ tests/utils/ --reporter=dot",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:scale-postgres": "node scripts/test-scale-postgres.mjs",
     "typecheck": "turbo run typecheck",
     "dogfood": "node scripts/run-dogfood-scenario.cjs",
     "e2e:tui": "node scripts/run-e2e-tui.cjs",
@@ -108,6 +109,7 @@
     "cloud:build": "pnpm --filter @mcp-guardian/cloud build",
     "cloud:test": "pnpm --filter @mcp-guardian/cloud test",
     "cloud:migrate": "pnpm --filter @mcp-guardian/cloud run db:migrate",
+    "cloud:register-pro-key": "node apps/cloud/scripts/register-pro-license.mjs",
     "eval:full": "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY tsx corpus/run-eval.ts",
     "eval:attack-learning": "tsx scripts/simulate-attack-learning-stream.ts",
     "eval:attack-learning:long": "tsx scripts/long-attack-learning-eval.ts",

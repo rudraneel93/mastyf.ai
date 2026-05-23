@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/core",
-  "version": "2.9.6",
+  "version": "2.10.0",
   "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "ajv": "^8.17.1",
     "ioredis": "^5.10.1",
     "lru-cache": "^11.3.6"
   },

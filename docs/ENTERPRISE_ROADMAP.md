@@ -15,9 +15,9 @@ Self-hosted **v2.9.x** is production-viable with [ENTERPRISE_DEPLOY.md](./ENTERP
 
 | Item | Rationale | Priority |
 |------|-----------|----------|
-| **Dashboard policy editor** | YAML remains source of truth; guided edit + test in SPA (Policy tab already loads live YAML) | **Next (v2.10.0)** |
-| **Inbound HTTP/SSE gateway** | Non-stdio MCP ingress for shared gateways | v2.10.x |
-| **Full WebSocket transport parity** | Match stdio feature set (see TRANSPORT.md) | v2.10.x |
+| **Dashboard policy editor** | Editable YAML + `PUT /api/policy` + test sandbox | **Shipped (v2.9.7+)** |
+| **Inbound HTTP/SSE gateway** | `GUARDIAN_GATEWAY_MODE`, Helm ingress — [GATEWAY_DEPLOY.md](./GATEWAY_DEPLOY.md) | **Shipped (v2.10.0)** |
+| **Full WebSocket transport parity** | `transport: websocket` in ProxyManager + parity tests | **Shipped (v2.10.0)** |
 | **Enhanced SIEM templates** | Splunk/Datadog field mappings out of the box | v2.11 |
 | **Production MSI / code-sign CI** | Windows enterprise desktop rollout | v2.11 |
 

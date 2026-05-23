@@ -5,6 +5,9 @@
 import { detectPromptInjection } from '../scanners/prompt-injection-detector.js';
 import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { MAX_RESPONSE_DLP_BYTES, truncateForPolicy, utf8ByteLength } from '../utils/eval-bounds.js';
+import { decodeResponseForInspection } from '../utils/response-decode.js';
+
+export { decodeResponseForInspection } from '../utils/response-decode.js';
 
 export type DlpSeverity = 'critical' | 'high' | 'medium' | 'low';
 export type ResponseDlpMode = 'block' | 'redact' | 'audit';
@@ -28,6 +31,9 @@ export interface ResponseDlpResult {
   scannedBytes: number;
   redactedBody?: string;
   mode: ResponseDlpMode;
+  /** Human-readable redaction reasons for clients / headers. */
+  redactionReasons?: string[];
+  decodePasses?: string[];
 }
 
 interface PatternDef {
@@ -177,6 +183,19 @@ function collectPatternFindings(text: string, patterns: PatternDef[]): ResponseD
   return out;
 }
 
+/** Context-aware: redact value after password:/api_key:/secret: labels. */
+const LABELED_SECRET_RE =
+  /\b((?:password|passwd|api[_-]?key|secret|token|credential)s?)\s*[:=]\s*(\S+)/gi;
+
+function redactLabeledSecrets(text: string): { text: string; reasons: string[] } {
+  const reasons: string[] = [];
+  const out = text.replace(LABELED_SECRET_RE, (_full, label: string) => {
+    reasons.push(`labeled-secret:${String(label).toLowerCase()}`);
+    return `${label}: [REDACTED]`;
+  });
+  return { text: out, reasons };
+}
+
 function redactSpans(text: string, findings: ResponseDlpFinding[]): string {
   const spans = findings
     .filter((f) => f.start != null && f.end != null && f.end > f.start)
@@ -187,6 +206,11 @@ function redactSpans(text: string, findings: ResponseDlpFinding[]): string {
     out = out.slice(0, f.start!) + `[REDACTED:${label}]` + out.slice(f.end!);
   }
   return out;
+}
+
+function buildRedactionReasons(findings: ResponseDlpFinding[], extra: string[] = []): string[] {
+  const fromFindings = findings.slice(0, 8).map((f) => `${f.category}:${f.ruleId}`);
+  return [...new Set([...extra, ...fromFindings])];
 }
 
 /**
@@ -220,10 +244,13 @@ export function evaluateResponseDlp(
   const { text: scanText, truncated: charTrunc } = truncateForPolicy(body, MAX_RESPONSE_DLP_BYTES);
   truncated = truncated || charTrunc;
 
+  const decoded = decodeResponseForInspection(scanText);
+  const inspectText = decoded.text;
+
   const findings: ResponseDlpFinding[] = [];
   const ctx = `response:${serverName}:${toolName}`;
 
-  for (const f of detectPromptInjection(toolName, scanText)) {
+  for (const f of detectPromptInjection(toolName, inspectText)) {
     const sev: DlpSeverity =
       f.severity === 'critical' ? 'critical' : f.severity === 'high' ? 'high' : 'medium';
     findings.push({
@@ -234,7 +261,7 @@ export function evaluateResponseDlp(
     });
   }
 
-  for (const f of scanForSecrets(scanText, ctx)) {
+  for (const f of scanForSecrets(inspectText, ctx)) {
     const sev: DlpSeverity = f.severity === 'HIGH' ? 'high' : 'medium';
     findings.push({
       category: 'secret',
@@ -244,11 +271,11 @@ export function evaluateResponseDlp(
     });
   }
 
-  findings.push(...collectPatternFindings(scanText, PII_PATTERNS));
-  findings.push(...collectPatternFindings(scanText, SENSITIVE_CONTENT_MARKERS));
+  findings.push(...collectPatternFindings(inspectText, PII_PATTERNS));
+  findings.push(...collectPatternFindings(inspectText, SENSITIVE_CONTENT_MARKERS));
 
   for (const pattern of RESPONSE_EXFIL_PATTERNS) {
-    if (pattern.test(scanText)) {
+    if (pattern.test(inspectText)) {
       findings.push({
         category: 'exfil',
         severity: 'high',
@@ -259,7 +286,7 @@ export function evaluateResponseDlp(
     }
   }
 
-  const b64chunks = [...scanText.matchAll(/[A-Za-z0-9+/]{100,}={0,2}/g)];
+  const b64chunks = [...inspectText.matchAll(/[A-Za-z0-9+/]{100,}={0,2}/g)];
   for (const chunk of b64chunks.slice(0, 8)) {
     try {
       const decoded = Buffer.from(chunk[0], 'base64').toString('utf-8');
@@ -281,10 +308,18 @@ export function evaluateResponseDlp(
   const hasHigh = findings.some((f) => f.severity === 'high');
 
   let redactedBody: string | undefined;
-  if (mode === 'redact' && findings.length > 0) {
-    redactedBody = redactSpans(scanText, findings);
-    if (redactedBody !== scanText && body !== scanText) {
-      redactedBody = body.slice(0, body.length - scanText.length) + redactedBody;
+  const redactionReasons: string[] = [];
+  if (mode === 'redact') {
+    let working = inspectText;
+    const labeled = redactLabeledSecrets(working);
+    working = labeled.text;
+    redactionReasons.push(...labeled.reasons);
+    if (findings.length > 0) {
+      working = redactSpans(working, findings);
+      redactionReasons.push(...buildRedactionReasons(findings));
+    }
+    if (labeled.reasons.length > 0 || findings.length > 0) {
+      redactedBody = working;
     }
   }
 
@@ -294,9 +329,11 @@ export function evaluateResponseDlp(
     hasCritical,
     hasHigh,
     truncated,
-    scannedBytes: utf8ByteLength(scanText),
+    scannedBytes: utf8ByteLength(inspectText),
     redactedBody,
     mode,
+    redactionReasons: redactionReasons.length ? redactionReasons : undefined,
+    decodePasses: decoded.passes.length ? decoded.passes : undefined,
   };
 }
 

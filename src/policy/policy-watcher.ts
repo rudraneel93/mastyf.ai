@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { PolicyConfig } from './policy-types.js';
 import { PolicyEngine } from './policy-engine.js';
+import { getOrCreatePolicyEngine } from './policy-engine-cache.js';
 import { parsePolicyConfig } from './policy-schema.js';
 import { applyPolicyMerges } from './policy-merge.js';
 import { getPolicyAuditor } from '../utils/enterprise-bootstrap.js';
@@ -60,7 +61,7 @@ export class PolicyWatcher {
       }
       const config = applyPolicyMerges(parsePolicyConfig(load(yaml)));
       const oldMode = this.current?.getMode();
-      const engine = new PolicyEngine(config);
+      const engine = getOrCreatePolicyEngine(config);
       Logger.info(
         `[policy-watcher] Policy loaded (mode: ${config.policy.mode}, rules: ${config.policy.rules.length})` +
         (oldMode && oldMode !== config.policy.mode ? ` (mode changed from ${oldMode})` : ''),

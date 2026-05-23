@@ -26,3 +26,16 @@ MCP Guardian evaluates each `tools/call` through layered policy sources. When mu
 | pass / no decision | pass | **pass** |
 
 Implementation: `src/policy/policy-precedence.ts`, `PolicyEngine.evaluateAsync()`.
+
+## Response DLP and redaction metadata
+
+Outbound `tools/call` results are decoded (HTML entities, bounded URL-decode) before secret/PII scanning. Labeled secrets are redacted in context (`password: [REDACTED]`) rather than wiping entire lines.
+
+When redaction occurs, Guardian may attach:
+
+| Surface | Field |
+|---------|--------|
+| HTTP | `X-Guardian-Redaction-Reason` response header |
+| JSON-RPC | `result._meta.redaction` with `{ reason, rules[] }` |
+
+Set `GUARDIAN_RESPONSE_DLP_MODE=redact` to scrub-and-pass instead of block. See `src/policy/response-dlp.ts` and `src/utils/response-decode.ts`.

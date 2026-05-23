@@ -4,6 +4,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { PolicyEngine } from './policy-engine.js';
+import { getOrCreatePolicyEngine } from './policy-engine-cache.js';
 import type { PolicyConfig } from './policy-types.js';
 import { resolveTenantPolicyPath, DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
 import { Logger } from '../utils/logger.js';
@@ -40,7 +41,7 @@ export class TenantPolicyRegistry {
     try {
       const tenantYaml = load(readFileSync(path, 'utf-8')) as PolicyConfig;
       const merged = this.mergeConfigs(this.baseConfig, tenantYaml);
-      const engine = new PolicyEngine(merged);
+      const engine = getOrCreatePolicyEngine(merged);
       this.cache.set(tid, engine);
       Logger.info(`[tenant-policy] Loaded override for tenant '${tid}' from ${path}`);
       return engine;

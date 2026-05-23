@@ -7,8 +7,13 @@ export default function TermsPage() {
       <div className="card">
         <p>
           MCP Guardian Cloud provides an optional hosted control plane for managing policies and
-          tenant configuration for self-hosted MCP Guardian deployments. The service is free and
-          open source; use it in compliance with applicable laws.
+          tenant configuration for self-hosted MCP Guardian deployments. The control plane sign-in
+          is free and open source.
+        </p>
+        <p>
+          <strong>MCP Guardian Pro</strong> ($4.99 USD one-time, sold via Lemon Squeezy) is a
+          lifetime digital license for self-hosted Pro entitlement. Pro purchases are subject to the
+          seller&apos;s refund policy stated at checkout.
         </p>
         <p>
           The service is provided as-is. You are responsible for securing your self-hosted

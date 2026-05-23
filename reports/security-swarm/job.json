@@ -1,11 +1,11 @@
 {
-  "jobId": "bec8256a-5081-4307-bd02-ccecf67f6539",
+  "jobId": "e66c6bb2-98f1-41f8-b383-9feda332e4f0",
   "state": "done",
   "phase": "analysis",
   "phaseLabel": "Complete",
   "progressPct": 100,
-  "startedAt": "2026-05-22T12:53:26.966Z",
-  "finishedAt": "2026-05-22T12:59:53.611Z",
+  "startedAt": "2026-05-22T17:09:55.362Z",
+  "finishedAt": "2026-05-22T17:13:18.611Z",
   "exitCode": 0,
   "error": null,
   "analysisPath": "/Users/rudraneeldas/Desktop/mcp-guardian/reports/security-swarm/analysis.txt"

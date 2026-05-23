@@ -4,7 +4,8 @@
       "label": "scout-audit",
       "ok": true,
       "status": 0,
-      "elapsedSec": 1,
+      "timedOut": false,
+      "elapsedSec": 1.6,
       "stdout": "",
       "stderr": ""
     },
@@ -12,7 +13,8 @@
       "label": "pnpm-build",
       "ok": true,
       "status": 0,
-      "elapsedSec": 3.2,
+      "timedOut": false,
+      "elapsedSec": 2.8,
       "stdout": "",
       "stderr": ""
     },
@@ -20,7 +22,8 @@
       "label": "vitest-policy-proxy-utils",
       "ok": true,
       "status": 0,
-      "elapsedSec": 23.7,
+      "timedOut": false,
+      "elapsedSec": 61.7,
       "stdout": "",
       "stderr": ""
     },
@@ -28,27 +31,39 @@
       "label": "corpus-eval",
       "ok": true,
       "status": 0,
-      "elapsedSec": 1.4,
+      "timedOut": false,
+      "elapsedSec": 2.1,
       "stdout": "",
       "stderr": ""
     },
     {
-      "label": "adversarial-harness-full",
+      "label": "setup-python-venv",
       "ok": true,
       "status": 0,
-      "elapsedSec": 323.3,
+      "timedOut": false,
+      "elapsedSec": 0.7,
       "stdout": "",
       "stderr": ""
     },
     {
-      "label": "attack-learning-sim",
+      "label": "harness-node-tests",
       "ok": true,
       "status": 0,
-      "elapsedSec": 0.4,
+      "timedOut": false,
+      "elapsedSec": 40.1,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "label": "harness-parity",
+      "ok": true,
+      "status": 0,
+      "timedOut": false,
+      "elapsedSec": 61.7,
       "stdout": "",
       "stderr": ""
     }
   ],
-  "mode": "full",
+  "mode": "fast",
   "live": true
 }

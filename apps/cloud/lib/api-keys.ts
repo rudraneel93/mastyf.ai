@@ -26,8 +26,18 @@ export function verifyApiKey(plaintext: string, hash: string): boolean {
   return bcrypt.compareSync(plaintext, hash);
 }
 
+export function isCloudLicenseKey(token: string): boolean {
+  return token.startsWith(PREFIX);
+}
+
 export function extractBearerToken(authHeader: string | null): string | null {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7).trim();
   return token.startsWith(PREFIX) ? token : null;
+}
+
+export function extractRawBearerToken(authHeader: string | null): string | null {
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  return token.length > 0 ? token : null;
 }

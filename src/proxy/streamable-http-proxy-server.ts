@@ -23,6 +23,7 @@ import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { parseJsonWithDepthLimit } from './http-proxy-security.js';
+import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 
 export interface StreamableHttpProxyOptions {
   listenPort: number;
@@ -192,7 +193,7 @@ export class StreamableHttpProxyServer {
         path: url.pathname + url.search,
         method: 'POST',
         headers,
-        timeout: 30_000,
+        timeout: getUpstreamTimeoutMs(),
         agent: isHttps ? getMtlsAgent() : undefined,
       };
       const clientReq = (isHttps ? httpsRequest : httpRequest)(reqOpts, (upstreamRes) => {

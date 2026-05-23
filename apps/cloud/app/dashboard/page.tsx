@@ -1,3 +1,4 @@
+import { GitHubGettingStarted } from '@/components/GitHubGettingStarted';
 import { LaunchDashboard } from '@/components/LaunchDashboard';
 import { auth } from '@/lib/auth';
 import { getUserOrg } from '@/lib/org-context';
@@ -15,14 +16,15 @@ export default async function DashboardPage() {
   const ctx = await getUserOrg(session!.user!.id);
   if (!ctx) return null;
 
-  const envBlock = `# MCP Guardian — connect your self-hosted instance (optional cloud control plane)
+  const envBlock = `# MCP Guardian — connect your self-hosted instance (optional cloud policy / advanced SSO)
 GUARDIAN_MULTI_TENANT_ENABLED=true
 GUARDIAN_TENANT_ID=${ctx.org.slug}
 GUARDIAN_CONTROL_PLANE_URL=${appUrl()}
-# API key from Settings (for policy sync via API):
+# Copy AUTH_SECRET from Vercel (mcp-guardian-cloud → Settings → Environment Variables):
+GUARDIAN_CLOUD_JWT_SECRET=<paste-cloud-AUTH_SECRET>
+DASHBOARD_JWT_SECRET=<same-as-GUARDIAN_CLOUD_JWT_SECRET>
+# Optional — Pro license / policy API:
 # GUARDIAN_LICENSE_KEY=<gcp_...-from-settings>
-DASHBOARD_JWT_SECRET=<generate-a-secret>
-GUARDIAN_CLOUD_JWT_SECRET=<same-as-cloud-LICENSE_JWT_SECRET-or-AUTH_SECRET>
 # Policy file path on your Guardian host:
 # policy-templates/tenants/${ctx.org.slug}/policy.yaml
 
@@ -55,6 +57,7 @@ GUARDIAN_CLOUD_JWT_SECRET=<same-as-cloud-LICENSE_JWT_SECRET-or-AUTH_SECRET>
         </div>
       </div>
 
+      <GitHubGettingStarted />
       <LaunchDashboard />
     </main>
   );

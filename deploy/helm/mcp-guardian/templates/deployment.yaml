@@ -39,6 +39,9 @@ spec:
             - {{ .Values.config.policy.path }}
             - --blocking-mode
             - {{ .Values.config.policy.mode }}
+            {{- if .Values.gateway.enabled }}
+            - --gateway
+            {{- end }}
           env:
             - name: REPLICA_COUNT
               value: {{ .Values.replicaCount | quote }}
@@ -112,6 +115,16 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.gateway.enabled }}
+            - name: gateway
+              containerPort: {{ .Values.gateway.service.port }}
+              protocol: TCP
+            {{- if .Values.gateway.websocketPort }}
+            - name: gateway-ws
+              containerPort: {{ .Values.gateway.websocketPort }}
+              protocol: TCP
+            {{- end }}
+            {{- end }}
             {{- if .Values.metrics.enabled }}
             - name: metrics
               containerPort: {{ .Values.metrics.port }}

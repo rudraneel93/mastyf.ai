@@ -4,6 +4,52 @@ All notable changes to MCP Guardian will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Pro monetization E2E** — Live Lemon Squeezy checkout URL default; `POST /api/webhooks/lemonsqueezy` auto-registers `license_key_created` keys; `pnpm cloud:register-pro-key` manual fallback; migration `006_pro_license_webhook.sql`.
+- **`@mcp-guardian/core` offline regex** — TR39 `confusables.txt` pre-pass (`MCPG-R-092`), distance-aware `first…then` chaining (`MCPG-R-093`), `docs.openai.com` URL allowlist for MCPG-R-020.
+- **§6 enterprise closure** — LLM cache 24h default; local semantic on LLM failure; Postgres RLS session (`008-tenant-rls-extended.sql`); DPoP lock-free claim; HIPAA audit doc; DR restore runbook.
+- **`@mcp-guardian/core` semantic hardening** — in-process circuit breaker, local heuristic fallback when LLM absent, per-tenant semantic queue caps, explicit skip reasons in scan timings.
+- **Policy compile cache** — `getOrCreatePolicyEngine()` reuses compiled engines across hot-reloads (`policy-engine-cache.ts`).
+- **Dashboard query cache** — Redis/local TTL cache for `GET /api/cost/breakdown` (`GUARDIAN_DASHBOARD_QUERY_CACHE`).
+- **Helm ops** — Postgres `pg_basebackup` CronJob, PgBouncer ConfigMap (`pool_mode=transaction`, `server_idle_timeout=300`).
+- **Database ops doc** — [DATABASE_OPERATIONS.md](docs/DATABASE_OPERATIONS.md) (partitioning, backups, scale test).
+- **HTTP redaction header** — `X-Guardian-Redaction-Reason` on HTTP proxy when DLP redacts responses.
+
+### Changed
+- Enterprise Helm overlay enables `GUARDIAN_SEMANTIC_SYNC_RESPONSE` + `GUARDIAN_LOCAL_SEMANTIC` by default.
+- Grafana SLO dashboard adds compliance % panel and per-tenant cost panel.
+- Scale Postgres script reports insert p99 and tenant read latency.
+
+## [2.10.0] - 2026-05-23
+
+### Added
+- **Shared MCP gateway** — `GUARDIAN_GATEWAY_MODE` / `mcp-guardian proxy --gateway`; Helm `gateway.*` ingress for `/sse` and `/message`; [GATEWAY_DEPLOY.md](docs/GATEWAY_DEPLOY.md).
+- **WebSocket in ProxyManager** — `transport: "websocket"` in MCP config; hot-reload policy across WS instances.
+- **Security swarm hardening** — per-step `spawnSync` timeouts, 2MB `maxBuffer`, stderr redaction, HMAC-signed `evasion-promotions.json`, 3-failure circuit breaker.
+- **Per-tenant budget on hot path** — `GUARDIAN_TENANT_DAILY_BUDGET_JSON` enforced before async semantic LLM (`tenant-budget.ts`).
+- **`@mcp-guardian/core` JSON Schema validation** — Ajv `validateSchema` before property traversal (`MCPG-S-005`).
+- **Grafana SLO dashboard** — `deploy/grafana/mcp-guardian-slo.json` (p99 latency, semantic skips, blocks).
+
+### Changed
+- Enterprise Helm overlay defaults: `GUARDIAN_SEMANTIC_ASYNC=true`, `GUARDIAN_GATEWAY_MODE=true`, semantic LLM rate cap.
+- Dashboard access log events chained to SIEM audit trail when `GUARDIAN_AUDIT_HASH_CHAIN` is enabled.
+- Gap closure doc: `reports/enterprise-mcp-tests-31/gap-matrix.md` (mcp tests 31 analysis package).
+
+## [2.9.7] - 2026-05-23
+
+### Added
+- **Live dashboard data** — Overview, Audit, Cost, AI, and Agent flow tabs read live `history.db` and threat state; ThreatIntel SPA; `/api/visuals/live` reuses proxy `runtimeHistoryDb` (no open/close churn).
+- **Tenant-scoped security swarm** — artifacts under `reports/tenants/<tenant>/security-swarm/`; continuous live attack runner; swarm hardening after long runs.
+- **Dashboard policy editor** — `PUT /api/policy` with YAML schema validation, atomic write, editable PolicyPanel (Save / Discard), RBAC `policy_mutate`.
+- **Free OSS cloud control plane MVP** — `apps/cloud` with OAuth stubs, policy API, Vercel deploy docs.
+- **Open-core Pro licensing** — Community tier on npm (MIT); Pro features gated at runtime via `GUARDIAN_OPEN_CORE`, cloud license API, dashboard upgrade banner.
+- **Enterprise analysis remediation** — response DLP HTML/URL decode, semantic LLM circuit breaker + per-tenant rate limits, tenant audit JSONL, `GET /api/audit`, HIPAA/PCI templates, optional Postgres RLS `006`, cost breakdown API, scale test script.
+- **`@mcp-guardian/core`** — recursive schema scan, Ollama semantic fallback, multi-step/confusable regex heuristics.
+
+### Changed
+- README aligned with tenant-scoped swarm artifact paths; Helm PDB auto-enables when `replicaCount > 1`.
+- `docs/SAAS_CONTROL_PLANE.md` Mermaid diagram uses quoted node labels (fixes GitHub render for `/api/v1/policy`).
+
 ## [2.9.6] - 2026-05-22
 
 ### Fixed

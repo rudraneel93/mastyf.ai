@@ -1,0 +1,22 @@
+# HIPAA-oriented policy overlay — merge with default-policy.yaml for regulated workloads.
+# Does not replace a full HIPAA compliance program; enables PHI pattern blocks + audit emphasis.
+version: '1.0'
+policy:
+  mode: block
+  default_action: block
+  rules:
+    - id: HIPAA-PHI-PATTERNS
+      description: Block common PHI markers in tool arguments and descriptions
+      target: all_tools
+      patterns:
+        - '(?i)medical\\s+record'
+        - '(?i)patient\\s+(?:ssn|dob|mrn|id)'
+        - '(?i)\\b(?:diagnosis|prescription|hipaa)\\b'
+      action: block
+      reason: HIPAA Protected Health Information pattern
+    - id: HIPAA-AUDIT-EMPHASIS
+      description: Ensure policy changes are audited
+      action: audit
+      metadata:
+        compliance: hipaa
+        log_immutable: true

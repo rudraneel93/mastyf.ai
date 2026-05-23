@@ -1,0 +1,13 @@
+# Data residency metadata — pair with GUARDIAN_REGION and tenant policy templates.
+policy:
+  metadata:
+    data_residency:
+      primary_region: ${GUARDIAN_REGION:-default}
+      audit_retention_days: 365
+      cross_border_replication: false
+  rules:
+    - id: RESIDENCY-AUDIT-TAG
+      description: Tag audit events with residency scope
+      action: audit
+      metadata:
+        residency_enforced: true

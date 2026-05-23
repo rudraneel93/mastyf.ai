@@ -8,6 +8,8 @@ import {
   resolveTenantContext,
   extractTenantHeader,
 } from './resolve-tenant.js';
+import { getLicenseClient } from '../license/license-client.js';
+import { isOpenCoreEnabled } from '../license/feature-tiers.js';
 
 export function jwtTenantClaimName(): string {
   return process.env['GUARDIAN_JWT_TENANT_CLAIM'] || 'tenant_id';
@@ -125,6 +127,13 @@ export function resolveProxyTenantId(opts: {
   jwtTenantId?: string;
   authenticated: boolean;
 }): string {
+  if (isMultiTenantModeEnabled() && isOpenCoreEnabled()) {
+    if (!getLicenseClient().hasFeature('multi_tenant')) {
+      throw new JwtTenantRequiredError(
+        'Multi-tenant mode requires MCP Guardian Pro (set GUARDIAN_LICENSE_KEY)',
+      );
+    }
+  }
   const hints = extractRequestTenantHints({ headers: opts.headers, meta: opts.meta });
   return resolveAuthenticatedTenant({
     jwtTenantId: opts.jwtTenantId,

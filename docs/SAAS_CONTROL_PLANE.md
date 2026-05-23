@@ -1,6 +1,13 @@
 # MCP Guardian Cloud (optional control plane)
 
-Free, open-source hosted control plane for MCP Guardian: OAuth signup, tenant provisioning, policy management, and API keys for connecting self-hosted Guardian instances. No billing or subscription required.
+Free, open-source hosted control plane for MCP Guardian: OAuth signup, tenant provisioning, policy management, and API keys for connecting self-hosted Guardian instances. Control-plane sign-in is free; optional **Pro** ($4.99 lifetime) is sold via Lemon Squeezy — see [MONETIZATION.md](./MONETIZATION.md).
+
+## Pro ($4.99 lifetime)
+
+- **Landing:** [apps/cloud](../apps/cloud) homepage (deploy to Vercel for payment-provider website URL)
+- **Checkout:** `NEXT_PUBLIC_PRO_CHECKOUT_URL` → Lemon Squeezy
+- **Buyer setup:** [PRO_SETUP.md](./PRO_SETUP.md)
+- **Deploy:** [CLOUD_VERCEL_DEPLOY.md](./CLOUD_VERCEL_DEPLOY.md)
 
 ## What it is
 

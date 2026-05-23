@@ -39,6 +39,10 @@ env -u DASHBOARD_AUTH_DISABLED ./scripts/verify-enterprise-preflight.sh
 | Item | Configuration |
 |------|----------------|
 | Multi-tenant JWT | `GUARDIAN_MULTI_TENANT_ENABLED=true`, JWT `tenant_id` claim (`GUARDIAN_JWT_TENANT_CLAIM`) |
+| Postgres RLS | `GUARDIAN_PG_RLS_ENABLED=true` with `DB_TYPE=postgres` (enterprise Helm default) |
+| Immutable audit chain | `GUARDIAN_AUDIT_HASH_CHAIN=true` — [HIPAA_AUDIT_TRAIL.md](./HIPAA_AUDIT_TRAIL.md) |
+| Semantic LLM cap | `GUARDIAN_SEMANTIC_LLM_MAX_PER_MIN=10`, `GUARDIAN_LLM_CACHE_TTL_SEC=86400` |
+| DPoP lock-free | `GUARDIAN_DPOP_LOCK_FREE=true` (jittered SET NX; set `legacy` for lock-based path) |
 | DPoP | `GUARDIAN_REQUIRE_DPOP=true` + Redis for jti dedup |
 | Cost governance | Merge `policy-templates/enterprise-cost-governance.yaml`, `GUARDIAN_DAILY_BUDGET_USD` |
 | SIEM | Structured JSON logs; `MCP_GUARDIAN_SIEM_*` exporters |
@@ -58,6 +62,10 @@ All MCP transports share `gateToolResponseText()` (DLP, chunked inspection, opti
 | `GUARDIAN_SEMANTIC_SYNC_TIMEOUT_MS` | `3000` | LLM timeout for sync response gate |
 | `GUARDIAN_LOCAL_SEMANTIC` | on | Heuristic scorer when LLM absent |
 | `GUARDIAN_TENANT_SEMANTIC_JSON` | — | Per-tenant `syncResponse`, `asyncAudit`, `strict`, etc. |
+| `GUARDIAN_SEMANTIC_ASYNC` | off (set `true` in enterprise Helm) | Post-hoc LLM audit; lowers p99 vs sync semantic |
+| `GUARDIAN_TENANT_DAILY_BUDGET_JSON` | — | Per-tenant USD caps enforced before semantic LLM |
+| `GUARDIAN_GATEWAY_MODE` | off | SSE/WebSocket-only shared ingress (no stdio children) |
+| `GUARDIAN_SWARM_EVASION_SIGNING_KEY` | — | HMAC verify for `evasion-promotions.json` in CI |
 | `GUARDIAN_STREAMABLE_HTTP_UPSTREAM_RELAY` | off | POST `/mcp` relay + response gate for streamable HTTP proxy |
 
 ## OAuth hardening

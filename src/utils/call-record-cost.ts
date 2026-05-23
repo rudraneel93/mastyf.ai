@@ -21,6 +21,7 @@ import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from './metrics.js';
 import { broadcastDashboardEvent, emitFlowStep } from './dashboard-events.js';
 import { enqueueAuditWrite, initAuditWriteQueue } from '../database/audit-write-queue.js';
+import { recordTenantDailySpend } from '../services/tenant-budget.js';
 
 export async function enrichCallRecord(
   record: ProxyCallRecord,
@@ -77,6 +78,9 @@ export async function persistCallRecord(
       : undefined;
 
   enqueueAuditWrite({ record: enriched, costRecord: costJob });
+  if (enriched.costUsd && enriched.costUsd > 0) {
+    recordTenantDailySpend(enriched.tenantId, enriched.costUsd);
+  }
 
   broadcastDashboardEvent({
     type: enriched.blocked ? 'policy-block' : 'audit:decision',
@@ -115,6 +119,7 @@ export async function persistCallRecord(
       { server_name: enriched.serverName, model: enriched.model || 'unknown' },
       enriched.costUsd,
     );
+    Metrics.recordCostSpendUsd(enriched.costUsd, enriched.tenantId);
   }
   return enriched;
 }

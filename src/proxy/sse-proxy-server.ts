@@ -16,6 +16,7 @@ import { resolveModelId, resolveModelIdForServer } from '../config/llm-config.js
 import type { MtlsConfig } from '../utils/mtls-config.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
 import { resolveTenantContext, InvalidTenantIdError } from '../tenant/resolve-tenant.js';
+import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 
 interface SseProxyOptions {
   upstreamUrl: string;
@@ -502,7 +503,7 @@ export class SseProxyServer extends EventEmitter {
           'Content-Length': Buffer.byteLength(payload),
           ...(this.opts.authHeader ? { Authorization: this.opts.authHeader } : {}),
         },
-        timeout: 30_000,
+        timeout: getUpstreamTimeoutMs(),
       };
 
       const fwdAgent = getMtlsAgent();

@@ -49,6 +49,10 @@ export REDIS_CLUSTER_NODES=redis-0:6379,redis-1:6379,redis-2:6379
 export GUARDIAN_STRICT_MODE=true
 ```
 
+Guardian uses a single ioredis `Cluster` client (`src/utils/redis-client.ts`). Hash tags are not required for rate-limit keys today; keep all Guardian pods on the same cluster endpoint list.
+
+**Smoke test (no live cluster):** `pnpm test tests/utils/redis-client.test.ts` validates `parseClusterNodes` and mode priority. For a live cluster, use your operator’s Redis Cluster chart or `docker run` three nodes, export `REDIS_CLUSTER_NODES`, and run `pnpm enterprise:preflight`.
+
 ## Strict mode
 
 With `GUARDIAN_STRICT_MODE=true`, Guardian exits at startup in Kubernetes / multi-replica when Redis is unreachable or not configured.

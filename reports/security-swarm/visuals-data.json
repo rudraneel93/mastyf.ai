@@ -1,17 +1,20 @@
 {
-  "generatedAt": "2026-05-22T12:59:52.348Z",
+  "generatedAt": "2026-05-23T06:42:01.931Z",
   "windowDays": 7,
   "meta": {
     "dbPath": "/Users/rudraneeldas/.mcp-guardian/history.db",
+    "tenantId": "default",
     "hasTraffic": true,
     "hasInstantLearning": true,
-    "hasSemantic": true,
-    "emptyReasons": {}
+    "hasSemantic": false,
+    "emptyReasons": {
+      "semantic": "No calibration.json or empty semantic outcomes."
+    }
   },
   "traffic": {
     "hasData": true,
-    "totalCalls": 2825,
-    "totalBlocked": 246,
+    "totalCalls": 7675,
+    "totalBlocked": 5117,
     "hourly": [
       {
         "hourStart": "2026-05-16T08:00:00.000Z",
@@ -54,47 +57,65 @@
         "latencyP95Ms": 33458
       },
       {
-        "hourStart": "2026-05-22T04:00:00.000Z",
-        "calls": 34,
-        "blocked": 30,
-        "passed": 4,
-        "passRatePct": 11.8,
-        "costUsd": 0.000799,
-        "latencyP50Ms": 35,
-        "latencyP95Ms": 163
-      },
-      {
-        "hourStart": "2026-05-22T05:00:00.000Z",
-        "calls": 36,
-        "blocked": 30,
-        "passed": 6,
-        "passRatePct": 16.7,
-        "costUsd": 0.001108,
-        "latencyP50Ms": 41,
-        "latencyP95Ms": 174
-      },
-      {
-        "hourStart": "2026-05-22T06:00:00.000Z",
-        "calls": 113,
-        "blocked": 95,
-        "passed": 18,
-        "passRatePct": 15.9,
-        "costUsd": 0.003425,
-        "latencyP50Ms": 35,
-        "latencyP95Ms": 148
-      },
-      {
         "hourStart": "2026-05-22T07:00:00.000Z",
-        "calls": 16,
-        "blocked": 10,
-        "passed": 6,
-        "passRatePct": 37.5,
-        "costUsd": 0.000765,
-        "latencyP50Ms": 39,
+        "calls": 4,
+        "blocked": 0,
+        "passed": 4,
+        "passRatePct": 100,
+        "costUsd": 0.000396,
+        "latencyP50Ms": 61,
         "latencyP95Ms": 142
+      },
+      {
+        "hourStart": "2026-05-22T12:00:00.000Z",
+        "calls": 2744,
+        "blocked": 2742,
+        "passed": 2,
+        "passRatePct": 0.1,
+        "costUsd": 0.047965,
+        "latencyP50Ms": 21,
+        "latencyP95Ms": 22
+      },
+      {
+        "hourStart": "2026-05-22T13:00:00.000Z",
+        "calls": 2268,
+        "blocked": 2266,
+        "passed": 2,
+        "passRatePct": 0.1,
+        "costUsd": 0.039797,
+        "latencyP50Ms": 21,
+        "latencyP95Ms": 22
+      },
+      {
+        "hourStart": "2026-05-23T00:00:00.000Z",
+        "calls": 24,
+        "blocked": 21,
+        "passed": 3,
+        "passRatePct": 12.5,
+        "costUsd": 0.000586,
+        "latencyP50Ms": 46,
+        "latencyP95Ms": 150
+      },
+      {
+        "hourStart": "2026-05-23T01:00:00.000Z",
+        "calls": 9,
+        "blocked": 7,
+        "passed": 2,
+        "passRatePct": 22.2,
+        "costUsd": 0.000321,
+        "latencyP50Ms": 37,
+        "latencyP95Ms": 160
       }
     ],
     "byServer": [
+      {
+        "serverName": "official-filesystem",
+        "calls": 5000,
+        "blocked": 4994,
+        "costUsd": 0.087868,
+        "latencyP50Ms": 21,
+        "latencyP95Ms": 22
+      },
       {
         "serverName": "bench-echo",
         "calls": 2584,
@@ -104,12 +125,12 @@
         "latencyP95Ms": 33174
       },
       {
-        "serverName": "official-filesystem",
-        "calls": 195,
-        "blocked": 165,
-        "costUsd": 0.005701,
-        "latencyP50Ms": 35,
-        "latencyP95Ms": 154
+        "serverName": "adv-e2e-echo",
+        "calls": 30,
+        "blocked": 30,
+        "costUsd": 0.000501,
+        "latencyP50Ms": 48,
+        "latencyP95Ms": 121
       },
       {
         "serverName": "filesystem",
@@ -118,6 +139,14 @@
         "costUsd": 0.000789,
         "latencyP50Ms": 2,
         "latencyP95Ms": 142
+      },
+      {
+        "serverName": "e2e-echo",
+        "calls": 15,
+        "blocked": 12,
+        "costUsd": 0.0003,
+        "latencyP50Ms": 150,
+        "latencyP95Ms": 184
       },
       {
         "serverName": "github",
@@ -146,59 +175,69 @@
     ],
     "topTools": [
       {
-        "tool": "search",
-        "count": 2594
-      },
-      {
         "tool": "read_text_file",
-        "count": 147
+        "count": 2759
       },
       {
-        "tool": "write_file",
-        "count": 32
+        "tool": "search",
+        "count": 2618
       },
       {
         "tool": "list_directory",
-        "count": 19
+        "count": 2241
+      },
+      {
+        "tool": "execute_command",
+        "count": 10
       },
       {
         "tool": "read_file",
+        "count": 9
+      },
+      {
+        "tool": "write_file",
         "count": 6
+      },
+      {
+        "tool": "puppeteer_navigate",
+        "count": 5
+      },
+      {
+        "tool": "query",
+        "count": 5
       },
       {
         "tool": "write_to_file",
         "count": 4
       },
       {
-        "tool": "execute_command",
-        "count": 4
+        "tool": "echo",
+        "count": 3
+      },
+      {
+        "tool": "create_issue",
+        "count": 3
       },
       {
         "tool": "get_file_contents",
-        "count": 2
-      },
-      {
-        "tool": "search_repositories",
-        "count": 2
-      },
-      {
-        "tool": "search_files",
-        "count": 2
-      },
-      {
-        "tool": "execute",
-        "count": 2
-      },
-      {
-        "tool": "list_tables",
         "count": 2
       }
     ],
     "topBlockRules": [
       {
         "rule": "semantic-path-guard",
-        "count": 111,
+        "count": 4129,
         "plainEnglish": "semantic-path-guard"
+      },
+      {
+        "rule": "encoding-evasion-guard",
+        "count": 623,
+        "plainEnglish": "encoding-evasion-guard"
+      },
+      {
+        "rule": "timing-enumeration-guard",
+        "count": 242,
+        "plainEnglish": "timing-enumeration-guard"
       },
       {
         "rule": "rate-limit",
@@ -206,62 +245,52 @@
         "plainEnglish": "rate-limit"
       },
       {
-        "rule": "multimodal-injection",
-        "count": 32,
-        "plainEnglish": "multimodal-injection"
-      },
-      {
-        "rule": "request-prompt-injection",
-        "count": 21,
-        "plainEnglish": "Prompt injection in tool args"
-      },
-      {
         "rule": "cve-gate",
         "count": 20,
         "plainEnglish": "cve-gate"
       },
       {
+        "rule": "request-prompt-injection",
+        "count": 12,
+        "plainEnglish": "Prompt injection in tool args"
+      },
+      {
         "rule": "deny-dangerous-tools",
-        "count": 4,
+        "count": 10,
         "plainEnglish": "deny-dangerous-tools"
       },
       {
-        "rule": "block-shell-injection",
-        "count": 3,
-        "plainEnglish": "block-shell-injection"
+        "rule": "multimodal-injection",
+        "count": 9,
+        "plainEnglish": "multimodal-injection"
       },
       {
-        "rule": "secret-scan",
-        "count": 2,
-        "plainEnglish": "Secret scan"
+        "rule": "semantic-url-guard",
+        "count": 6,
+        "plainEnglish": "semantic-url-guard"
       },
       {
-        "rule": "block-path-traversal",
-        "count": 2,
-        "plainEnglish": "block-path-traversal"
-      },
-      {
-        "rule": "default",
-        "count": 1,
-        "plainEnglish": "default"
+        "rule": "semantic-shell-guard",
+        "count": 6,
+        "plainEnglish": "Semantic shell guard"
       }
     ]
   },
   "instantLearning": {
     "source": "live",
-    "totalEvents": 315,
-    "queuedSuggestions": 11,
+    "totalEvents": 130,
+    "queuedSuggestions": 26,
     "blocksPerMinute": [
       {
         "t": 0,
-        "value": 12
+        "value": 7
+      },
+      {
+        "t": 60000,
+        "value": 2
       },
       {
         "t": 120000,
-        "value": 1
-      },
-      {
-        "t": 240000,
         "value": 1
       }
     ],
@@ -270,94 +299,74 @@
         "key": "semantic-path-guard:read_text_file",
         "rule": "semantic-path-guard",
         "tool": "read_text_file",
-        "count": 110
-      },
-      {
-        "key": "multimodal-injection:write_file",
-        "rule": "multimodal-injection",
-        "tool": "write_file",
-        "count": 32
-      },
-      {
-        "key": "request-prompt-injection:read_text_file",
-        "rule": "request-prompt-injection",
-        "tool": "read_text_file",
-        "count": 19
-      },
-      {
-        "key": "request-timeout:hang",
-        "rule": "request-timeout",
-        "tool": "hang",
-        "count": 17
-      },
-      {
-        "key": "tool-fingerprint-mismatch:search",
-        "rule": "tool-fingerprint-mismatch",
-        "tool": "search",
-        "count": 17
+        "count": 8
       },
       {
         "key": "request-prompt-injection:search",
         "rule": "request-prompt-injection",
         "tool": "search",
-        "count": 17
+        "count": 6
       },
       {
-        "key": "request-prompt-injection:search_files",
+        "key": "request-timeout:hang",
+        "rule": "request-timeout",
+        "tool": "hang",
+        "count": 4
+      },
+      {
+        "key": "tool-fingerprint-mismatch:search",
+        "rule": "tool-fingerprint-mismatch",
+        "tool": "search",
+        "count": 4
+      },
+      {
+        "key": "multimodal-injection:write_file",
+        "rule": "multimodal-injection",
+        "tool": "write_file",
+        "count": 4
+      },
+      {
+        "key": "request-prompt-injection:read_text_file",
         "rule": "request-prompt-injection",
-        "tool": "search_files",
+        "tool": "read_text_file",
         "count": 2
       },
       {
-        "key": "semantic-path-guard:list_directory",
-        "rule": "semantic-path-guard",
-        "tool": "list_directory",
+        "key": "deny-eval:eval",
+        "rule": "deny-eval",
+        "tool": "eval",
         "count": 1
       },
       {
-        "key": "default:list_allowed_directories",
-        "rule": "default",
-        "tool": "list_allowed_directories",
+        "key": "deny-eval:execute_command",
+        "rule": "deny-eval",
+        "tool": "execute_command",
+        "count": 1
+      },
+      {
+        "key": "semantic-shell-guard:search",
+        "rule": "semantic-shell-guard",
+        "tool": "search",
         "count": 1
       }
     ],
-    "classConfidence": []
+    "classConfidence": [
+      {
+        "class": "prompt_injection",
+        "confidence": 0.46
+      }
+    ]
   },
   "semantic": {
-    "hasData": true,
-    "totals": {
-      "records": 13,
-      "flagged": 11,
-      "labeled": 11,
-      "truePositive": 10,
-      "falsePositive": 0
-    },
-    "confidenceBuckets": [
-      {
-        "bucket": "0.85-1.0",
-        "count": 5
-      }
-    ],
-    "labelMix": [
-      {
-        "label": "true_positive",
-        "count": 5
-      }
-    ],
-    "avgFlagConfidence": 0.88
+    "hasData": false,
+    "totals": {},
+    "confidenceBuckets": [],
+    "labelMix": [],
+    "avgFlagConfidence": 0
   },
   "regression": {
-    "gates": {
-      "corpus": true,
-      "parity": true,
-      "steps": true,
-      "scout": true,
-      "bypassCount": 0,
-      "netNewBypassCount": 0,
-      "maxBypasses": 0,
-      "bypassBaseline": true
-    },
-    "overall": true,
+    "gates": null,
+    "overall": null,
     "categoryRecall": [
       {
         "category": "credential-exfil",
@@ -395,33 +404,7 @@
         "total": 26
       }
     ],
-    "userServers": [
-      {
-        "serverName": "echo-test",
-        "status": "failed",
-        "toolCount": 0
-      },
-      {
-        "serverName": "filesystem",
-        "status": "ok",
-        "toolCount": 14
-      },
-      {
-        "serverName": "fixture_echo",
-        "status": "ok",
-        "toolCount": 3
-      },
-      {
-        "serverName": "github",
-        "status": "ok",
-        "toolCount": 26
-      },
-      {
-        "serverName": "puppeteer",
-        "status": "ok",
-        "toolCount": 7
-      }
-    ]
+    "userServers": []
   },
   "pipeline": {
     "phases": [
@@ -452,32 +435,7 @@
       }
     ],
     "jobState": "running",
-    "stepTimings": [
-      {
-        "label": "scout-audit",
-        "elapsedSec": 1
-      },
-      {
-        "label": "pnpm-build",
-        "elapsedSec": 3.2
-      },
-      {
-        "label": "vitest-policy-proxy-utils",
-        "elapsedSec": 23.7
-      },
-      {
-        "label": "corpus-eval",
-        "elapsedSec": 1.4
-      },
-      {
-        "label": "adversarial-harness-full",
-        "elapsedSec": 323.3
-      },
-      {
-        "label": "attack-learning-sim",
-        "elapsedSec": 0.4
-      }
-    ],
-    "totalSec": 353
+    "stepTimings": [],
+    "totalSec": 0
   }
 }

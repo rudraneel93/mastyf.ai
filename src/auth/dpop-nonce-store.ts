@@ -42,9 +42,39 @@ export class InMemoryDPoPNonceStore implements DPoPNonceStore {
 
 const DPOP_LOCK_MAX_ATTEMPTS = 3;
 const DPOP_LOCK_BASE_DELAY_MS = 10;
+const DPOP_LOCK_FREE_MAX_ATTEMPTS = 5;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function isDpopLockFreeEnabled(): boolean {
+  if (process.env['GUARDIAN_DPOP_LOCK_FREE'] === 'false') return false;
+  if (process.env['GUARDIAN_DPOP_LOCK_FREE'] === 'true') return true;
+  return process.env['GUARDIAN_DPOP_LOCK_FREE'] !== 'legacy';
+}
+
+/**
+ * Lock-free jti claim: atomic SET NX + jittered retry (§6.2 DPoP contention).
+ */
+export async function claimDpopJtiLockFree(
+  redis: Pick<Redis, 'set' | 'get'>,
+  keyPrefix: string,
+  jti: string,
+  ttlSeconds: number,
+  tenantId: string = DEFAULT_TENANT_ID,
+): Promise<boolean> {
+  const scopedPrefix = `${keyPrefix}tenant:${tenantId || DEFAULT_TENANT_ID}:`;
+  const dataKey = `${scopedPrefix}${jti}`;
+
+  for (let attempt = 0; attempt < DPOP_LOCK_FREE_MAX_ATTEMPTS; attempt++) {
+    const ok = await redis.set(dataKey, '1', 'EX', ttlSeconds, 'NX');
+    if (ok === 'OK') return true;
+    const existing = await redis.get(dataKey);
+    if (existing) return false;
+    await sleep(retryDelayWithJitter(attempt, DPOP_LOCK_BASE_DELAY_MS));
+  }
+  return false;
 }
 
 /** Redis claim with short-lived lock — reduces replay window under replication lag. */
@@ -99,6 +129,9 @@ export class RedisDPoPNonceStore implements DPoPNonceStore {
       if (clients.length > 0) {
         return claimDpopJtiQuorum(clients, this.prefix, jti, this.ttlSeconds, tenantId);
       }
+    }
+    if (isDpopLockFreeEnabled()) {
+      return claimDpopJtiLockFree(this.redis, this.prefix, jti, this.ttlSeconds, tenantId);
     }
     return claimDpopJtiOnRedis(this.redis, this.prefix, jti, this.ttlSeconds, tenantId);
   }

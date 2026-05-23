@@ -1,4 +1,14 @@
 import type { Issue, ToolDefinition } from "./types.js";
+import { hasConfusableDelta, normalizeUnicode } from "./confusables.js";
+
+export interface RegexScanOptions {
+  /** TR39 confusables + NFKC before pattern match (default: true). */
+  unicodeStrict?: boolean;
+}
+
+/** Safe documentation / schema hosts excluded from MCPG-R-020. */
+const SAFE_URL_HOSTS =
+  "schema\\.org|json-schema\\.org|openapi\\.org|docs\\.openai\\.com";
 
 interface PatternRule {
   id: string;               // Stable MCPG-R-### ID
@@ -56,7 +66,7 @@ const CRITICAL_RULES: PatternRule[] = [
 
   // Exfiltration
   { id: "MCPG-R-020", category: "exfiltration", severity: "critical",
-    pattern: /https?:\/\/(?!(?:schema\.org|json-schema\.org|openapi\.org))\S+/i,
+    pattern: new RegExp(`https?:\\/\\/(?!(?:${SAFE_URL_HOSTS}))\\S+`, "i"),
     message: "Embedded URL — potential exfiltration endpoint" },
   { id: "MCPG-R-021", category: "exfiltration", severity: "critical",
     pattern: /send\s+(?:the\s+)?(?:result|data|output|response|content|this)\s+to/i,
@@ -126,11 +136,66 @@ const WARNING_RULES: PatternRule[] = [
     message: "HTML comment in tool description — potential hidden instruction" },
 ];
 
+const MULTI_STEP_CHAIN = /\bbefore\b[\s\S]{0,120}?\bthen\b/i;
+const FIRST_THEN_CHAIN = /\bfirst\b[\s\S]{0,120}?\bthen\b/i;
+const CONFUSABLE_BEFORE = /\bb[\u0435e]fore\b/i;
+
 const ALL_RULES = [...CRITICAL_RULES, ...WARNING_RULES];
 
-export function runRegexScan(tool: ToolDefinition): Issue[] {
+export function runRegexScan(
+  tool: ToolDefinition,
+  options: RegexScanOptions = {},
+): Issue[] {
   const issues: Issue[] = [];
-  const text = tool.description ?? "";
+  const raw = tool.description ?? "";
+  const unicodeStrict = options.unicodeStrict !== false;
+  const text = unicodeStrict ? normalizeUnicode(raw) : raw;
+
+  if (unicodeStrict && hasConfusableDelta(raw)) {
+    issues.push({
+      id: "MCPG-R-092",
+      layer: "regex",
+      severity: "warning",
+      category: "confusable",
+      message: "Unicode confusable / homoglyph obfuscation in description (TR39 normalized)",
+      evidence: raw.slice(0, 80),
+      confidence: 0.85,
+    });
+  }
+
+  if (MULTI_STEP_CHAIN.test(text)) {
+    issues.push({
+      id: "MCPG-R-090",
+      layer: "regex",
+      severity: "critical",
+      category: "cross-tool",
+      message: "Multi-step tool chain directive (before…then) in description",
+      evidence: text.match(MULTI_STEP_CHAIN)?.[0]?.slice(0, 80) || "",
+      confidence: 0.9,
+    });
+  }
+  if (FIRST_THEN_CHAIN.test(text)) {
+    issues.push({
+      id: "MCPG-R-093",
+      layer: "regex",
+      severity: "critical",
+      category: "cross-tool",
+      message: "Multi-step tool chain directive (first…then) in description",
+      evidence: text.match(FIRST_THEN_CHAIN)?.[0]?.slice(0, 80) || "",
+      confidence: 0.9,
+    });
+  }
+  if (CONFUSABLE_BEFORE.test(raw) || CONFUSABLE_BEFORE.test(text)) {
+    issues.push({
+      id: "MCPG-R-091",
+      layer: "regex",
+      severity: "warning",
+      category: "confusable",
+      message: "Possible homoglyph obfuscation in description",
+      evidence: "before (mixed script)",
+      confidence: 0.75,
+    });
+  }
 
   for (const rule of ALL_RULES) {
     const match = rule.pattern.exec(text);

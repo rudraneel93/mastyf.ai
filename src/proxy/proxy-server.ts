@@ -33,6 +33,7 @@ import {
 import { isSemanticAsyncEnabled } from '../ai/async-semantic-audit.js';
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { injectRedactionMeta } from '../utils/redaction-meta.js';
 import {
   flowSessionKey,
   recordSessionToolCall,
@@ -368,7 +369,8 @@ export class McpProxyServer {
 
             if (gate.outcome.action === 'redact') {
               try {
-                msg.result = JSON.parse(gate.outcome.body);
+                const parsed = JSON.parse(gate.outcome.body) as unknown;
+                msg.result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
                 line = JSON.stringify(msg);
               } catch {
                 /* keep upstream */
@@ -392,15 +394,14 @@ export class McpProxyServer {
                 this.spawnEnv,
                 this.spawnArgs,
               ).catch(() => {});
-              Metrics.blockedRequestsTotal.inc(
-                Metrics.withTenantMetricLabels(
-                  {
-                    server_name: this.serverName,
-                    block_reason: gate.outcome.rule,
-                    rule: gate.outcome.rule,
-                  },
-                  reqCtx.tenantId,
-                ),
+              Metrics.recordProxyBlock(
+                {
+                  server_name: this.serverName,
+                  block_reason: gate.outcome.rule,
+                  rule: gate.outcome.rule,
+                  tenant_id: reqCtx.tenantId,
+                },
+                'response_gate',
               );
               Metrics.requestsTotal.inc(
                 Metrics.withTenantMetricLabels(
@@ -479,11 +480,15 @@ export class McpProxyServer {
       const reason = `Upstream request timed out after ${timeoutMs}ms`;
       this.recordDeniedCall(toolName, reqCtx?.requestTokens ?? 0, durationMs, 'request-timeout', reason, undefined, reqCtx?.tenantId);
       this.breakerFor(reqCtx?.tenantId || this.defaultTenantId).recordFailure();
-      Metrics.blockedRequestsTotal.inc({
-        server_name: this.serverName,
-        block_reason: 'request_timeout',
-        rule: 'request-timeout',
-      });
+      Metrics.recordProxyBlock(
+        {
+          server_name: this.serverName,
+          block_reason: 'request_timeout',
+          rule: 'request-timeout',
+          tenant_id: reqCtx?.tenantId,
+        },
+        'timeout',
+      );
       Metrics.requestsTotal.inc({
         server_name: this.serverName,
         decision: 'block',
@@ -608,11 +613,15 @@ export class McpProxyServer {
             rule: 'tool-fingerprint-mismatch',
             policy: this.policyEngine?.getMode() ?? 'block',
           });
-          Metrics.blockedRequestsTotal.inc({
-            server_name: this.serverName,
-            block_reason: 'rug_pull',
-            rule: 'tool-fingerprint-mismatch',
-          });
+          Metrics.recordProxyBlock(
+            {
+              server_name: this.serverName,
+              block_reason: 'rug_pull',
+              rule: 'tool-fingerprint-mismatch',
+              tenant_id: this.defaultTenantId,
+            },
+            'rug_pull',
+          );
           return;
         }
 
@@ -700,7 +709,15 @@ export class McpProxyServer {
                 blockReason: `dlp:${secretFindings.length}_secrets_in_args`,
                 proxyLatencyMs: Date.now() - proxyStartTime,
               });
-              Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: 'dlp_secrets_in_args', rule: 'secret-scan' });
+              Metrics.recordProxyBlock(
+                {
+                  server_name: this.serverName,
+                  block_reason: 'dlp_secrets_in_args',
+                  rule: 'secret-scan',
+                  tenant_id: requestTenantId,
+                },
+                'dlp',
+              );
               Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: 'true' });
               return;
             }
@@ -833,7 +850,15 @@ export class McpProxyServer {
               blockReason: `cve:${cveReason}`,
               proxyLatencyMs: Date.now() - proxyStartTime,
             });
-            Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: 'cve_gate', rule: 'cve-gate' });
+            Metrics.recordProxyBlock(
+              {
+                server_name: this.serverName,
+                block_reason: 'cve_gate',
+                rule: 'cve-gate',
+                tenant_id: requestTenantId,
+              },
+              'cve',
+            );
             Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
             this.sendError(msg.id, -32001, `Blocked by MCP Guardian CVE policy: ${cveReason}`, {
               rule: 'cve-gate',
@@ -943,7 +968,14 @@ export class McpProxyServer {
               proxyLatencyMs: Date.now() - proxyStartTime,
             });
 
-            Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: blockReason || 'policy', rule: decision.rule });
+            Metrics.recordProxyBlock(
+              {
+                server_name: this.serverName,
+                block_reason: blockReason || 'policy',
+                rule: decision.rule,
+                tenant_id: context.tenantId,
+              },
+            );
             Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
             void alertPolicyBlock(this.serverName, toolName, decision.rule, decision.reason, requestId);
             this.sendError(msg.id, -32001, `Blocked by MCP Guardian policy: ${decision.reason}`, {

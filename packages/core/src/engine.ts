@@ -4,14 +4,20 @@ import type {
 import { runRegexScan } from "./regex-scanner.js";
 import { runSchemaScan } from "./schema-scanner.js";
 import { runSemanticScan, type SemanticScanOptions } from "./semantic-scanner.js";
+import { tryAcquireSemanticSlot, releaseSemanticSlot, semanticQueueMax, semanticPerTenantMax } from "./semantic-queue.js";
+import { isCoreSemanticCircuitOpen } from "./semantic-circuit-breaker.js";
 
 export interface ScanEngineOptions {
+  /** TR39 confusables before offline regex (default: true). */
+  unicodeStrict?: boolean;
   semantic?: SemanticScanOptions & {
     // Run semantic only if regex/schema already fired (default: false for full coverage)
     onlyOnHits?: boolean;
     // Minimum confidence to report a semantic issue (default: 0.7)
     confidenceThreshold?: number;
   };
+  /** Optional tenant id for per-tenant semantic queue caps */
+  tenantId?: string;
   // Skip layers entirely
   skipRegex?: boolean;
   skipSchema?: boolean;
@@ -94,7 +100,7 @@ export async function scanTool(
   if (runRegex && runSchema) {
     const t0 = performance.now();
     const [regex, schema] = await Promise.all([
-      Promise.resolve(runRegexScan(tool)),
+      Promise.resolve(runRegexScan(tool, { unicodeStrict: options.unicodeStrict })),
       Promise.resolve(runSchemaScan(tool)),
     ]);
     regexIssues = regex;
@@ -105,7 +111,7 @@ export async function scanTool(
   } else {
     if (runRegex) {
       const t0 = performance.now();
-      regexIssues = runRegexScan(tool);
+      regexIssues = runRegexScan(tool, { unicodeStrict: options.unicodeStrict });
       timings.regex = { ran: true, durationMs: Math.round(performance.now() - t0) };
     }
     if (runSchema) {
@@ -124,16 +130,47 @@ export async function scanTool(
   );
 
   if (shouldRunSemantic) {
-    const t0 = performance.now();
-    const rawSemantic = await runSemanticScan(
-      tool,
-      priorHits,
-      options.semantic ?? {}
-    );
-    semanticIssues = rawSemantic.filter(
-      i => i.layer !== "semantic" || i.confidence >= confidenceThreshold
-    );
-    timings.semantic = { ran: true, durationMs: Math.round(performance.now() - t0), skipped: undefined };
+    if (isCoreSemanticCircuitOpen()) {
+      timings.semantic = {
+        ran: false,
+        durationMs: 0,
+        skipped: "semantic circuit breaker open",
+      };
+    } else if (!tryAcquireSemanticSlot(options.tenantId)) {
+      const cap = options.tenantId
+        ? `per-tenant cap (${semanticPerTenantMax()})`
+        : `global queue cap (${semanticQueueMax()})`;
+      timings.semantic = {
+        ran: false,
+        durationMs: 0,
+        skipped: cap,
+      };
+    } else {
+      try {
+        const t0 = performance.now();
+        const rawSemantic = await runSemanticScan(
+          tool,
+          priorHits,
+          options.semantic ?? {}
+        );
+        const skipMeta = rawSemantic.find((i) => i.category === "configuration" || i.category === "error");
+        if (skipMeta && skipMeta.layer === "semantic") {
+          timings.semantic = {
+            ran: false,
+            durationMs: Math.round(performance.now() - t0),
+            skipped: skipMeta.message,
+          };
+          semanticIssues = rawSemantic.filter((i) => i.category !== "configuration" && i.category !== "error");
+        } else {
+          semanticIssues = rawSemantic.filter(
+            i => i.layer !== "semantic" || i.confidence >= confidenceThreshold
+          );
+          timings.semantic = { ran: true, durationMs: Math.round(performance.now() - t0), skipped: undefined };
+        }
+      } finally {
+        releaseSemanticSlot(options.tenantId);
+      }
+    }
   } else if (options.skipSemantic) {
     timings.semantic = { ran: false, durationMs: 0, skipped: "explicitly disabled" };
   } else {

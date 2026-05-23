@@ -22,7 +22,8 @@ describe('LicenseClient', () => {
     expect(isLicenseEnforcementEnabled()).toBe(false);
   });
 
-  it('treats as licensed when enforcement disabled', () => {
+  it('treats as licensed when enforcement and open-core disabled', () => {
+    process.env.GUARDIAN_OPEN_CORE = 'false';
     const client = new LicenseClient({
       requireLicense: false,
       refreshSeconds: 300,

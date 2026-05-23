@@ -5,7 +5,7 @@
  * Usage:
  *   node security-swarm/run-analysis.mjs [--full] [--nightly] [--skip-live] [--skip-swarm] [--quiet] [--continuous] [--skip-continuous]
  */
-import { spawnSync } from 'node:child_process';
+import { runStep } from './lib/run-step.mjs';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,18 +79,19 @@ function setPhase(phaseId) {
 function run(cmd, args, opts = {}) {
   const label = opts.label || `${cmd} ${args.join(' ')}`;
   log(`▶ ${label}`);
-  const r = spawnSync(cmd, args, {
+  const r = runStep(cmd, args, {
     cwd: opts.cwd ?? REPO_ROOT,
-    encoding: QUIET ? 'utf-8' : undefined,
+    label,
+    stepKey: opts.stepKey ?? label,
+    live: !QUIET,
     env: { ...process.env, ...opts.env },
-    stdio: QUIET ? ['ignore', 'pipe', 'pipe'] : 'inherit',
   });
   if (QUIET) {
     if (r.stdout) appendJobLog(String(r.stdout).slice(-8000));
     if (r.stderr) appendJobLog(String(r.stderr).slice(-8000));
   }
-  if (r.status !== 0 && !opts.allowFail) {
-    throw new Error(`${label} exited ${r.status}`);
+  if ((r.status !== 0 || r.timedOut) && !opts.allowFail) {
+    throw new Error(`${label} exited ${r.status ?? 1}${r.timedOut ? ' (timeout)' : ''}`);
   }
   return r.status ?? 1;
 }

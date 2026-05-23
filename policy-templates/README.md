@@ -6,6 +6,9 @@ Optional YAML fragments to merge with `default-policy.yaml` (or your own base po
 |----------|---------|--------|
 | [http-tools-policy.yaml](./http-tools-policy.yaml) | SSRF guards for outbound HTTP MCP tools | `GUARDIAN_HTTP_TOOLS_POLICY=true` |
 | [enterprise-cost-governance.yaml](./enterprise-cost-governance.yaml) | Per-tool rate limits + token budgets | Merge via second `--policy` flag |
+| [hipaa-compliance.yaml](./hipaa-compliance.yaml) | PHI pattern blocks + audit metadata | Regulated workloads |
+| [pci-dss-masking.yaml](./pci-dss-masking.yaml) | Cardholder data block/redact rules | Payment-adjacent MCP tools |
+| [data-residency.yaml](./data-residency.yaml) | Residency metadata flags + doc hooks | Multi-region governance |
 
 ## Enterprise cost governance
 

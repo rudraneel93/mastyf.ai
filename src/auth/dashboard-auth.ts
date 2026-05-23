@@ -89,7 +89,12 @@ export class DashboardAuth {
     this.config = {
       enabled,
       apiKey: config?.apiKey ?? process.env['DASHBOARD_API_KEY'] ?? undefined,
-      jwtSecret: config?.jwtSecret ?? process.env['DASHBOARD_JWT_SECRET'] ?? undefined,
+      jwtSecret:
+        config?.jwtSecret
+        ?? process.env['DASHBOARD_JWT_SECRET']
+        ?? process.env['GUARDIAN_CLOUD_JWT_SECRET']
+        ?? process.env['LICENSE_JWT_SECRET']
+        ?? undefined,
       sessionTtlSeconds: config?.sessionTtlSeconds ?? 3600,
       allowedOrigins: config?.allowedOrigins ?? (process.env['DASHBOARD_ALLOWED_ORIGINS']
         ? process.env['DASHBOARD_ALLOWED_ORIGINS'].split(',').map(s => s.trim())
@@ -281,8 +286,9 @@ export class DashboardAuth {
     const body = req.body || {};
 
     // Invalidate pre-login session (session fixation mitigation)
-    if (req.existingSessionToken) {
-      this.activeTokens.delete(req.existingSessionToken);
+    const priorSession = req.existingSessionToken;
+    if (priorSession) {
+      this.activeTokens.delete(priorSession);
     }
 
     // Check API key shortcut
@@ -309,6 +315,11 @@ export class DashboardAuth {
     ) {
       const roles = this.sessionRolesFromLogin(body as { role?: string; roles?: string });
       const token = this.createSessionToken(tenantId, roles);
+      if (priorSession) {
+        void import('../audit/dashboard-access-log.js').then(({ appendSessionRotateAudit }) =>
+          appendSessionRotateAudit({ tenantId, oldToken: priorSession, newToken: token }),
+        );
+      }
       StructuredLogger.info({
         event: 'dashboard_login',
         ip,

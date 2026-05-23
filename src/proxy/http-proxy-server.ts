@@ -31,7 +31,9 @@ import {
 } from './http-proxy-security.js';
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
+import { formatRedactionHeader, injectRedactionMeta } from '../utils/redaction-meta.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
+import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
 
 /**
  * HTTP/SSE Proxy for remote MCP servers.
@@ -281,7 +283,14 @@ export class HttpProxyServer {
           const decision = await this.policyEngine.evaluateAsync(context);
 
           if (decision.action === 'block') {
-            Metrics.blockedRequestsTotal.inc({ server_name: this.serverName, block_reason: `policy:${decision.rule}`, rule: decision.rule });
+            Metrics.recordProxyBlock(
+              {
+                server_name: this.serverName,
+                block_reason: `policy:${decision.rule}`,
+                rule: decision.rule,
+                tenant_id: requestTenantId,
+              },
+            );
             Metrics.requestsTotal.inc({ server_name: this.serverName, decision: 'block', authn_success: String(authnSuccess) });
             const rateLimited =
               /rate\s*limit/i.test(decision.reason || '') ||
@@ -311,7 +320,7 @@ export class HttpProxyServer {
         path: upstreamUrl.pathname + upstreamUrl.search,
         method: req.method,
         headers: { ...req.headers, host: upstreamUrl.hostname },
-        timeout: 30000, // 30s upstream timeout (mirrors SseProxyServer)
+        timeout: getUpstreamTimeoutMs(),
       };
 
       // Attach mTLS agent for HTTPS connections
@@ -386,25 +395,31 @@ export class HttpProxyServer {
             try {
               const raw = Buffer.concat(respChunks).toString();
               let outbound = raw;
+              let redactionReasons: string[] | undefined;
               const parsed = parseJsonWithDepthLimit(raw);
               if (parsed.ok) {
                 const msg = parsed.value as Record<string, unknown>;
-                const blocked = await this.inspectToolResponse(
+                const inspected = await this.inspectToolResponse(
                   toolsCallName!,
                   msg,
                   toolsCallId!,
                   requestTenantId,
                 );
-                if (blocked) {
+                redactionReasons = inspected.redactionReasons;
+                if (inspected.blocked) {
                   if (!res.headersSent) {
                     res.writeHead(403, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify(blocked));
+                    res.end(JSON.stringify(inspected.blocked));
                   }
-                  Metrics.blockedRequestsTotal.inc({
-                    server_name: this.serverName,
-                    block_reason: 'response_gate',
-                    rule: 'response-gate',
-                  });
+                  Metrics.recordProxyBlock(
+                    {
+                      server_name: this.serverName,
+                      block_reason: 'response_gate',
+                      rule: 'response-gate',
+                      tenant_id: requestTenantId,
+                    },
+                    'response_gate',
+                  );
                   Metrics.requestsTotal.inc({
                     server_name: this.serverName,
                     decision: 'block',
@@ -417,6 +432,10 @@ export class HttpProxyServer {
               }
               if (rotatedSessionToken) {
                 res.setHeader('x-mcp-guardian-session-token', rotatedSessionToken);
+              }
+              const redactionHdr = formatRedactionHeader(redactionReasons);
+              if (redactionHdr) {
+                safeHeaders['x-guardian-redaction-reason'] = redactionHdr;
               }
               delete safeHeaders['content-length'];
               delete safeHeaders['Content-Length'];
@@ -480,9 +499,9 @@ export class HttpProxyServer {
     response: Record<string, unknown>,
     requestId: string | number,
     tenantId?: string,
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<{ blocked: Record<string, unknown> | null; redactionReasons?: string[] }> {
     const result = (response as { result?: unknown }).result;
-    if (result == null || isResponseScanSkipped()) return null;
+    if (result == null || isResponseScanSkipped()) return { blocked: null };
 
     const responseText = JSON.stringify(result);
     const gate = await gateToolResponseText({
@@ -510,24 +529,27 @@ export class HttpProxyServer {
 
     if (gate.outcome.action === 'redact' && gate.outcome.body) {
       try {
-        (response as { result: unknown }).result = JSON.parse(gate.outcome.body);
+        const parsed = JSON.parse(gate.outcome.body) as unknown;
+        (response as { result: unknown }).result = injectRedactionMeta(parsed, gate.outcome.redactionReasons);
       } catch {
         /* keep upstream */
       }
-      return null;
+      return { blocked: null, redactionReasons: gate.outcome.redactionReasons };
     }
 
     if (gate.outcome.action === 'block') {
       return {
-        jsonrpc: '2.0',
-        id: requestId,
-        error: {
-          code: -32002,
-          message: gate.outcome.message,
+        blocked: {
+          jsonrpc: '2.0',
+          id: requestId,
+          error: {
+            code: -32002,
+            message: gate.outcome.message,
+          },
         },
       };
     }
-    return null;
+    return { blocked: null };
   }
 
   getPort(): number {

@@ -17,7 +17,7 @@ import type { PolicyEngine } from '../policy/policy-engine.js';
 
 export type ResponseGateOutcome =
   | { action: 'forward' }
-  | { action: 'redact'; body: string }
+  | { action: 'redact'; body: string; redactionReasons?: string[] }
   | { action: 'block'; message: string; rule: string };
 
 export interface ResponseGateResult {
@@ -46,7 +46,14 @@ export async function gateToolResponseText(opts: {
   const policyMode = opts.policy?.getMode() ?? 'audit';
 
   if (inspect.redactedBody && inspect.dlpMode === 'redact') {
-    return { outcome: { action: 'redact', body: inspect.redactedBody }, inspect };
+    return {
+      outcome: {
+        action: 'redact',
+        body: inspect.redactedBody,
+        redactionReasons: inspect.redactionReasons,
+      },
+      inspect,
+    };
   }
 
   const blockDlp = shouldBlockResponseDlp({

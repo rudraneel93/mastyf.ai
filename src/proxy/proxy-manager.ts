@@ -2,6 +2,8 @@ import { IDatabase } from '../database/database-interface.js';
 import { McpProxyServer } from './proxy-server.js';
 import { StdioConnectionPool, stdioPoolSize } from './stdio-connection-pool.js';
 import { SseProxyServer } from './sse-proxy-server.js';
+import { WebSocketProxyServer } from './websocket-proxy-server.js';
+import { assertGatewayStartup, isGatewayModeEnabled } from '../tenant/gateway-mode.js';
 import { McpServerConfig } from '../types.js';
 import { Logger } from '../utils/logger.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
@@ -15,6 +17,7 @@ export class ProxyManager {
   private stdioProxies: McpProxyServer[] = [];
   private stdioPools: StdioConnectionPool[] = [];
   private sseProxies: Map<string, SseProxyServer> = new Map();
+  private wsProxies: Map<string, WebSocketProxyServer> = new Map();
   private policyEngine: PolicyEngine | undefined;
   private tenantPolicyRegistry: TenantPolicyRegistry | undefined;
 
@@ -66,16 +69,29 @@ export class ProxyManager {
   }
 
   /** Returns summary counts for the CLI proxy command output */
-  getProxyStats(): { stdioCount: number; sseCount: number } {
-    return { stdioCount: this.stdioProxies.length, sseCount: this.sseProxies.size };
+  getProxyStats(): { stdioCount: number; sseCount: number; wsCount: number } {
+    return {
+      stdioCount: this.stdioProxies.length,
+      sseCount: this.sseProxies.size,
+      wsCount: this.wsProxies.size,
+    };
   }
 
   async startAll(configs: McpServerConfig[]): Promise<void> {
-const stdioServers = configs.filter((c) => c.command);
-const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' || c.url));
+    const gateway = isGatewayModeEnabled();
+    if (gateway) assertGatewayStartup();
+
+    const stdioServers = gateway
+      ? []
+      : configs.filter((c) => c.command && c.transport !== 'websocket');
+    const sseServers = configs.filter(
+      (c) => !c.command && (c.transport === 'sse' || (!c.transport && c.url)),
+    );
+    const wsServers = configs.filter((c) => c.transport === 'websocket' && c.url);
 
     let stdioStarted = 0;
     let sseStarted = 0;
+    let wsStarted = 0;
 
     // ─── Stdio proxies ─────────────────────────────────────
     for (const config of stdioServers) {
@@ -152,8 +168,38 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
       }
     }
 
+    for (const config of wsServers) {
+      try {
+        const url = config.url;
+        if (!url) {
+          Logger.warn(`[proxy] SKIPPED WebSocket "${config.name}" — no url`);
+          continue;
+        }
+        const listenPort = parseInt(
+          config.env?.['GUARDIAN_WS_PROXY_PORT'] || config.env?.['GUARDIAN_SSE_PROXY_PORT'] || '0',
+          10,
+        ) || 0;
+        const wsProxy = new WebSocketProxyServer({
+          listenPort: listenPort > 0 ? listenPort : 0,
+          upstreamWsUrl: url,
+          serverName: config.name,
+          policy: this.policyEngine,
+          db: this.db,
+          authValidator: this.authValidator,
+        });
+        const boundPort = await wsProxy.start();
+        this.wsProxies.set(config.name, wsProxy);
+        wsStarted++;
+        Logger.info(
+          `[proxy] WebSocket active for "${config.name}" → ${url} (local ws://127.0.0.1:${boundPort})`,
+        );
+      } catch (err: any) {
+        Logger.error(`[proxy] FAILED WebSocket for "${config.name}": ${err?.message}`);
+      }
+    }
+
     // ─── Summary — loud and clear ═══════════════════════════
-    const total = stdioStarted + sseStarted;
+    const total = stdioStarted + sseStarted + wsStarted;
     const skipped = configs.length - total;
 
     if (total === 0) {
@@ -162,8 +208,7 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
         '║  ZERO PROXIES STARTED — NO PROTECTION ACTIVE             ║\n' +
         '╠══════════════════════════════════════════════════════════╣\n' +
         '║  All configured servers were skipped.                    ║\n' +
-        '║  Check that each server has "command" (stdio) or         ║\n' +
-        '║  "url" (SSE/HTTP) in your MCP config.                   ║\n' +
+        '║  Check command (stdio) or url (SSE/WS) in MCP config.   ║\n' +
         '╚══════════════════════════════════════════════════════════╝'
       );
       return;
@@ -175,6 +220,7 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
       `╠══════════════════════════════════════════╣\n` +
       `║  Stdio: ${String(stdioStarted).padStart(4)} servers              ║\n` +
       `║  SSE:   ${String(sseStarted).padStart(4)} servers              ║\n` +
+      `║  WS:    ${String(wsStarted).padStart(4)} servers              ║\n` +
       `║  Total: ${String(total).padStart(4)} servers protected        ║`
     );
 
@@ -182,6 +228,7 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
       const startedNames = new Set<string>();
       for (const p of this.stdioProxies) startedNames.add(p['serverName'] as string);
       for (const [name] of this.sseProxies) startedNames.add(name);
+      for (const [name] of this.wsProxies) startedNames.add(name);
       const skippedNames = configs.filter(c => !startedNames.has(c.name)).map(c => c.name);
       Logger.warn(
         `║  ⚠  SKIPPED: ${String(skipped).padStart(2)} server(s)              ║\n` +
@@ -215,6 +262,10 @@ const sseServers = configs.filter((c) => !c.command && (c.transport === 'sse' ||
       await sseProxy.stop();
     }
     this.sseProxies.clear();
+    for (const [, wsProxy] of this.wsProxies) {
+      await wsProxy.stop();
+    }
+    this.wsProxies.clear();
     Logger.info('All proxies stopped');
   }
 }

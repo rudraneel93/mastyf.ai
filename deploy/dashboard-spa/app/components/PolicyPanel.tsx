@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   fetchPolicy,
   reloadPolicy,
+  savePolicy,
   testPolicy,
   type PolicyInfo,
 } from '@/lib/guardian-api';
@@ -19,12 +20,16 @@ export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
   const canTest = hasPermission(roles, 'policy_test');
   const canMutate = hasPermission(roles, 'policy_mutate');
   const [policy, setPolicy] = useState<PolicyInfo | null>(null);
+  const [draftYaml, setDraftYaml] = useState('');
+  const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState('');
   const [testTool, setTestTool] = useState('');
   const [testArgs, setTestArgs] = useState('{"query": "test"}');
 
   const refresh = useCallback(async () => {
-    setPolicy(await fetchPolicy());
+    const next = await fetchPolicy();
+    setPolicy(next);
+    setDraftYaml(next?.yaml ?? '');
   }, []);
 
   useEffect(() => {
@@ -61,6 +66,36 @@ export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
     if (ok) await refresh();
   };
 
+  const dirty = (policy?.yaml ?? '') !== draftYaml;
+
+  const onSave = async () => {
+    if (!canMutate) {
+      onAction?.('Requires operator role');
+      return;
+    }
+    if (!dirty) {
+      onAction?.('No changes to save');
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await savePolicy(draftYaml);
+      if (result.ok) {
+        onAction?.('Policy saved; watcher will hot-reload');
+        await refresh();
+      } else {
+        onAction?.(result.details ? `${result.error}: ${result.details}` : result.error || 'Save failed');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDiscard = () => {
+    setDraftYaml(policy?.yaml ?? '');
+    onAction?.('Discarded unsaved edits');
+  };
+
   return (
     <section>
       <h2>Policy studio</h2>
@@ -75,6 +110,21 @@ export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
       </p>
 
       <div className="btn-row">
+        <button
+          type="button"
+          disabled={!canMutate || !dirty || saving}
+          onClick={() => void onSave()}
+        >
+          {saving ? 'Saving…' : 'Save policy'}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!canMutate || !dirty || saving}
+          onClick={onDiscard}
+        >
+          Discard
+        </button>
         <button type="button" disabled={!canMutate} onClick={() => void onReload()}>
           Reload policy watcher
         </button>
@@ -111,10 +161,17 @@ export function PolicyPanel({ roles, lastBlocked, onAction }: Props) {
         Run policy test
       </button>
 
-      {policy?.yaml ? (
+      {policy?.yaml || canMutate ? (
         <>
-          <h3>Active policy YAML</h3>
-          <textarea className="policy-yaml" readOnly rows={18} value={policy.yaml} />
+          <h3>Active policy YAML{dirty ? ' (unsaved changes)' : ''}</h3>
+          <textarea
+            className="policy-yaml"
+            readOnly={!canMutate}
+            rows={18}
+            value={draftYaml}
+            onChange={(e) => setDraftYaml(e.target.value)}
+            spellCheck={false}
+          />
         </>
       ) : (
         <p className="muted">No policy file loaded on proxy (start with --policy).</p>

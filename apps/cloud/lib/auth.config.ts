@@ -1,24 +1,26 @@
 import type { NextAuthConfig } from 'next-auth';
-import GitHub from 'next-auth/providers/github';
-import Google from 'next-auth/providers/google';
+import { configuredOAuthProviders } from './oauth-providers';
 
 export const authConfig = {
-  providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
-    }),
-    GitHub({
-      clientId: process.env.AUTH_GITHUB_ID,
-      clientSecret: process.env.AUTH_GITHUB_SECRET,
-    }),
-  ],
+  providers: configuredOAuthProviders(),
   pages: { signIn: '/login' },
   trustHost: true,
+  // JWT sessions: same token in middleware (edge) and server components (adapter still stores users/accounts).
+  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   callbacks: {
-    session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+        token.email = user.email ?? token.email;
+        token.name = user.name ?? token.name;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
+        if (typeof token.email === 'string') session.user.email = token.email;
+        if (typeof token.name === 'string') session.user.name = token.name;
       }
       return session;
     },

@@ -78,6 +78,10 @@ export class WsBroadcaster {
             return;
           }
           const license = getLicenseClient();
+          if (!license.hasFeature('websocket')) {
+            done(false, 4402, 'MCP Guardian Pro license required for live WebSocket');
+            return;
+          }
           const tenantId =
             result.sessionTenantId ?? license.getTenantSlug() ?? DEFAULT_TENANT_ID;
           (info.req as IncomingMessage & Record<string, unknown>)[WS_AUTH_KEY] = {

@@ -9,7 +9,7 @@
  * --quiet  Capture output (for CI); no live streaming
  * --fast   PR path (~15 min); omit for full nightly swarm
  */
-import { spawnSync } from 'node:child_process';
+import { runStep, formatStepOutput, STEP_TIMEOUT_MS } from './lib/run-step.mjs';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,14 +58,17 @@ function banner(title, sub = '') {
 
 function resolveVenvPython() {
   if (existsSync(VENV_PY)) return VENV_PY;
-  const r = spawnSync('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
+  const r = runStep('node', ['adversarial-harness/scripts/setup-python-venv.mjs'], {
     cwd: REPO,
-    encoding: 'utf-8',
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stepKey: 'setup-python-venv',
+    live: false,
   });
   const out = (r.stdout || '').trim();
   return out || 'python3';
 }
+
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 function run(cmd, args, opts = {}) {
   const label = opts.label ?? [cmd, ...args].join(' ');
@@ -83,35 +86,60 @@ function run(cmd, args, opts = {}) {
   console.log(paint(`  ${cmd} ${args.join(' ')}`, c.dim));
   console.log(paint(`  started ${new Date().toISOString()}`, c.dim));
 
-  const r = spawnSync(cmd, args, {
+  const r = runStep(cmd, args, {
     cwd: opts.cwd ?? REPO,
-    encoding: LIVE ? undefined : 'utf-8',
+    label,
+    stepKey: label,
+    timeoutMs: opts.timeoutMs ?? STEP_TIMEOUT_MS[label],
+    live: LIVE,
     env: {
-      ...process.env,
-      FORCE_COLOR: LIVE ? '1' : process.env.FORCE_COLOR,
       GUARDIAN_DISABLE_SEMANTIC: opts.semanticOff ? 'true' : process.env.GUARDIAN_DISABLE_SEMANTIC || '',
       GUARDIAN_POLICY_TIMING_ENVELOPE: process.env.GUARDIAN_POLICY_TIMING_ENVELOPE ?? 'false',
       ...opts.env,
     },
-    stdio: LIVE ? 'inherit' : ['pipe', 'pipe', 'pipe'],
   });
 
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-  const ok = r.status === 0;
+  const timedOut = !!r.timedOut;
+  const ok = r.status === 0 && !timedOut;
+  const { stdout, stderr } = formatStepOutput(r, LIVE);
   const step = {
     label,
     ok,
-    status: r.status ?? 1,
+    status: timedOut ? 124 : (r.status ?? 1),
+    timedOut,
     elapsedSec: parseFloat(elapsed),
-    stdout: LIVE ? '' : String(r.stdout || '').slice(0, 4000),
-    stderr: LIVE ? '' : String(r.stderr || '').slice(0, 1500),
+    stdout,
+    stderr,
   };
   steps.push(step);
+
+  if (ok) {
+    consecutiveFailures = 0;
+  } else {
+    consecutiveFailures++;
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      console.error(
+        paint(
+          `✗ Swarm circuit breaker: ${MAX_CONSECUTIVE_FAILURES} consecutive failures — aborting`,
+          c.red,
+        ),
+      );
+      writeFileSync(
+        join(OUT_DIR, 'steps.json'),
+        JSON.stringify({ steps, aborted: true, reason: 'circuit_breaker' }, null, 2),
+      );
+      process.exit(1);
+    }
+  }
 
   console.log(
     ok
       ? paint(`✓ ${label} — PASS (${elapsed}s)`, c.green)
-      : paint(`✗ ${label} — FAIL (${elapsed}s, exit ${r.status})`, c.red),
+      : paint(
+          `✗ ${label} — FAIL (${elapsed}s, exit ${step.status}${timedOut ? ' timeout' : ''})`,
+          c.red,
+        ),
   );
   if (!ok && !LIVE && step.stderr) {
     console.log(paint(step.stderr, c.red));

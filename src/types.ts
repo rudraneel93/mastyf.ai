@@ -4,7 +4,7 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   url?: string; // for SSE/HTTP transports
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'sse' | 'websocket';
   // metadata
   packageName?: string;
   version?: string;

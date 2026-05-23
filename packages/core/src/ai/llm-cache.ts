@@ -7,6 +7,7 @@ export interface LlmCacheKeyInput {
   prompt: string;
   system: string;
   temperature: number;
+  policyMode?: string;
 }
 
 let sharedCache: LlmCache | null = null;
@@ -32,7 +33,8 @@ export function resetLlmCacheForTests(): void {
 }
 
 function hashCacheKey(input: LlmCacheKeyInput): string {
-  const payload = `${input.model}\0${input.system}\0${input.prompt}\0${input.temperature}`;
+  const mode = input.policyMode?.trim() || 'block';
+  const payload = `${mode}\0${input.model}\0${input.system}\0${input.prompt}\0${input.temperature}`;
   return createHash('sha256').update(payload).digest('hex');
 }
 
