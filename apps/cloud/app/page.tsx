@@ -4,12 +4,18 @@ import { auth } from '@/lib/auth';
 import { GITHUB_REPO_URL, GITHUB_README_URL } from '@/lib/github-links';
 import { resolveProCheckoutUrl } from '@/lib/pro-checkout-url';
 import {
+  COMPARISON_ROWS,
   EVIDENCE_ROWS,
   FEATURES,
   HERO_STATS,
   NPM_PACKAGE_URL,
+  PROBLEM_BULLETS,
+  SOLUTION_PILLARS,
   SWARM_AGENTS,
+  TARGET_SEGMENTS,
+  USP_ITEMS,
 } from '@/components/landing/stats';
+import { ThreatArchitectureTabs } from '@/components/landing/ThreatArchitectureTabs';
 import './landing.css';
 
 const PRO_CHECKOUT_URL = resolveProCheckoutUrl();
@@ -36,7 +42,10 @@ export default async function HomePage() {
           <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
             npm
           </a>
+          <a href="#problem">Why MCP security</a>
           <a href="#swarm">Security Swarm</a>
+          <a href="#threat-research">Threat research</a>
+          <a href="#usp">Why Guardian</a>
           <a href="#evidence">Evidence</a>
           <a href="#pricing">Pricing</a>
           <Link href="/dashboard">Cloud console</Link>
@@ -53,17 +62,17 @@ export default async function HomePage() {
       <div className="landing-wrap">
         <header className="landing-hero" id="top">
           <div className="landing-eyebrow">
-            <span className="landing-pill landing-pill-accent">v3.0 — Pro paywall + dual license</span>
-            <span className="landing-pill landing-pill-success">MIT Community on npm</span>
-            <span className="landing-pill landing-pill-success">11k+ downloads / month</span>
-            <span className="landing-pill">CI-gated adversarial harness</span>
+            <span className="landing-pill landing-pill-accent">The MCP security category leader</span>
+            <span className="landing-pill landing-pill-success">11k+ npm downloads / month</span>
+            <span className="landing-pill landing-pill-warn">557+ adversarial fixtures</span>
+            <span className="landing-pill">Self-improving Security Swarm</span>
           </div>
-          <h1>Runtime security for MCP infrastructure</h1>
+          <h1>Stop AI agents from becoming your next breach vector</h1>
           <p className="lead">
-            Transparent proxy between AI agents and MCP servers — three-layer detection, cost
-            governance, health monitoring, and a closed-loop{' '}
-            <strong style={{ color: 'var(--text)' }}>Security Swarm</strong> that gates policy in CI
-            and learns from every blocked <code>tools/call</code>.
+            MCP Guardian is the security proxy between AI agents and MCP servers — inspecting every{' '}
+            <code>tools/call</code> and tool response in real time, enforcing YAML policy, and running a
+            closed-loop <strong style={{ color: 'var(--text)' }}>Security Swarm</strong> that red-teams
+            itself faster than attackers evolve.
           </p>
           <div className="landing-hero-cta">
             {session ? (
@@ -136,6 +145,29 @@ export default async function HomePage() {
               </article>
             );
           })}
+        </section>
+
+        <section className="landing-section landing-problem" id="problem">
+          <div className="landing-section-header">
+            <h2>The attack surface nobody is watching</h2>
+            <p>
+              Claude, GPT-4, and enterprise agents are wired to real systems through MCP — faster than
+              security teams can respond. One compromised session looks like a legitimate user.
+            </p>
+          </div>
+          <ul className="landing-problem-list">
+            {PROBLEM_BULLETS.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+          <div className="landing-solution-grid">
+            {SOLUTION_PILLARS.map((p) => (
+              <article key={p.title} className="landing-solution-card">
+                <h3>{p.title}</h3>
+                <p>{p.body}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="landing-section landing-npm" id="npm">
@@ -278,6 +310,80 @@ export default async function HomePage() {
           </div>
         </section>
 
+        <section className="landing-section" id="threat-research">
+          <div className="landing-section-header">
+            <h2>LLM-powered threat discovery — two architectures</h2>
+            <p>
+              Pro-tier pipelines that turn live blocks and swarm bypasses into new adversarial fixtures.
+              Human review for policy changes; autonomous corpus growth for regression.
+            </p>
+          </div>
+          <ThreatArchitectureTabs />
+        </section>
+
+        <section className="landing-section" id="usp">
+          <div className="landing-section-header">
+            <h2>Why teams choose MCP Guardian</h2>
+            <p>
+              No purpose-built MCP security competitor exists. Generic API gateways don&apos;t understand
+              agent behavior — and brittle custom middleware breaks on every SDK update.
+            </p>
+          </div>
+          <div className="landing-usp-grid">
+            {USP_ITEMS.map((u) => (
+              <article key={u.title} className="landing-usp-card">
+                <div className="landing-usp-icon" aria-hidden>
+                  ✓
+                </div>
+                <h3>{u.title}</h3>
+                <p>{u.body}</p>
+              </article>
+            ))}
+          </div>
+          <div className="card landing-compare" style={{ overflowX: 'auto', padding: 0, marginTop: '2rem' }}>
+            <table className="landing-evidence landing-compare-table">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>MCP Guardian</th>
+                  <th>Generic gateway / DIY</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON_ROWS.map((row) => (
+                  <tr key={row.capability}>
+                    <td>{row.capability}</td>
+                    <td>
+                      <span className="landing-compare-yes">{row.guardian}</span>
+                    </td>
+                    <td>
+                      <span className="landing-compare-no">{row.generic}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="landing-section">
+          <div className="landing-section-header">
+            <h2>Built for teams shipping agents to production</h2>
+            <p>
+              CISO and VP Engineering buyers · platform / AI infra deployers · Kubernetes + Postgres +
+              OIDC already in place.
+            </p>
+          </div>
+          <div className="landing-target-grid">
+            {TARGET_SEGMENTS.map((t) => (
+              <article key={t.title} className="landing-target-card">
+                <h3>{t.title}</h3>
+                <p>{t.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
         <section className="landing-section">
           <div className="landing-section-header">
             <h2>Built for production MCP fleets</h2>
@@ -333,6 +439,28 @@ export default async function HomePage() {
               enterprise-attack-sim
             </a>
           </p>
+        </section>
+
+        <section className="landing-section landing-journey">
+          <div className="landing-journey-inner card">
+            <div>
+              <h2>Post-MVP. Pilot-validated. Category-defining.</h2>
+              <p>
+                330 enterprise attack simulations · 93.3% block rate · 38ms average detection · zero false
+                positives. Open-source core on npm; Pro unlocks Security Swarm, threat research pipelines,
+                and fleet dashboard. AI agent security is the next major enterprise category — MCP Guardian
+                is built to define it.
+              </p>
+            </div>
+            <div className="landing-journey-cta">
+              <a href={NPM_PACKAGE_URL} className="btn btn-primary" rel="noopener noreferrer">
+                Install free on npm
+              </a>
+              <a href={PRO_CHECKOUT_URL} className="btn" rel="noopener noreferrer">
+                Buy Pro — $4.99 lifetime
+              </a>
+            </div>
+          </div>
         </section>
 
         <section className="landing-pricing" id="pricing">

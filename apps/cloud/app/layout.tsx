@@ -5,12 +5,13 @@ import './globals.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://mcp-guardian-cloud.vercel.app'),
-  title: 'MCP Guardian — Runtime security for MCP',
+  title: 'MCP Guardian — Stop AI agents from becoming your next breach vector',
   description:
-    'CI-gated Security Swarm, three-layer detection, and optional cloud control plane. 154/154 corpus blocked, enterprise-ready proxy for Cursor, Cline, and Claude Code.',
+    'Purpose-built MCP security proxy: 557+ adversarial fixtures, Security Swarm, LLM threat discovery, three-layer detection. 11k+ npm downloads. Enterprise-ready Helm deploy.',
   openGraph: {
-    title: 'MCP Guardian',
-    description: 'Runtime security, cost governance, and Security Swarm for Model Context Protocol infrastructure.',
+    title: 'MCP Guardian — Runtime security for MCP',
+    description:
+      'The defining product for AI agent security — inspect every tools/call, self-improving Security Swarm, HIPAA/PCI overlays.',
     images: ['/assets/security-swarm-architecture.png'],
   },
 };
