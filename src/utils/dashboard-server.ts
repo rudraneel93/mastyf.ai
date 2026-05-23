@@ -379,6 +379,26 @@ export async function startDashboardServer(
     res.end(JSON.stringify(data));
   }
 
+  function prefersHtml(req: IncomingMessage): boolean {
+    const accept = req.headers.accept ?? '';
+    return typeof accept === 'string' && accept.includes('text/html');
+  }
+
+  function writeCloudExchangeError(
+    req: IncomingMessage,
+    res: ServerResponse,
+    status: number,
+    message: string,
+  ): void {
+    if (prefersHtml(req)) {
+      const safe = message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Cloud SSO</title></head><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem"><h1>Cloud sign-in failed</h1><p>${safe}</p><p><a href="/">Back to dashboard</a> · <a href="https://mcp-guardian-cloud.vercel.app/dashboard">Cloud console</a></p></body></html>`);
+      return;
+    }
+    writeJson(res, status, { error: message });
+  }
+
   function getClientIp(req: IncomingMessage): string {
     const forwarded = req.headers['x-forwarded-for'];
     if (forwarded) {
@@ -542,50 +562,62 @@ export async function startDashboardServer(
         const fullUrl = new URL(req.url || '/', 'http://localhost');
         const exchangeToken = fullUrl.searchParams.get('token')?.trim();
         if (!exchangeToken) {
-          writeJson(res, 400, { error: 'token query parameter required' });
+          writeCloudExchangeError(req, res, 400, 'token query parameter required');
           return;
         }
 
         if (!auth.hasJwtSessionAuth()) {
-          writeJson(res, 503, {
-            error:
-              'Set DASHBOARD_JWT_SECRET or GUARDIAN_CLOUD_JWT_SECRET on this Guardian host (same value as cloud LICENSE_JWT_SECRET / AUTH_SECRET)',
-          });
+          writeCloudExchangeError(
+            req,
+            res,
+            503,
+            'Set DASHBOARD_JWT_SECRET or GUARDIAN_CLOUD_JWT_SECRET on this Guardian host (same value as cloud AUTH_SECRET). The cloud console at mcp-guardian-cloud.vercel.app does not need this — only self-hosted SSO.',
+          );
           return;
         }
 
-        let sessionToken: string | undefined;
-        let tenantSlug: string | undefined;
-
         const controlPlaneUrl = loadLicenseClientConfig().controlPlaneUrl;
         if (!controlPlaneUrl) {
-          writeJson(res, 503, { error: 'GUARDIAN_CONTROL_PLANE_URL not configured' });
+          writeCloudExchangeError(
+            req,
+            res,
+            503,
+            'GUARDIAN_CONTROL_PLANE_URL not configured (set to https://mcp-guardian-cloud.vercel.app)',
+          );
           return;
         }
         const exchanged = await licenseClient.exchangeCloudToken(exchangeToken);
         if (!exchanged?.sessionToken) {
-          writeJson(res, 401, { error: 'Invalid or expired exchange token' });
+          writeCloudExchangeError(req, res, 401, 'Invalid or expired exchange token');
           return;
         }
-        sessionToken = exchanged.sessionToken;
-        tenantSlug = exchanged.tenantSlug;
 
-        const cloudPayload = verifyCloudSessionToken(sessionToken);
+        const cloudPayload = verifyCloudSessionToken(exchanged.sessionToken);
         if (!cloudPayload) {
-          writeJson(res, 401, { error: 'Invalid cloud session token' });
+          writeCloudExchangeError(
+            req,
+            res,
+            401,
+            'Invalid cloud session token — GUARDIAN_CLOUD_JWT_SECRET must match cloud AUTH_SECRET',
+          );
           return;
         }
 
-        const token = auth.createCloudSession(
-          tenantSlug ?? cloudPayload.tenantSlug,
-          cloudPayload.identity,
-          mapCloudRoles(cloudPayload.roles),
-        );
-        const csrfToken = auth.isCsrfEnforced() ? auth.issueCsrfToken() : undefined;
-        const cookies = [auth.sessionSetCookieHeader(token)];
-        if (csrfToken) cookies.push(auth.csrfSetCookieHeader(csrfToken));
-        res.writeHead(302, { Location: '/', 'Set-Cookie': cookies });
-        res.end();
+        try {
+          const token = auth.createCloudSession(
+            exchanged.tenantSlug ?? cloudPayload.tenantSlug,
+            cloudPayload.identity,
+            mapCloudRoles(cloudPayload.roles),
+          );
+          const csrfToken = auth.isCsrfEnforced() ? auth.issueCsrfToken() : undefined;
+          const cookies = [auth.sessionSetCookieHeader(token)];
+          if (csrfToken) cookies.push(auth.csrfSetCookieHeader(csrfToken));
+          res.writeHead(302, { Location: '/', 'Set-Cookie': cookies });
+          res.end();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Cloud session creation failed';
+          writeCloudExchangeError(req, res, 503, msg);
+        }
         return;
       }
 

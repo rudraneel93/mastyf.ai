@@ -511,7 +511,9 @@ ${csrfField}
     roles: DashboardRole[] = ['tenant-admin'],
   ): string {
     if (!this.config.jwtSecret) {
-      throw new Error('DASHBOARD_JWT_SECRET required for cloud session');
+      throw new Error(
+        'Set DASHBOARD_JWT_SECRET or GUARDIAN_CLOUD_JWT_SECRET (same value as cloud AUTH_SECRET)',
+      );
     }
     Logger.info(`[dashboard-auth] Cloud session for ${identity} tenant=${tenantSlug}`);
     return this.createSessionToken(tenantSlug, roles);

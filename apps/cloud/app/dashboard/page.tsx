@@ -1,5 +1,5 @@
+import { CloudConsoleBanner } from '@/components/CloudConsoleBanner';
 import { GitHubGettingStarted } from '@/components/GitHubGettingStarted';
-import { LaunchDashboard } from '@/components/LaunchDashboard';
 import { auth } from '@/lib/auth';
 import { getUserOrg } from '@/lib/org-context';
 import Link from 'next/link';
@@ -58,7 +58,6 @@ DASHBOARD_JWT_SECRET=<same-as-GUARDIAN_CLOUD_JWT_SECRET>
       </div>
 
       <GitHubGettingStarted />
-      <LaunchDashboard />
     </main>
   );
 }

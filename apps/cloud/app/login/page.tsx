@@ -26,7 +26,15 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function LoginPage({ searchParams }: Props) {
   const session = await auth();
   const params = await searchParams;
-  const callbackUrl = params.callbackUrl ?? POST_SIGNIN_PATH;
+  let callbackUrl = params.callbackUrl ?? POST_SIGNIN_PATH;
+  try {
+    const parsed = new URL(callbackUrl, 'http://local');
+    if (parsed.pathname.startsWith('/')) {
+      callbackUrl = `${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    /* keep as-is */
+  }
   const errorCode = params.error;
   const errorMessage = errorCode
     ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default)

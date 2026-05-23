@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 function isValidGuardianUrl(url: string): boolean {
   const trimmed = url.trim();
@@ -52,57 +52,43 @@ export function LaunchDashboard() {
 
   return (
     <div className="card">
+      <h2>Open live dashboard (SSO)</h2>
+      <p className="muted">
+        One-time redirect to your Guardian ops UI. Requires the env block above on that host (
+        <code>GUARDIAN_CLOUD_JWT_SECRET</code> must match cloud <code>AUTH_SECRET</code>).
+      </p>
+      <label style={{ display: 'block', marginTop: '1rem' }}>
+        Guardian base URL
+        <input
+          type="url"
+          value={guardianUrl}
+          onChange={(e) => setGuardianUrl(e.target.value)}
+          placeholder="http://localhost:4000"
+          style={{
+            display: 'block',
+            width: '100%',
+            marginTop: '0.35rem',
+            padding: '0.5rem',
+            borderRadius: '6px',
+            border: '1px solid var(--border)',
+            background: '#0a0e13',
+            color: 'var(--text)',
+          }}
+        />
+      </label>
       <button
         type="button"
-        className="btn"
-        style={{ marginBottom: advancedOpen ? '1rem' : 0 }}
-        onClick={() => setAdvancedOpen((open) => !open)}
-        aria-expanded={advancedOpen}
+        className="btn btn-primary"
+        style={{ marginTop: '1rem' }}
+        onClick={() => void onLaunch()}
+        disabled={loading}
       >
-        {advancedOpen ? 'Hide' : 'Show'} advanced: SSO into self-hosted dashboard
+        {loading ? 'Redirecting…' : 'Open live dashboard (SSO)'}
       </button>
-      {advancedOpen && (
-        <>
-          <p className="muted">
-            Launch your self-hosted Guardian ops dashboard with a one-time SSO token. Your Guardian
-            host must have <code>GUARDIAN_CONTROL_PLANE_URL</code>, <code>GUARDIAN_TENANT_ID</code>,
-            and <code>GUARDIAN_CLOUD_JWT_SECRET</code> (same as cloud <code>AUTH_SECRET</code>) — see
-            the env block above. Restart Guardian after changing env.
-          </p>
-          <label style={{ display: 'block', marginTop: '1rem' }}>
-            Guardian base URL
-            <input
-              type="url"
-              value={guardianUrl}
-              onChange={(e) => setGuardianUrl(e.target.value)}
-              placeholder="http://localhost:4000"
-              style={{
-                display: 'block',
-                width: '100%',
-                marginTop: '0.35rem',
-                padding: '0.5rem',
-                borderRadius: '6px',
-                border: '1px solid var(--border)',
-                background: '#0a0e13',
-                color: 'var(--text)',
-              }}
-            />
-          </label>
-          <button
-            type="button"
-            className="btn"
-            style={{ marginTop: '1rem' }}
-            onClick={() => void onLaunch()}
-            disabled={loading}
-          >
-            {loading ? 'Redirecting…' : 'Open live dashboard (SSO)'}
-          </button>
-          {error && (
-            <p className="alert alert-warn" style={{ marginTop: '1rem' }}>
-              {error}
-            </p>
-          )}
-        </>
+      {error && (
+        <p className="alert alert-warn" style={{ marginTop: '1rem' }}>
+          {error}
+        </p>
       )}
     </div>
   );
