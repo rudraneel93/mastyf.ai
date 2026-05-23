@@ -142,7 +142,7 @@ export const FEATURES = [
 
 export const EVIDENCE_ROWS = [
   { suite: 'Corpus (default-policy)', result: '154/154 blocked · 74/74 benign pass', trust: 'CI-gated' },
-  { suite: 'Evasion probes', result: '84/85 blocked (adv-066 tracked)', trust: 'CI-gated' },
+  { suite: 'Evasion probes', result: '148/155 blocked (7 tracked bypasses)', trust: 'CI-gated' },
   { suite: 'Node live integration', result: '26/26 stdio proxy tests', trust: 'CI-gated' },
   { suite: 'Python ↔ TS parity', result: '400/402 (99.5%) · 0 corpus mismatches', trust: 'Offline mirror' },
   { suite: 'Enterprise 5-scenario sim', result: '330 attacks · 93.33% block · 0 FP', trust: 'Synthetic' },

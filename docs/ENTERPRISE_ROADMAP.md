@@ -13,8 +13,11 @@ Self-hosted **v2.9.x** is production-viable with [ENTERPRISE_DEPLOY.md](./ENTERP
 
 ## P1 — Platform (v2.10 – v2.11)
 
+**Next P1 focus (May 2026):** Enhanced SIEM templates (Splunk/Datadog field mappings). Shipped in v3.2.1: dashboard semantic confidence column + live flow timeline confidence display.
+
 | Item | Rationale | Priority |
 |------|-----------|----------|
+| **Dashboard semantic confidence UX** | Per-flag confidence in AI Learning + flow timeline | **Shipped (v3.2.1)** |
 | **Dashboard policy editor** | Editable YAML + `PUT /api/policy` + test sandbox | **Shipped (v2.9.7+)** |
 | **Inbound HTTP/SSE gateway** | `GUARDIAN_GATEWAY_MODE`, Helm ingress — [GATEWAY_DEPLOY.md](./GATEWAY_DEPLOY.md) | **Shipped (v2.10.0)** |
 | **Full WebSocket transport parity** | `transport: websocket` in ProxyManager + parity tests | **Shipped (v2.10.0)** |

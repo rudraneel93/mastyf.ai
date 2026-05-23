@@ -15,6 +15,7 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     environment: npm-publish
+    # Requires GitHub Environment secret NPM_TOKEN (npm automation token with publish scope).
 
     steps:
       - uses: actions/checkout@v4

@@ -29,3 +29,4 @@ scenarios/real-life/output/
 reports/tenants/
 .vercel
 .env*.local
+*.tsbuildinfo

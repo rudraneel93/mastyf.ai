@@ -931,13 +931,14 @@ export async function fetchSemanticOutcomes(): Promise<SemanticOutcomesResponse>
   };
   const records = (body.records || []).map((r) => {
     const sync = r.syncDecision as { blockRule?: string; rule?: string } | undefined;
-    const sem = r.semanticAudit as { suspicious?: boolean } | undefined;
+    const sem = r.semanticAudit as { suspicious?: boolean; confidence?: number } | undefined;
     return {
       id: String(r.id ?? ''),
       toolName: String(r.toolName ?? ''),
       ruleName: sync?.blockRule || sync?.rule || String(r.ruleName ?? ''),
       label: (r.label as SemanticOutcome['label']) ?? null,
       flagged: !!sem?.suspicious,
+      confidence: typeof sem?.confidence === 'number' ? sem.confidence : undefined,
       createdAt: String(r.timestamp ?? ''),
     };
   });

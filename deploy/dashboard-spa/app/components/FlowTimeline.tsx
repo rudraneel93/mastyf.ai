@@ -61,6 +61,9 @@ export function FlowTimeline({ entries }: Props) {
                   {e.serverName ? `${e.serverName} · ` : ''}
                   {e.toolName || ''}
                   {e.requestId ? ` · req ${e.requestId}` : ''}
+                  {typeof e.metadata?.confidence === 'number'
+                    ? ` · confidence ${(e.metadata.confidence * 100).toFixed(0)}%`
+                    : ''}
                 </p>
               ) : null}
             </li>

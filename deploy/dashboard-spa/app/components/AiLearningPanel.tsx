@@ -293,6 +293,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
             <tr>
               <th>Tool</th>
               <th>Rule</th>
+              <th>Confidence</th>
               <th>Label</th>
               <th>Actions</th>
             </tr>
@@ -302,6 +303,9 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction }: Props) {
               <tr key={r.id}>
                 <td>{r.toolName || '—'}</td>
                 <td>{r.ruleName || '—'}</td>
+                <td>
+                  {r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : '—'}
+                </td>
                 <td>{r.label || '—'}</td>
                 <td>
                   {canAi ? (

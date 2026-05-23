@@ -50,9 +50,11 @@ After first deploy (or locally with production `DATABASE_URL`):
 
 ```bash
 DATABASE_URL="postgresql://..." pnpm cloud:migrate
+# or with Vercel env pull:
+VERCEL_TOKEN=... ./scripts/cloud-migrate-production.sh --pull-vercel
 ```
 
-Applies `005_pro_license_keys.sql` and `006_pro_license_webhook.sql`.
+Applies all migrations through **007** (`007_fleet_instances.sql` for fleet heartbeat).
 
 ## 4. Lemon Squeezy webhook
 
@@ -69,6 +71,8 @@ Details: [WEBHOOK_AUTOMATION.md](./WEBHOOK_AUTOMATION.md)
 |-------|----------|
 | `https://YOUR-APP.vercel.app` | Free + **Pro $4.99** cards; **Buy Pro** opens LS checkout |
 | `/terms` and `/privacy` | Linked from footer |
+| `/dashboard/fleet` | Fleet overview (requires sign-in + migration **007**) |
+| `./scripts/verify-pro-production.sh` | Production smoke (landing, license 401, webhook reject) |
 | Test LS purchase | Row in `pro_license_keys` without manual SQL |
 | `GET /api/v1/license` + buyer key | `"licensed": true` |
 

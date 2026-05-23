@@ -58,10 +58,11 @@ See [LEMON_SQUEEZY_SETUP.md](./LEMON_SQUEEZY_SETUP.md) §5.
 
 ## Testing
 
-1. Enable LS **test mode** on the webhook
-2. Complete a test checkout
-3. Confirm a row in `pro_license_keys` with `ls_license_key_id` set
-4. `curl -H "Authorization: Bearer YOUR-KEY" https://YOUR-APP/api/v1/license` → `"licensed": true`
+1. Production smoke (no purchase): `pnpm cloud:verify-prod` or `./scripts/verify-pro-production.sh`
+2. Enable LS **test mode** on the webhook
+3. Complete a test checkout
+4. Confirm a row in `pro_license_keys` with `ls_license_key_id` set
+5. `curl -H "Authorization: Bearer YOUR-KEY" https://YOUR-APP/api/v1/license` → `"licensed": true`
 
 ## Security notes
 
