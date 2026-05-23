@@ -34,9 +34,15 @@ function readDir(tenantId?: string): string {
   return getEffectiveSwarmDir(tenantId || DEFAULT_TENANT_ID);
 }
 
-/** Tenant swarm dir first, then legacy global dir (shared pipeline artifacts). */
+function resolvedTenantId(tenantId?: string): string {
+  return validateTenantId(tenantId?.trim() || DEFAULT_TENANT_ID);
+}
+
+/** Tenant swarm dir first; legacy global dir only for the default tenant. */
 function swarmArtifactCandidates(name: string, tenantId?: string): string[] {
-  const tenantPath = join(readDir(tenantId), name);
+  const tid = resolvedTenantId(tenantId);
+  const tenantPath = join(readDir(tid), name);
+  if (tid !== DEFAULT_TENANT_ID) return [tenantPath];
   const legacyPath = join(LEGACY_SWARM_DIR, name);
   if (tenantPath === legacyPath) return [tenantPath];
   return [tenantPath, legacyPath];
@@ -347,6 +353,8 @@ export function readAutoCorpusManifest(tenantId?: string): {
     entries: AutoCorpusManifestEntry[];
   }>('auto-corpus-manifest.json', tenantId);
   if (fromSwarm) return fromSwarm;
+
+  if (resolvedTenantId(tenantId) !== DEFAULT_TENANT_ID) return null;
 
   const envPath = autoCorpusManifestPath();
   if (existsSync(envPath)) {
