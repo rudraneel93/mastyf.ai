@@ -21,6 +21,7 @@
  */
 import type { Issue } from './types.js';
 import { runEntropyScan } from './entropy-detector.js';
+import { normalizeUnicode } from './confusables.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PATTERN DEFINITIONS
@@ -840,12 +841,16 @@ export function runArgumentScan(
   issues.push(...entropyIssues);
 
   for (const item of flat) {
+    // ── Unicode normalization (NFKD) before regex matching ──────────
+    // Fixes 88% Cyrillic/Greek homoglyph evasion (adversarial harness finding #1)
+    const normalized = normalizeUnicode(item.value, true);
+
     // ══════════════════════════════════════════════════════════════════
     // SQL Injection
     // ══════════════════════════════════════════════════════════════════
-    if (isSqlQueryParam(item.keyPath) || isSqlStringLikely(item)) {
+    if (isSqlQueryParam(item.keyPath) || isSqlStringLikely({ value: normalized, keyPath: item.keyPath })) {
       for (const pattern of SQL_INJECTION_PATTERNS) {
-        if (pattern.test(item.value)) {
+        if (pattern.test(item.value) || pattern.test(normalized)) {
           issues.push(makeIssue(
             'MCPG-A-SQL-001', 'sql-injection', 'critical',
             `SQL injection pattern in argument "${item.keyPath}"`,
