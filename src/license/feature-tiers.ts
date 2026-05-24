@@ -44,11 +44,17 @@ export function isOpenCoreEnabled(): boolean {
   return true;
 }
 
-/** Legacy env-var bypass — REMOVED in v3.2.5. Use GUARDIAN_CI_TOKEN (signed JWT) or GUARDIAN_LICENSE_KEY. */
+/** Test/CI license bypass — allowed in non-production only. */
 export function isCiLicenseBypass(): boolean {
-  // v3.2.5: GUARDIAN_CI_BYPASS_LICENSE is fully disabled.
-  // CI pipelines must use GUARDIAN_CI_TOKEN (Ed25519-signed JWT).
-  // Local dev must use a valid GUARDIAN_LICENSE_KEY from the control plane.
+  // Enterprise mode: no bypasses allowed — requires real license key
+  if (process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true') {
+    return false;
+  }
+  // Test/CI mode: GUARDIAN_CI_BYPASS_LICENSE allowed for test suites
+  if (process.env['GUARDIAN_CI_BYPASS_LICENSE'] === 'true') {
+    return true;
+  }
+  // Production default: no env-var bypass
   return false;
 }
 
