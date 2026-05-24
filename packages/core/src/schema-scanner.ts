@@ -12,6 +12,30 @@ const SUSPICIOUS_PARAM_NAMES = [
 const MAX_SCHEMA_DEPTH = 8;
 const COMMAND_LIKE = /command|cmd|shell|exec|script|query|sql/i;
 
+// ── Schema injection / poisoning patterns ──────────────────────────────
+const SCHEMA_INJECTION_PATTERNS = [
+  // JSON Schema $ref circumevention
+  /\$ref\s*:\s*['"](?:https?|ftp|file):\/\//i,
+  /\$ref\s*:\s*['"]\/[^'"]+['"]/i,
+  // Type confusion
+  /\b(?:any|never|unknown)\s*:\s*\{/, // suspicious broad types
+  // Schema poisoning via additionalProperties/unevaluatedProperties
+  /additionalProperties\s*:\s*(?:true|false)(?:\s*,?\s*unevaluatedProperties)?/i,
+  // Validator evasion
+  /"type"\s*:\s*\[[^\]]*"string"[^\]]*"object"[^\]]*\]/i, // polymorphic type evasion
+  // Recursive self-referencing
+  /\$ref\s*:\s*['"]#\/definitions\/\w+['"]/i,
+  // Pattern abuse (ReDoS in schema patterns)
+  /"pattern"\s*:\s*['"](?:\(.*\)\*\{|\(.*\*\)\+|\(.*\+\)\*)['"]/i,
+  // minLength/maxLength overflow
+  /"minLength"\s*:\s*\d{10,}/,
+  /"maxLength"\s*:\s*\d{10,}/,
+  // minItems/maxItems overflow
+  /"minItems"\s*:\s*\d{8,}/,
+  // format string injection
+  /"format"\s*:\s*['"](?:uri|email|hostname|ipv[46]|date-time)?['"]\s*,\s*"pattern"\s*:/i,
+];
+
 interface SchemaProp {
   description?: string;
   default?: unknown;
@@ -129,6 +153,24 @@ function scanProperty(
   }
 }
 
+function detectSchemaInjection(tool: ToolDefinition, issues: Issue[]): void {
+  const schemaStr = JSON.stringify(tool.inputSchema ?? {});
+  for (const pattern of SCHEMA_INJECTION_PATTERNS) {
+    if (pattern.test(schemaStr)) {
+      issues.push({
+        id: 'MCPG-S-010',
+        layer: 'schema',
+        severity: 'warning',
+        category: 'schema-injection',
+        message: `Schema injection/poisoning pattern detected in tool "${tool.name}" inputSchema`,
+        evidence: schemaStr.slice(0, 200),
+        confidence: 0.75,
+      });
+      break; // One schema injection issue per tool is enough
+    }
+  }
+}
+
 function validateInputSchema(tool: ToolDefinition, issues: Issue[]): boolean {
   const schema = tool.inputSchema;
   if (!schema || typeof schema !== "object") return true;
@@ -164,6 +206,7 @@ function validateInputSchema(tool: ToolDefinition, issues: Issue[]): boolean {
 export function runSchemaScan(tool: ToolDefinition): Issue[] {
   const issues: Issue[] = [];
   const schema = tool.inputSchema as { properties?: Record<string, SchemaProp> } | undefined;
+  detectSchemaInjection(tool, issues);
   if (!validateInputSchema(tool, issues)) return issues;
   if (!schema?.properties) return issues;
 

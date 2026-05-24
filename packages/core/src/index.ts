@@ -1,5 +1,6 @@
 export {
-  scanTool, scanServer, type ScanEngineOptions
+  scanTool, scanToolCall, scanServer, runArgumentScan,
+  type ScanEngineOptions, type ToolCallScanResult
 } from "./engine.js";
 export { runRegexScan, type RegexScanOptions } from "./regex-scanner.js";
 export { normalizeUnicode, resetConfusablesCache } from "./confusables.js";

@@ -6,20 +6,20 @@ export function semanticQueueMax(): number {
   const n = parseInt(
     process.env["GUARDIAN_SEMANTIC_ASYNC_MAX_QUEUE"] ||
       process.env["MCP_GUARDIAN_SEMANTIC_MAX_QUEUE"] ||
-      "200",
+      "1000",
     10,
   );
-  return Number.isFinite(n) && n > 0 ? n : 200;
+  return Number.isFinite(n) && n > 0 ? n : 1000;
 }
 
 export function semanticPerTenantMax(): number {
   const n = parseInt(
     process.env["MCP_GUARDIAN_SEMANTIC_PER_TENANT_MAX"] ||
       process.env["GUARDIAN_SEMANTIC_PER_TENANT_MAX"] ||
-      "10",
+      "50",
     10,
   );
-  return Number.isFinite(n) && n > 0 ? n : 10;
+  return Number.isFinite(n) && n > 0 ? n : 50;
 }
 
 export function tryAcquireSemanticSlot(tenantId?: string): boolean {

@@ -1,6 +1,7 @@
 import type { PolicyDecision } from '../policy-types.js';
 import { evaluateEncodingGuard } from '../encoding-guard.js';
 import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
+import { scanForSecrets } from '../../scanners/secret-scanner.js';
 import type { PolicyStrategy } from './types.js';
 
 /** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
@@ -8,6 +9,7 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
   const encoding = evaluateEncodingGuard(ctx);
   if (encoding) return encoding;
 
+  // Layer 1: prompt injection + instruction override detection
   const findings = scanToolCallArguments(ctx.arguments ?? {});
   if (findings.length > 0) {
     const top = findings[0];
@@ -17,6 +19,18 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
       reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
     };
   }
+
+  // Layer 2: credential/secret detection in args
+  const argsStr = JSON.stringify(ctx.arguments ?? {});
+  const secrets = scanForSecrets(argsStr, ctx.toolName ?? 'unknown');
+  if (secrets.length > 0) {
+    return {
+      action: 'block',
+      rule: 'secret-in-args',
+      reason: 'Allowlisted tool blocked: credentials/secrets detected in arguments',
+    };
+  }
+
   return null;
 }
 
