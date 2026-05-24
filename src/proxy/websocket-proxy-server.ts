@@ -30,6 +30,7 @@ import type { AgentIdentity } from '../auth/auth-types.js';
 import { sanitizeProxyClientError, webSocketClientOptions } from '../utils/ws-tls-config.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
 import { getUpstreamTimeoutMs } from '../utils/upstream-timeout.js';
+import { getAnomalyDetector } from '../ai/anomaly-detector.js';
 
 export interface WebSocketProxyOptions {
   listenPort: number;
@@ -438,6 +439,42 @@ export class WebSocketProxyServer {
         id: msg.id,
         error: { code: -32001, message: `Blocked by MCP Guardian policy: ${decision.reason}` },
       };
+    }
+
+    // ── Anomaly detection (ML pipeline) ────────────────────────────
+    try {
+      const anomalyDetector = getAnomalyDetector();
+      const sessionKey = (params?._meta?.['sessionId'] as string | undefined) || String(context.requestId);
+      const anomaly = await anomalyDetector.evaluate(
+        this.opts.serverName,
+        context.toolName,
+        0,    // criticalCount (filled by argument scanner integration)
+        0,    // warningCount
+        0,    // maxConfidence
+        {},   // categories
+        sessionKey,
+        tenantId,
+      );
+
+      if (anomaly.aboveThreshold && anomaly.confidence > 0.7) {
+        Logger.warn(
+          `[ws-proxy:${this.opts.serverName}] Anomaly detected: ${context.toolName} ` +
+          `score=${anomaly.confidence.toFixed(3)} layer=${anomaly.primaryLayer}`,
+        );
+        if (process.env['GUARDIAN_ANOMALY_BLOCK'] === 'true') {
+          breaker.recordFailure();
+          return {
+            jsonrpc: '2.0',
+            id: msg.id,
+            error: {
+              code: -32001,
+              message: `Blocked: anomalous behavior detected (score: ${anomaly.confidence.toFixed(2)}, layer: ${anomaly.primaryLayer})`,
+            },
+          };
+        }
+      }
+    } catch {
+      // Anomaly detection failure is non-fatal
     }
 
     breaker.recordSuccess();
