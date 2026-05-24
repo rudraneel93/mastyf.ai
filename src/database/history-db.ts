@@ -351,7 +351,7 @@ export class HistoryDatabase implements IDatabase {
 
   async getCallRecordsForServer(
     serverName: string,
-    limit = 5000,
+    limit = 1000000,
     tenantId?: string,
   ): Promise<ProxyCallRecord[]> {
     return monitorDbQuery('getCallRecordsForServer', () => {
