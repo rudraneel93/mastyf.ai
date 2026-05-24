@@ -7,6 +7,7 @@ import { runSemanticScan, type SemanticScanOptions } from "./semantic-scanner.js
 import { tryAcquireSemanticSlot, releaseSemanticSlot, semanticQueueMax, semanticPerTenantMax } from "./semantic-queue.js";
 import { isCoreSemanticCircuitOpen } from "./semantic-circuit-breaker.js";
 import { isCoreLocalSemanticEnabled, runLocalSemanticFallback } from "./local-semantic-fallback.js";
+import { runArgumentScan } from "./argument-scanner.js";
 
 export interface ScanEngineOptions {
   /** TR39 confusables before offline regex (default: true). */
@@ -195,6 +196,49 @@ export async function scanTool(
     layers: timings,
   };
 }
+
+export interface ToolCallScanResult extends ToolScanResult {
+  argumentIssues: Issue[];
+}
+
+/**
+ * Full tool-call evaluation — scans both the tool definition (descriptions,
+ * schemas, semantics) AND runtime arguments for SQL/NoSQL injection,
+ * boundary evasion, credential leaks, and shell obfuscation.
+ *
+ * Use scanTool() for server registration-time scanning (definitions only).
+ * Use scanToolCall() for runtime call-time evaluation (definitions + args).
+ */
+export async function scanToolCall(
+  tool: ToolDefinition,
+  args?: Record<string, unknown>,
+  options: ScanEngineOptions = {},
+): Promise<ToolCallScanResult> {
+  // ── Definition scan (existing layers) ────────────────────────────
+  const defResult = await scanTool(tool, options);
+
+  // ── Argument scan (NEW layer) ─────────────────────────────────────
+  let argumentIssues: Issue[] = [];
+  if (args && !options.skipRegex) {
+    const argResult = runArgumentScan(args, tool.name);
+    argumentIssues = argResult.issues;
+  }
+
+  // Merge argument issues into the full issue list
+  const allIssues = deduplicateIssues([
+    ...defResult.issues,
+    ...argumentIssues,
+  ]);
+
+  return {
+    ...defResult,
+    status: computeStatus(allIssues),
+    issues: allIssues,
+    argumentIssues,
+  };
+}
+
+export { runArgumentScan } from "./argument-scanner.js";
 
 export async function scanServer(
   serverName: string,
