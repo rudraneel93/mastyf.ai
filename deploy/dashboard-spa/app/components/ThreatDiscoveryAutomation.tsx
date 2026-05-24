@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  fetchThreatDiscoveryStatus,
-  type ThreatDiscoveryStatus,
+  buildMutatingHeaders,
+  guardianFetch,
 } from '@/lib/guardian-api';
 
 type AutomationState = {
@@ -27,27 +27,75 @@ type AutomationState = {
 };
 
 async function fetchSchedulerStatus(): Promise<AutomationState> {
-  const resp = await fetch('/api/threat-discovery/scheduler/status');
-  const data = await resp.json();
-  
-  // Fetch pipeline health from threat-discovery status
-  const tdResp = await fetch('/api/threat-discovery/status');
-  const tdData = await tdResp.json();
-  
-  // Fetch promotion stats
-  let promoStats = { enabled: false, totalPromoted: 0, dailyQuota: { used: 0, max: 5 }, lastPromotionAt: null };
+  const [schResp, tdResp] = await Promise.all([
+    guardianFetch('/api/threat-discovery/scheduler/status'),
+    guardianFetch('/api/threat-discovery/status'),
+  ]);
+
+  let running = false;
+  let lastRunAt: string | null = null;
+  let totalRuns = 0;
+  let lastRunOk = false;
+  let pipelineHealth: AutomationState['pipelineHealth'] = {
+    queued: 0, writesThisHour: 0, maxPerHour: 20, enabled: false, sources: {},
+  };
+
+  if (schResp.ok) {
+    const schData = (await schResp.json()) as Record<string, unknown>;
+    running = (schData.running as boolean) ?? false;
+    lastRunAt = (schData.lastRunAt as string) ?? null;
+    totalRuns = (schData.totalRuns as number) ?? 0;
+    lastRunOk = (schData.lastRunOk as boolean) ?? false;
+  }
+
+  if (tdResp.ok) {
+    const tdData = (await tdResp.json()) as Record<string, unknown>;
+    const p = tdData.pipelineHealth as Record<string, unknown> | undefined;
+    if (p) {
+      pipelineHealth = {
+        queued: (p.queued as number) ?? 0,
+        writesThisHour: (p.writesThisHour as number) ?? 0,
+        maxPerHour: (p.maxPerHour as number) ?? 20,
+        enabled: (p.enabled as boolean) ?? false,
+        sources: (p.sources as Record<string, boolean>) ?? {},
+      };
+    }
+  }
+
+  // Fetch promotion stats (best-effort)
+  let promoStats: AutomationState['promotionStats'] = {
+    enabled: false, totalPromoted: 0, dailyQuota: { used: 0, max: 5 }, lastPromotionAt: null,
+  };
   try {
-    const promoResp = await fetch('/api/threat-discovery/promote/batch', { method: 'POST' });
-    const promoData = await promoResp.json();
-    if (!promoData.error) promoStats = promoData;
-  } catch {}
+    const headers = await buildMutatingHeaders();
+    const promoResp = await guardianFetch('/api/threat-discovery/promote/batch', {
+      method: 'POST',
+      headers,
+    });
+    if (promoResp.ok) {
+      const promoData = (await promoResp.json()) as Record<string, unknown>;
+      if (!promoData.error) {
+        promoStats = {
+          enabled: (promoData.enabled as boolean) ?? false,
+          totalPromoted: (promoData.totalPromoted as number) ?? 0,
+          dailyQuota: {
+            used: ((promoData.dailyQuota as Record<string, unknown>)?.used as number) ?? 0,
+            max: ((promoData.dailyQuota as Record<string, unknown>)?.max as number) ?? 5,
+          },
+          lastPromotionAt: typeof promoData.lastPromotionAt === 'string' ? promoData.lastPromotionAt : null,
+        };
+      }
+    }
+  } catch {
+    /* best-effort: promotion API may not be available */
+  }
 
   return {
-    schedulerRunning: data.running ?? false,
-    lastRunAt: data.lastRunAt ?? null,
-    totalRuns: data.totalRuns ?? 0,
-    lastRunOk: data.lastRunOk ?? false,
-    pipelineHealth: tdData?.pipelineHealth ?? { queued: 0, writesThisHour: 0, maxPerHour: 20, enabled: false, sources: {} },
+    schedulerRunning: running,
+    lastRunAt,
+    totalRuns,
+    lastRunOk,
+    pipelineHealth,
     promotionStats: promoStats,
   };
 }
@@ -79,12 +127,22 @@ export function ThreatDiscoveryAutomation() {
   }, [load]);
 
   const startScheduler = async () => {
-    await fetch('/api/threat-discovery/scheduler/start', { method: 'POST' });
+    try {
+      const headers = await buildMutatingHeaders();
+      await guardianFetch('/api/threat-discovery/scheduler/start', { method: 'POST', headers });
+    } catch {
+      /* best-effort */
+    }
     void load();
   };
 
   const stopScheduler = async () => {
-    await fetch('/api/threat-discovery/scheduler/stop', { method: 'POST' });
+    try {
+      const headers = await buildMutatingHeaders();
+      await guardianFetch('/api/threat-discovery/scheduler/stop', { method: 'POST', headers });
+    } catch {
+      /* best-effort */
+    }
     void load();
   };
 
@@ -245,11 +303,14 @@ export function ThreatDiscoveryAutomation() {
             type="button"
             className="primary btn-sm"
             onClick={async () => {
-              await fetch('/api/threat-discovery/threat-lab/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: 'reactive' }),
-              });
+              try {
+                const headers = await buildMutatingHeaders();
+                await guardianFetch('/api/threat-discovery/threat-lab/run', {
+                  method: 'POST',
+                  headers,
+                  body: JSON.stringify({ mode: 'reactive' }),
+                });
+              } catch { /* best-effort */ }
               void load();
             }}
           >
@@ -259,7 +320,10 @@ export function ThreatDiscoveryAutomation() {
             type="button"
             className="primary btn-sm"
             onClick={async () => {
-              await fetch('/api/threat-discovery/auto-research/run', { method: 'POST' });
+              try {
+                const headers = await buildMutatingHeaders();
+                await guardianFetch('/api/threat-discovery/auto-research/run', { method: 'POST', headers });
+              } catch { /* best-effort */ }
               void load();
             }}
           >
