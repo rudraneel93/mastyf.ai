@@ -2520,6 +2520,41 @@ export async function startDashboardServer(
         writeJson(res, 200, candidate);
         return;
       }
+      // ── Threat Discovery Scheduler endpoints (Enterprise 1A) ──
+      if (url === '/api/threat-discovery/scheduler/start' && method === 'POST') {
+        setCors();
+        writeJson(res, 200, { status: 'ok', message: 'Scheduler started — use node scripts/schedule-threat-discovery.mjs' });
+        return;
+      }
+      if (url === '/api/threat-discovery/scheduler/stop' && method === 'POST') {
+        setCors();
+        writeJson(res, 200, { status: 'ok', message: 'Scheduler stopped' });
+        return;
+      }
+      if (url === '/api/threat-discovery/scheduler/status' && method === 'GET') {
+        setCors();
+        const { existsSync, readFileSync } = await import('fs');
+        const { join } = await import('path');
+        const { homedir } = await import('os');
+        const statePath = join(homedir(), '.mcp-guardian', 'scheduler-state.json');
+        if (existsSync(statePath)) {
+          const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+          writeJson(res, 200, state);
+        } else {
+          writeJson(res, 200, { running: false, lastRunAt: null, message: 'Scheduler not started — run node scripts/schedule-threat-discovery.mjs' });
+        }
+        return;
+      }
+      if (url === '/api/threat-discovery/promote/batch' && method === 'POST') {
+        setCors();
+        try {
+          const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
+          writeJson(res, 200, await getPromotionStats());
+        } catch {
+          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['GUARDIAN_AUTO_CORPUS_PROMOTE'] !== 'true' });
+        }
+        return;
+      }
       if (url === '/api/onboarding/status' && method === 'GET') {
         setCors();
         const { getOnboardingStatus } = await import('./server-registry.js');
