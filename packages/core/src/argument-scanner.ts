@@ -93,7 +93,33 @@ const SQL_INJECTION_PATTERNS = [
 
   // === dangerous functions ===
   /\b(?:dbo\.|master\.\.)xp_/i,
-  /\b(?:sp_executesql|sp_execute_external_script)\b/i,
+  /\b(?:sp_executesql|sp_execute_external_script|sp_sqlexec|sp_OACreate|sp_OAMethod|sp_OAStop)\b/i,
+  /\bOPENROWSET\s*\(/i,
+  /\bOPENDATASOURCE\s*\(/i,
+  /\bOPENQUERY\s*\(/i,
+  // === error-based injection ===
+  /'\s+AND\s+(?:RAISERROR|THROW|CAST|CONVERT)\s*\(/i,
+  /'\s+AND\s+CTXSYS\.DRITHSX\.SN\s*\(/i,
+  // === blind time variants ===
+  /\bWAITFOR\s+DELAY\s+['"]?\d+:\d+:\d+['"]?/i,
+  /\bpg_sleep\s*\(\s*\d+/i,
+  /\bDBMS_PIPE\.RECEIVE_MESSAGE\s*\(/i,
+  // === Oracle-specific ===
+  /\b(?:UTL_HTTP\.REQUEST|UTL_INADDR\.GET_HOST_NAME|UTL_TCP|DBMS_LDAP\.INIT)\s*\(/i,
+  /\b(?:HTTPURITYPE|DBURITYPE|XDBURITYPE)\s*\(/i,
+  // === PostgreSQL-specific ===
+  /\bCOPY\s+\w+\s+FROM\s+PROGRAM\b/i,
+  /\b(?:lo_import|lo_export)\s*\(/i,
+  // === HQL/JPQL injection ===
+  /\bFROM\s+\w+\s+WHERE\s+\w+\s*=\s*\w+\s+(?:OR|AND)\s+/i,
+  /\bSELECT\s+NEW\s+\w+\s*\(/i,
+  // === MySQL-specific ===
+  /\bSELECT\s+.*INTO\s+(?:OUT|DUMP)FILE\b/i,
+  /\bBENCHMARK\s*\(\s*\d+\s*,\s*\w+\s*\(/i,
+  // === group_concat data extraction ===
+  /\bGROUP_CONCAT\s*\(/i,
+  /\bstring_agg\s*\(/i,
+  /\bLISTAGG\s*\(/i,
 ];
 
 // ── NoSQL Injection (expanded) ──────────────────────────────────────────────
@@ -161,6 +187,15 @@ const NOSQL_INJECTION_PATTERNS = [
 
   // === ElastiSearch query DSL injection ===
   /\b(?:script\s*\{|inline\s*['"]|\bsource\s*['"][^'"]{0,100}(?:execute|exec|Runtime|ProcessBuilder|Class\.forName))/i,
+  // === Redis injection ===
+  /\b(?:CONFIG\s+SET|CONFIG\s+GET|SAVE|BGSAVE|SHUTDOWN|FLUSHALL|FLUSHDB|DEBUG\s+SEGFAULT|MODULE\s+LOAD|SLAVEOF|REPLICAOF|MIGRATE)\b/i,
+  /\b(?:EVAL|EVALSHA)\b/i,
+  // === Cassandra/CQL injection ===
+  /\b(?:CREATE\s+KEYSPACE|DROP\s+KEYSPACE|ALTER\s+KEYSPACE|CREATE\s+TABLE|DROP\s+TABLE|TRUNCATE\s+TABLE)\b/i,
+  // === DynamoDB injection ===
+  /\b(?:FilterExpression|KeyConditionExpression|UpdateExpression|ConditionExpression)\s*:\s*['"][^'"]{0,100}(?:SET|REMOVE|ADD|DELETE)\b/i,
+  // === CouchDB injection ===
+  /\b(?:_design|_all_docs|_changes|_replicate|_compact|_view_cleanup)\b/i,
 ];
 
 // ── Boundary / Null-Byte Evasion (expanded) ──────────────────────────────────
