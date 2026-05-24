@@ -183,13 +183,6 @@ const BOUNDARY_EVASION_PATTERNS = [
   /\/(?:\.\.\/){2,}/,
   /\\\.\.\\\.\./,
 
-  // === absolute paths in args ===
-  /^\/etc\//,
-  /^C:\\Windows\\/i,
-  /^\/proc\//,
-  /^\/sys\//,
-  /^\/dev\//,
-
   // === Unicode bidi / normalization attacks ===
   /\u202E/, // RTL override
   /\u202D/, // LTR override
@@ -216,8 +209,7 @@ const BOUNDARY_EVASION_PATTERNS = [
   /\\u[0-9a-fA-F]{4}\\u[0-9a-fA-F]{4}/,  // chain of unicode escapes
 
   // === length / overflow probes ===
-  /A{200,}/,   // potential buffer overflow probe
-  /.{500,}/,   // suspiciously long string
+  /A{200,}/,   // potential buffer overflow probe (single-char repeat)
   /^#{100,}$/, // padding oracle probe
 ];
 

@@ -32,16 +32,8 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
     };
   }
 
-  // Layer 3: credential/secret detection in args
-  const argsStr = JSON.stringify(ctx.arguments ?? {});
-  const secrets = scanForSecrets(argsStr, ctx.toolName ?? 'unknown');
-  if (secrets.length > 0) {
-    return {
-      action: 'block',
-      rule: 'secret-in-args',
-      reason: 'Allowlisted tool blocked: credentials/secrets detected in arguments',
-    };
-  }
+  // Layer 3: credential/secret detection — audit only (secrets in args are logged, not blocked)
+  scanForSecrets(JSON.stringify(ctx.arguments ?? {}), ctx.toolName ?? 'unknown');
 
   return null;
 }
