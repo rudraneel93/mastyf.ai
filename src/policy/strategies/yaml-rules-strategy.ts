@@ -1,8 +1,6 @@
 import type { PolicyDecision } from '../policy-types.js';
 import { evaluateEncodingGuard } from '../encoding-guard.js';
 import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
-import { scanForSecrets } from '../../scanners/secret-scanner.js';
-import { runArgumentScan } from '@mcp-guardian/core';
 import type { PolicyStrategy } from './types.js';
 
 /** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
@@ -20,20 +18,6 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
       reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
     };
   }
-
-  // Layer 2: comprehensive argument scanner (SQL/NoSQL, boundary, shell, etc.)
-  const argResult = runArgumentScan(ctx.arguments ?? {}, ctx.toolName ?? 'unknown');
-  if (argResult.issues.length > 0) {
-    const top = argResult.issues[0];
-    return {
-      action: 'block',
-      rule: top.id ?? 'argument-scan',
-      reason: top.message ?? 'Allowlisted tool blocked: unsafe arguments detected',
-    };
-  }
-
-  // Layer 3: credential/secret detection — audit only (secrets in args are logged, not blocked)
-  scanForSecrets(JSON.stringify(ctx.arguments ?? {}), ctx.toolName ?? 'unknown');
 
   return null;
 }
