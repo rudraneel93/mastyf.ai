@@ -1,6 +1,8 @@
 import type { PolicyDecision } from '../policy-types.js';
 import { evaluateEncodingGuard } from '../encoding-guard.js';
 import { scanToolCallArguments } from '../../scanners/prompt-injection-detector.js';
+import { runTokenInspection } from '../../scanners/token-inspector.js';
+import { walkStringLeaves } from '../arg-leaf-walker.js';
 import type { PolicyStrategy } from './types.js';
 
 /** Defense in depth: allowlisted tools must still pass argument guards (adv-066 class). */
@@ -16,6 +18,18 @@ function blockAllowlistedToolIfArgsUnsafe(ctx: import('../policy-types.js').Call
       action: 'block',
       rule: top.patternId ?? 'request-prompt-injection',
       reason: top.description ?? 'Allowlisted tool blocked: unsafe arguments',
+    };
+  }
+
+  // Layer 4: JWT/SAML token inspection (fixes 87% token evasion)
+  const flat = walkStringLeaves(ctx.arguments ?? {}).map((l) => ({ keyPath: '(root)', value: l.value }));
+  const tokenIssues = runTokenInspection(flat);
+  if (tokenIssues.length > 0) {
+    const top = tokenIssues[0];
+    return {
+      action: 'block',
+      rule: 'token-inspection',
+      reason: top.message ?? 'Allowlisted tool blocked: suspicious token/JWT detected',
     };
   }
 
