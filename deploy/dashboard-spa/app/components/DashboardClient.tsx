@@ -38,7 +38,11 @@ import { HealthReliabilityPanel } from './dashboard/HealthReliabilityPanel';
 import { AuditExplorerPanel } from './dashboard/AuditExplorerPanel';
 import { FleetOverviewPanel } from './dashboard/FleetOverviewPanel';
 import { AnalyticsChartsHub } from './dashboard/AnalyticsChartsHub';
-import { DashboardWindowProvider, DashboardWindowSelector } from './dashboard/DashboardWindowContext';
+import {
+  DashboardWindowProvider,
+  DashboardWindowSelector,
+  useCurrentWindowDays,
+} from './dashboard/DashboardWindowContext';
 import { DashboardRegionProvider, DashboardRegionSelector } from './dashboard/DashboardRegionContext';
 import { VisualsProvider } from './dashboard/VisualsProvider';
 import { hasPermission } from '@/lib/dashboard-roles';
@@ -110,6 +114,8 @@ export function DashboardClient() {
   const statusTimerRef = useRef<number | null>(null);
 
   const ws = useDashboardWs(ready, sessionKey);
+  const { windowDays: currentWindowDays, windowLabel: currentWindowLabel } =
+    useCurrentWindowDays();
 
   const applyStatus = useCallback((text: string, isError: boolean, immediate = false) => {
     if (statusTimerRef.current) {
@@ -135,12 +141,13 @@ export function DashboardClient() {
       const [auditRes, metricsRes, costRes, secRes, healthRes, fleetRes, authRes] =
         await Promise.all([
           fetchAudit({
+            windowDays: currentWindowDays,
             limit: 100,
             action: auditAction || undefined,
             server: auditServer || undefined,
           }),
-          fetchAggregateMetrics(),
-          fetchCost(),
+          fetchAggregateMetrics(currentWindowDays),
+          fetchCost(currentWindowDays),
           fetchSecurity(),
           fetchHealth(),
           fetchFleetInstances(),
@@ -201,7 +208,16 @@ export function DashboardClient() {
         }
       }
     }
-  }, [applyStatus, auditAction, auditServer, ws.connected, ws.statusText, ws.statusIsError]);
+  }, [
+    applyStatus,
+    auditAction,
+    auditServer,
+    currentWindowDays,
+    currentWindowLabel,
+    ws.connected,
+    ws.statusText,
+    ws.statusIsError,
+  ]);
 
   useEffect(() => {
     setReady(true);
