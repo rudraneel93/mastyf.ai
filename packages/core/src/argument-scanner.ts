@@ -618,6 +618,129 @@ const DANGEROUS_JS_PATTERNS = [
   /\.(?:forms|embeds|plugins|anchors|images|links|applets)\[/i,
 ];
 
+// ── XSS / HTML / CSS Injection Patterns (Phase 5B) ─────────────────────────
+const XSS_INJECTION_PATTERNS: RegExp[] = [
+  // === Reflected XSS ===
+  /<script[^>]*>[\s\S]{0,100}<\/script>/i,
+  /<img[^>]+onerror\s*=/i,
+  /<img[^>]+onload\s*=/i,
+  /<svg[^>]+onload\s*=/i,
+  /<body[^>]+onload\s*=/i,
+  /<input[^>]+onfocus\s*=/i,
+  /<iframe[^>]+src\s*=\s*['"]javascript:/i,
+  // === Stored XSS event handlers ===
+  /\bon(?:mouseover|mouseout|mousedown|mouseup|click|dblclick|keydown|keyup|keypress|focus|blur|change|submit|reset|select|abort)\s*=/i,
+  // === DOM-based XSS ===
+  /\bdocument\.write\s*\(/i,
+  /\beval\s*\(/i,
+  /\bsetTimeout\s*\(\s*['"][^'"]{5,}/i,
+  /\bsetInterval\s*\(\s*['"][^'"]{5,}/i,
+  /\.innerHTML\s*=\s*['"][^'"]{5,}/i,
+  /\.outerHTML\s*=/i,
+  // === CSS injection ===
+  /style\s*=\s*['"][^'"]*\bexpression\s*\(/i,
+  /<style[^>]*>\s*@import\s+url\s*\(/i,
+  /\bmoz-binding\s*:/i,
+  /@import\s+url\s*\(/i,
+  // === CSP bypass ===
+  /<link[^>]+rel\s*=\s*['"]stylesheet['"][^>]+href\s*=\s*['"]data:/i,
+  /<meta[^>]+http-equiv\s*=\s*['"]refresh['"][^>]+url\s*=\s*['"]javascript:/i,
+  // === HTML smuggling ===
+  /data:text\/html[\s\S]{0,50}base64/i,
+  /<a[^>]+href\s*=\s*['"]javascript:/i,
+  /<form[^>]+action\s*=\s*['"]javascript:/i,
+  // === SVG-based XSS ===
+  /<svg[^>]*>[\s\S]{0,100}<script[\s\S]{0,100}<\/script>/i,
+  /<animate[^>]+onbegin\s*=/i,
+  /<set[^>]+onbegin\s*=/i,
+  /<use[^>]+href\s*=\s*['"]data:/i,
+];
+
+// ── DNS / Side-Channel Exfiltration Patterns (Phase 5C) ─────────────────────
+const EXFILTRATION_PATTERNS: RegExp[] = [
+  // === DNS tunneling ===
+  /[a-zA-Z0-9]{30,}\.(?:burpcollaborator|interact\.sh|oastify|canarytokens|requestbin|webhook\.site|pipedream|beeceptor)/i,
+  /[a-zA-Z0-9]{30,}\.(?:xyz|tk|ml|ga|cf|gq|pw|top|club|online|site|website|space|fun|host|press|digital)\)?$/i,
+  // === DNS exfiltration via dig/nslookup ===
+  /\b(?:dig|nslookup|host)\s+[\w-]+\.[\w-]+\.\w+/i,
+  /\b(?:dig|nslookup)\s+-t\s+\w+\s+\w+/i,
+  // === ICMP exfiltration ===
+  /\bping\s+-[c]\s+\d+\s+-p\s+[0-9a-fA-F]/i,
+  /\bping\s+-s\s+\d{3,}\b/i,
+  // === HTTP-based data exfiltration ===
+  /\bcurl\s+[^|]+\|[^|]*\b(?:nc|netcat|ncat)\b/i,
+  /\bwget\s+[^|]+\|\s*(?:nc|netcat)\b/i,
+  /\bcurl\s+-d\s+['"]?\$\(/i,
+  /\bcurl\s+.*--data-binary\s+@/i,
+  // === WebSocket exfiltration ===
+  /\bnew\s+WebSocket\s*\(/i,
+  /\bwss?:\/\/[^\s'"]+\?data=/i,
+  // === Timing side-channels ===
+  /\b(?:sleep|usleep)\s+\d+\s*;/i,
+  /\bping\s+-c\s+\d+\s+-i\s+\d+\b/i,
+];
+
+// ── HTTP Smuggling & Cache Poisoning (Phase 5D) ──────────────────────────────
+const HTTP_SMUGGLING_PATTERNS: RegExp[] = [
+  // === CL.TE smuggling ===
+  /Content-Length\s*:\s*\d+\s*\r?\n\s*Transfer-Encoding\s*:\s*chunked/i,
+  // === TE.CL smuggling ===
+  /Transfer-Encoding\s*:\s*chunked\s*\r?\n\s*Content-Length\s*:\s*\d+/i,
+  // === TE.TE confusion ===
+  /Transfer-Encoding\s*:\s*[\s\S]{0,50}\n\s*Transfer-Encoding\s*:/i,
+  // === Cache poisoning headers ===
+  /X-Forwarded-Host\s*:\s*[^\n]+/i,
+  /X-Original-URL\s*:\s*/i,
+  /X-Rewrite-URL\s*:\s*/i,
+  /X-HTTP-Method-Override\s*:/i,
+  // === HTTP Parameter Pollution ===
+  /(?:\?|&)[a-zA-Z0-9_-]+=[^&]*&[a-zA-Z0-9_-]+=[^&]*&[a-zA-Z0-9_-]+=[^&]*&[a-zA-Z0-9_-]+=/,
+  // === Response splitting ===
+  /\r\nHTTP\/[0-9]\.[0-9]/i,
+  /\r\nSet-Cookie\s*:/i,
+  /\r\nLocation\s*:/i,
+  /\r\nContent-Type\s*:/i,
+  // === Host header attacks ===
+  /Host\s*:\s*[^\n]+\nHost\s*:/i,
+  /Host\s*:\s*[^\n]+\nX-Forwarded-Host\s*:/i,
+];
+
+// ── Deserialization Gadget Chains (Phase 5E) ─────────────────────────────────
+const DESERIALIZATION_GADGET_PATTERNS: RegExp[] = [
+  // === Java ysoserial gadgets ===
+  /\b(?:CommonsCollections[1-7]|CommonsBeanutils[12]|Spring[12]|Groovy[12]|Jdk7u21|Jdk8u20|Jython1|Myfaces[12]|ROME|Click1|C3P0|Wicket1|Clojure|Hibernate[12]|JBossInterceptors1|JSON1|JavassistWeld1|JRE8u20|MozillaRhino[12]|URLDNS|JRMPClient|JRMPListener)\b/i,
+  // === InvokerTransformer chain ===
+  /\b(?:InvokerTransformer|ChainedTransformer|ConstantTransformer|InstantiateTransformer|ClosureTransformer)\b/i,
+  // === JNDI/LDAP/RMI attack vectors ===
+  /\b(?:ldap|rmi|dns|iiop|corbaname|nis):\/\/[^\s'"]+/i,
+  /\$\{jndi:/i,
+  /\$\{java:/i,
+  // === Python pickle RCE ===
+  /\b__setstate__\b/i,
+  /\b__getstate__\b/i,
+  /\bcopyreg\s*\(/i,
+  /\bposix\.system\b/i,
+  /\bnt\.system\b/i,
+  // === PHP unserialize gadgets (Monolog, Guzzle, WordPress) ===
+  /\bO:\d+:"Monolog\\\\Handler/i,
+  /\bO:\d+:"GuzzleHttp\\\\Cookie/i,
+  /\b(?:WP_Image_Editor|Requests_Utility_FilteredIterator)/i,
+  // === FastJSON / Jackson gadgets ===
+  /\b(?:TemplatesImpl|JdbcRowSetImpl|LdapAttribute)\b/i,
+  /@"type"\s*:\s*"[^"]*Jndi[^"]*"/i,
+];
+
+// ── GraphQL Injection (expanded) ─────────────────────────────────────────────
+const GRAPHQL_INJECTION_PATTERNS: RegExp[] = [
+  /\b(?:__schema|__type|__typename|__directive)\b/i,
+  /\{[\s\S]{0,50}(?:__schema|__type)\{/i,
+  /\bfragment\s+\w+\s+on\s+\w+\s*\{[\s\S]{0,100}(?:password|secret|token|credential)\}/i,
+  /\bquery\s*\{[\s\S]{0,50}(?:__schema|__type|__typename)\b/i,
+  /\b(?:query|mutation|subscription)\s*\{[\s\S]{0,500}\}/i,
+  /\b(?:alias|batch)\s*:\s*\{/i,
+  /\b(?:introspection|schema)\s*\{/i,
+];
+
 // ── File Inclusion / Traversal ──────────────────────────────────────────────
 const FILE_INCLUSION_PATTERNS = [
   // === absolute paths ===
@@ -1061,7 +1184,7 @@ export function runArgumentScan(
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // Deserialization Attacks
+    // Deserialization Attacks + Gadget Chains (Phase 5E)
     // ══════════════════════════════════════════════════════════════════
     if (isCodeParam(item.keyPath) || isSqlQueryParam(item.keyPath)) {
       for (const pattern of DESERIALIZATION_PATTERNS) {
@@ -1073,6 +1196,76 @@ export function runArgumentScan(
           ));
           break;
         }
+      }
+      for (const pattern of DESERIALIZATION_GADGET_PATTERNS) {
+        if (pattern.test(item.value)) {
+          issues.push(makeIssue(
+            'MCPG-A-DSER-002', 'deserialization', 'critical',
+            `Deserialization gadget chain in "${item.keyPath}"`,
+            item.value, 0.95,
+          ));
+          break;
+        }
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // XSS / HTML / CSS Injection (Phase 5B)
+    // ══════════════════════════════════════════════════════════════════
+    for (const pattern of XSS_INJECTION_PATTERNS) {
+      if (pattern.test(item.value)) {
+        issues.push(makeIssue(
+          'MCPG-A-XSS-001', 'xss-injection', 'critical',
+          `XSS/HTML/CSS injection pattern in "${item.keyPath}"`,
+          item.value, 0.9,
+        ));
+        break;
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // DNS / Side-Channel Exfiltration (Phase 5C)
+    // ══════════════════════════════════════════════════════════════════
+    if (isUrlParam(item.keyPath) || isShellCommandParam(item.keyPath)) {
+      for (const pattern of EXFILTRATION_PATTERNS) {
+        if (pattern.test(item.value)) {
+          issues.push(makeIssue(
+            'MCPG-A-EXFIL-001', 'exfiltration', 'critical',
+            `DNS/side-channel exfiltration pattern in "${item.keyPath}"`,
+            item.value, 0.85,
+          ));
+          break;
+        }
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // HTTP Smuggling & Cache Poisoning (Phase 5D)
+    // ══════════════════════════════════════════════════════════════════
+    if (isUrlParam(item.keyPath)) {
+      for (const pattern of HTTP_SMUGGLING_PATTERNS) {
+        if (pattern.test(item.value)) {
+          issues.push(makeIssue(
+            'MCPG-A-HTTPS-001', 'http-smuggling', 'critical',
+            `HTTP smuggling/cache poisoning in "${item.keyPath}"`,
+            item.value, 0.85,
+          ));
+          break;
+        }
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // GraphQL Injection (expanded)
+    // ══════════════════════════════════════════════════════════════════
+    for (const pattern of GRAPHQL_INJECTION_PATTERNS) {
+      if (pattern.test(item.value)) {
+        issues.push(makeIssue(
+          'MCPG-A-GQL-001', 'graphql-injection', 'warning',
+          `GraphQL injection/introspection in "${item.keyPath}"`,
+          item.value, 0.75,
+        ));
+        break;
       }
     }
 
