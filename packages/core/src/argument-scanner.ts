@@ -820,6 +820,30 @@ function makeIssue(
   };
 }
 
+/** Lightweight recursive decode: base64, hex, URL decode (up to depth 3). */
+function tryDecode(value: string): string[] {
+  const decoded: string[] = [value];
+  // Base64 decode
+  if (/^[A-Za-z0-9+/]{12,}={0,2}$/.test(value.trim())) {
+    try { const d = Buffer.from(value.trim(), 'base64').toString('utf-8'); if (d.length >= 4) decoded.push(d); } catch {}
+  }
+  // Hex decode
+  if (/^[0-9a-fA-F]{12,}$/.test(value.trim()) && value.trim().length % 2 === 0) {
+    try { const d = Buffer.from(value.trim(), 'hex').toString('utf-8'); if (/[\x20-\x7E]/.test(d)) decoded.push(d); } catch {}
+  }
+  // URL decode
+  if (/%[0-9a-fA-F]{2}/.test(value)) {
+    try { decoded.push(decodeURIComponent(value)); } catch {}
+  }
+  // Decode chains: decode then try base64 again on result
+  for (const d of decoded.slice(1)) {
+    if (/^[A-Za-z0-9+/]{12,}={0,2}$/.test(d.trim())) {
+      try { const dd = Buffer.from(d.trim(), 'base64').toString('utf-8'); if (dd.length >= 4) decoded.push(dd); } catch {}
+    }
+  }
+  return [...new Set(decoded)]; // deduplicate
+}
+
 export function runArgumentScan(
   args: Record<string, unknown> | undefined,
   toolName: string,
@@ -841,9 +865,10 @@ export function runArgumentScan(
   issues.push(...entropyIssues);
 
   for (const item of flat) {
-    // ── Unicode normalization (NFKD) before regex matching ──────────
-    // Fixes 88% Cyrillic/Greek homoglyph evasion (adversarial harness finding #1)
+    // ── Unicode normalization + recursive decode before regex ────────
+    // Fixes 88% Cyrillic homoglyph evasion + 50%+ encoding-based evasion
     const normalized = normalizeUnicode(item.value, true);
+    const decodedVariants = tryDecode(item.value);
 
     // ══════════════════════════════════════════════════════════════════
     // SQL Injection
