@@ -36,9 +36,35 @@ npm install -g @mcp-guardian/server
 
 See [README.md](../README.md) for proxy, dashboard, and policy setup.
 
+### Guardian Autopilot (recommended)
+
+One-command plug-and-play protection, learning, and daily digests — see [AUTOPILOT.md](./AUTOPILOT.md).
+
+```bash
+pnpm build:guardian
+pnpm autopilot:init -- --apply
+pnpm autopilot:start
+```
+
+If `mcp-guardian autopilot` says **unknown command**, the global npm CLI is outdated — use `pnpm autopilot:*` or `node dist/cli.js autopilot …` from this repo (see [AUTOPILOT.md](./AUTOPILOT.md)).
+
+**Full analysis:** `pnpm analyze` or Protection → **Full analysis (plain English)**. Cost charts live under Operations → Cost only.
+
+If the UI shows **“Dashboard API disabled; WebSocket at /ws only”**, the Pro license gate turned off REST routes. For local dev use `pnpm dashboard:proxy` (sets `GUARDIAN_CI_BYPASS_LICENSE=true`), or export it before starting the proxy:
+
+```bash
+export GUARDIAN_CI_BYPASS_LICENSE=true
+export DASHBOARD_ENABLED=true
+pnpm dashboard:proxy -- guardian-configs/filesystem.json
+```
+
+Open **http://localhost:4000/** (not a separate Next dev port unless you pass `?apiBase=http://localhost:4000`).
+
 ### React dashboard (required for Enterprise AI tab)
 
-The full dashboard UI (Enterprise AI, LoRA, supply chain, tribunal, compliance) ships as a Next.js static export. After install or upgrade, build once before starting the dashboard:
+The dashboard is a light, minimalist **Next.js** static export with seven workspaces: **Protection** (default home), **Activity** (security analysis pipeline + audit), **Threats** (Threat Lab, auto research, intel), **Security** (posture, policy, AI), **Operations**, **Settings**, and **Help**.
+
+After install or upgrade, build once before starting the dashboard:
 
 ```bash
 pnpm dashboard:build
@@ -47,7 +73,13 @@ pnpm dashboard:serve   # or DASHBOARD_ENABLED=true on the proxy
 
 Without `deploy/dashboard-spa/out/`, the server falls back to a legacy static shell with only basic metrics.
 
-After upgrading, **restart the Guardian proxy** (`pnpm build` then restart) so new dashboard API routes (e.g. `/api/incidents/investigate`) are registered.
+**MCP health report:** On Protection (home), use **Download health report** for a Markdown file (measured from `history.db`). Autopilot also writes scheduled digests — use **Generate digest now** on the Protection workspace.
+
+Deep-link: `?workspace=activity&view=analysis`, `?workspace=threats&view=threat-lab`, `?workspace=help&topic=threat-lab` (legacy `?tab=` aliases still work).
+
+Pipeline stages (Preflight → Technical) update in real time on **Activity → Security analysis** when you run analysis; infrastructure charts use `GET /api/visuals/live` from `history.db` (empty states when no traffic).
+
+After upgrading, **restart the Guardian proxy** (`pnpm build` then restart) so new API routes (e.g. `/api/reports/mcp-health`, `/api/incidents/investigate`) are registered.
 
 ### Local Security Swarm (maintainer, no license key)
 

@@ -24,13 +24,14 @@ import {
 } from '../../src/ai/threat-lab.js';
 import { candidateFingerprint, nextAdvId } from '../../src/ai/auto-corpus-writer.js';
 import { autoThreatResearchOwnsAdvWrites } from '../../src/ai/threat-research-pipeline.js';
+import { resolveSwarmOutputDir } from '../../src/tenant/swarm-tenant-paths.js';
 import { loadSemanticAuditRecordsAsync } from '../../src/ai/semantic-audit-store.js';
 import { getSharedThreatIntel } from '../../src/ai/threat-intel.js';
 
 await exitUnlessProFeature('swarm');
 
 const REPO = process.cwd();
-const OUT_DIR = join(REPO, 'reports', 'security-swarm');
+const OUT_DIR = resolveSwarmOutputDir();
 const MANIFEST = join(OUT_DIR, 'threat-lab-candidates.json');
 const CUSTOM = join(REPO, 'adversarial-harness', 'fixtures', 'custom-attacks');
 const GATES_PATH = join(REPO, 'security-swarm', 'config', 'gates.json');

@@ -62,7 +62,7 @@ function findSwarmArtifactPath(name: string, tenantId?: string): string | null {
   return null;
 }
 
-function readSwarmJsonFile<T>(name: string, tenantId?: string): T | null {
+export function readSwarmJsonFile<T>(name: string, tenantId?: string): T | null {
   const p = findSwarmArtifactPath(name, tenantId);
   if (!p) return null;
   try {

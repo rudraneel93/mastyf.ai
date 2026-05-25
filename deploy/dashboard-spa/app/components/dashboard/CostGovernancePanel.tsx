@@ -142,6 +142,9 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
   }
 
   const utilVariant = budgetPct != null ? (budgetPct >= 100 ? 'danger' : budgetPct >= 75 ? 'warn' : 'success') : 'default';
+  const coveragePct = cost?.costCoverage?.coveragePct;
+  const showCoverageBanner =
+    coveragePct != null && coveragePct < 80 && (cost?.costCoverage?.unpricedCalls ?? 0) > 0;
 
   return (
     <div className="cost-governance-panel">
@@ -149,8 +152,17 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
 
       <DashboardSection
         title="Cost governance"
-        subtitle={`FinOps view — ${window} measured spend`}
+        subtitle={`FinOps view — ${window} measured spend (advanced)`}
       >
+        {showCoverageBanner ? (
+          <p className="alert" role="status">
+            Partial coverage — {coveragePct}% of calls have model pricing (
+            {cost?.costCoverage?.unpricedCalls ?? 0} unpriced). {cost?.disclaimer || cost?.costCoverage?.disclaimer}
+          </p>
+        ) : cost?.disclaimer ? (
+          <p className="hint muted">{cost.disclaimer}</p>
+        ) : null}
+
         <div className="kpi-row">
           <KpiCard
             label="Total spend"
@@ -164,11 +176,13 @@ export function CostGovernancePanel({ refreshKey = 0, initialCost = null }: Prop
             unit="/hr"
             explanation="Spend divided by observed traffic time span in history DB."
           />
-          <KpiCard
-            label="Projected monthly"
-            value={cost?.projectedMonthly != null ? formatUsd(cost.projectedMonthly, 2) : '—'}
-            explanation="Extrapolated from current burn rate over 30 days."
-          />
+          {cost?.projectedMonthly != null ? (
+            <KpiCard
+              label="Projected monthly"
+              value={formatUsd(cost.projectedMonthly, 2)}
+              explanation="Extrapolated from current burn rate over 30 days (requires 24h+ traffic and 50%+ pricing coverage)."
+            />
+          ) : null}
           <KpiCard
             label="Pricing model"
             value={cost?.pricingModel?.split(' ')[0] || '—'}

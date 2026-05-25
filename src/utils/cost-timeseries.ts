@@ -10,6 +10,7 @@ import {
   computeComparison,
   fillTimeSeries,
   generateTimeBuckets,
+  parseRecordTimestamp,
   parseWindowDays,
   windowRangeMs,
 } from './time-buckets.js';
@@ -63,7 +64,7 @@ export async function buildCostTimeseries(
   for (const srv of srvs) {
     const recs = await db.getCallRecordsForServer(srv, undefined, tenantId);
     for (const r of recs) {
-      const ts = Date.parse(String(r.timestamp || ''));
+      const ts = parseRecordTimestamp(r.timestamp);
       if (!Number.isFinite(ts)) continue;
       const cost = Number(r.costUsd) || 0;
       if (ts >= priorStartMs && ts < priorEndMs) {
@@ -161,7 +162,7 @@ export async function loadAllRecordsInWindow(
   for (const srv of srvs) {
     const recs = await db.getCallRecordsForServer(srv, undefined, tenantId);
     for (const r of recs) {
-      const ts = Date.parse(String(r.timestamp || ''));
+      const ts = parseRecordTimestamp(r.timestamp);
       if (Number.isFinite(ts) && ts >= startMs && ts <= endMs) all.push(r);
     }
   }

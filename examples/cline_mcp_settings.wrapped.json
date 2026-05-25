@@ -8,6 +8,11 @@
         "--policy",
         "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
+      "env": {
+        "DASHBOARD_ENABLED": "false",
+        "GUARDIAN_WS_ENABLED": "false",
+        "METRICS_ENABLED": "false"
+      },
       "transport": "stdio"
     },
     "filesystem": {
@@ -18,6 +23,11 @@
         "--policy",
         "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
+      "env": {
+        "DASHBOARD_ENABLED": "false",
+        "GUARDIAN_WS_ENABLED": "false",
+        "METRICS_ENABLED": "false"
+      },
       "transport": "stdio"
     },
     "puppeteer": {
@@ -28,6 +38,11 @@
         "--policy",
         "/Users/rudraneeldas/Desktop/mcp-guardian/default-policy.yaml"
       ],
+      "env": {
+        "DASHBOARD_ENABLED": "false",
+        "GUARDIAN_WS_ENABLED": "false",
+        "METRICS_ENABLED": "false"
+      },
       "transport": "stdio"
     },
     "mcp-guardian": {

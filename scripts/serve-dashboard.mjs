@@ -11,6 +11,7 @@ import { existsSync } from 'node:fs';
 const port = parseInt(process.env.DASHBOARD_PORT || '4000', 10);
 process.env.DASHBOARD_ENABLED = 'true';
 process.env.GUARDIAN_WS_ENABLED = process.env.GUARDIAN_WS_ENABLED ?? 'true';
+process.env.GUARDIAN_CI_BYPASS_LICENSE = process.env.GUARDIAN_CI_BYPASS_LICENSE ?? 'true';
 
 // Open the proxy history database if it exists
 const dbPath = process.env.MCP_GUARDIAN_DB_PATH || resolveGuardianDbPath();

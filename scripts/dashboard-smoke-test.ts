@@ -133,6 +133,31 @@ async function main(): Promise<void> {
       activeLearning.status === 200,
       `status=${activeLearning.status}`,
     );
+
+    const analytics = await getJson('/api/analytics/summary?window=7d');
+    const analyticsBody = analytics.body as Record<string, unknown> | null;
+    record(
+      'GET /api/analytics/summary',
+      analytics.status === 200 && analyticsBody != null,
+      `status=${analytics.status} available=${String(analyticsBody?.available)}`,
+    );
+
+    const secDash = await getJson('/api/security/dashboard?window=24h');
+    const secBody = secDash.body as Record<string, unknown> | null;
+    record(
+      'GET /api/security/dashboard',
+      secDash.status === 200 && Array.isArray(secBody?.threats),
+      `status=${secDash.status} threats=${Array.isArray(secBody?.threats) ? (secBody!.threats as unknown[]).length : '—'}`,
+    );
+
+    const setupStatus = await getJson('/api/setup/status');
+    record('GET /api/setup/status', setupStatus.status === 200, `status=${setupStatus.status}`);
+
+    const setupDb = await getJson('/api/setup/db-health');
+    record('GET /api/setup/db-health', setupDb.status === 200, `status=${setupDb.status}`);
+
+    const setupCloud = await getJson('/api/setup/cloud-status');
+    record('GET /api/setup/cloud-status', setupCloud.status === 200, `status=${setupCloud.status}`);
   } finally {
     await closeDashboardServer();
   }
@@ -145,6 +170,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   console.log('[smoke] All dashboard smoke checks passed');
+  process.exit(0);
 }
 
 main().catch((err) => {

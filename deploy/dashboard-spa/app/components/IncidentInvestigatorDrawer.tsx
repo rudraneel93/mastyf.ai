@@ -69,11 +69,14 @@ export function IncidentInvestigatorDrawer({ triggerId, onClose, onOpenThreatLab
   const openThreatLab = () => {
     if (!investigation || !onOpenThreatLab) return;
     const hyp = investigation.hypotheses?.[0];
+    const anchorCitation = investigation.citations?.find((c) => c.id === triggerId);
+    const toolFromCitation = anchorCitation?.summary?.split(' on ')[0]?.trim();
+    const toolFromGraph = investigation.intentGraph?.nodes?.[0]?.toolName;
     onOpenThreatLab({
       semanticAuditId: triggerId,
-      toolName: hyp?.attackClass || 'unknown',
+      toolName: toolFromCitation || toolFromGraph || 'unknown',
       category: hyp?.attackClass || 'suspicious-activity',
-      narrative: investigation.narrative,
+      narrative: investigation.narrative ?? investigation.killChainNarrative,
       incidentId: investigation.incidentId,
     });
   };

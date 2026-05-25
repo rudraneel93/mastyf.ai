@@ -8,7 +8,10 @@ if [ ! -f dist/cli.js ]; then
   echo "[dashboard-proxy] Building dist…" >&2
   pnpm build
 elif [ ! -f dist/utils/dashboard-server.js ] \
-  || [ src/utils/dashboard-server.ts -nt dist/utils/dashboard-server.js ]; then
+  || [ src/utils/dashboard-server.ts -nt dist/utils/dashboard-server.js ] \
+  || [ ! -f dist/ai/mcp-health-report.js ] \
+  || [ src/ai/mcp-health-report.ts -nt dist/ai/mcp-health-report.js 2>/dev/null ] \
+  || [ src/ai/guardian-full-analysis.ts -nt dist/ai/guardian-full-analysis.js 2>/dev/null ]; then
   echo "[dashboard-proxy] Rebuilding dist (dashboard API changed)…" >&2
   pnpm exec tsc --project tsconfig.json
 fi
@@ -32,6 +35,8 @@ export MCP_GUARDIAN_DB_PATH="${MCP_GUARDIAN_DB_PATH:-$HOME/.mcp-guardian/history
 export DASHBOARD_ENABLED=true
 export DASHBOARD_AUTH_DISABLED="${DASHBOARD_AUTH_DISABLED:-true}"
 export GUARDIAN_WS_ENABLED="${GUARDIAN_WS_ENABLED:-true}"
+# Local dev: enable dashboard REST API without Pro license (see CHANGELOG / docs/PRO_SETUP.md)
+export GUARDIAN_CI_BYPASS_LICENSE="${GUARDIAN_CI_BYPASS_LICENSE:-true}"
 export METRICS_ENABLED="${METRICS_ENABLED:-true}"
 export DASHBOARD_PORT="${DASHBOARD_PORT:-4000}"
 export METRICS_PORT="${METRICS_PORT:-9090}"

@@ -18,6 +18,7 @@ import { ThreatDiscoveryRunControls } from './ThreatDiscoveryRunControls';
 import { THREAT_DISCOVERY_EXPLAINERS } from '@/lib/threat-discovery-copy';
 import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_SERIES } from '@/lib/chartTheme';
 import { ChartTooltip, ChartLegend } from './dashboard/chart-kit';
+import { ConfidenceReviewBoard } from './ConfidenceReviewBoard';
 
 type Props = {
   status: ThreatDiscoveryStatus | null;
@@ -137,6 +138,8 @@ export function ThreatDiscoveryOverview({
         onRunStarted={onRunStarted}
         onRefresh={onRefresh}
       />
+
+      <ConfidenceReviewBoard candidates={status.threatLab.manifest?.candidates ?? []} />
 
       <div className="infra-charts-grid">
         <div className="infra-chart-card">

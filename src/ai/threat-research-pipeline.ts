@@ -265,8 +265,10 @@ export async function processThreatResearchEvent(
     return { ok: false, reason: 'classification normalization failed' };
   }
 
+  const corpusGate =
+    process.env.GUARDIAN_AUTOPILOT_CORPUS_GATE === 'true' || requireReplay();
   const validation = validateThreatLabDiscovery(normalized, {
-    requireReplayBlock: requireReplay(),
+    requireReplayBlock: corpusGate,
   });
   if (!validation.ok) {
     return { ok: false, reason: validation.errors.join('; ') };
@@ -289,6 +291,19 @@ export async function processThreatResearchEvent(
   Logger.info(
     `[threat-research] auto-wrote ${written.advId} (${normalized.attackClass}, source=${event.type})`,
   );
+  try {
+    const { appendLearningEvent } = await import('../utils/learning-events.js');
+    appendLearningEvent(
+      {
+        type: 'threat_research_write',
+        detail: `${written.advId} ${normalized.attackClass}`,
+        fingerprint: event.fingerprint,
+        confidence: normalized.confidence,
+      },
+    );
+  } catch {
+    /* non-fatal */
+  }
 
   // ── Auto-promote to corpus/attacks/ (Phase 1 of self-sustaining pipeline) ──
   if (process.env.GUARDIAN_AUTO_CORPUS_PROMOTE === 'true') {

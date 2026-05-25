@@ -156,7 +156,10 @@ export function EnterpriseAiPanel({
         <IncidentInvestigatorDrawer
           triggerId={investigateId}
           onClose={() => setInvestigateId(null)}
-          onOpenThreatLab={onOpenThreatLab}
+          onOpenThreatLab={(ctx) => {
+            setInvestigateId(null);
+            onOpenThreatLab?.(ctx);
+          }}
         />
       ) : null}
     </div>

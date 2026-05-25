@@ -396,6 +396,24 @@ export function buildHybridEnv(metricsPort, liveDbPath, liveHomeDir) {
   };
 }
 
+/** Resolve DB/home for live proxy — shared dashboard DB when MCP_GUARDIAN_DB_PATH is set. */
+export function resolveLiveProxyPaths() {
+  const sharedDb = process.env.MCP_GUARDIAN_DB_PATH?.trim();
+  if (sharedDb) {
+    const liveDbPath = resolve(sharedDb);
+    const liveHomeDir =
+      process.env.MCP_GUARDIAN_HOME?.trim()
+      || join(dirname(liveDbPath), 'home');
+    mkdirSync(liveHomeDir, { recursive: true });
+    return { liveDbPath, liveHomeDir, shared: true };
+  }
+  const liveDbDir = mkdtempSync(join(tmpdir(), 'guardian-live-proxy-'));
+  const liveDbPath = join(liveDbDir, 'history.db');
+  const liveHomeDir = join(liveDbDir, 'home');
+  mkdirSync(liveHomeDir, { recursive: true });
+  return { liveDbPath, liveHomeDir, shared: false };
+}
+
 /** Start Guardian proxy + official filesystem MCP; returns session handle for live calls. */
 export async function createLiveProxySession() {
   if (!existsSync(CLI)) {
@@ -404,10 +422,10 @@ export async function createLiveProxySession() {
 
   const metricsPort =
     process.env.METRICS_PORT || String(await pickFreeTcpPort());
-  const liveDbDir = mkdtempSync(join(tmpdir(), 'guardian-live-proxy-'));
-  const liveDbPath = join(liveDbDir, 'history.db');
-  const liveHomeDir = join(liveDbDir, 'home');
-  mkdirSync(liveHomeDir, { recursive: true });
+  const { liveDbPath, liveHomeDir, shared } = resolveLiveProxyPaths();
+  if (shared) {
+    console.error(`[real-life] Using shared history DB: ${liveDbPath}`);
+  }
   const hybridEnv = buildHybridEnv(metricsPort, liveDbPath, liveHomeDir);
 
   const responses = new Map();

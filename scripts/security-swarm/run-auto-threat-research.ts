@@ -17,11 +17,12 @@ import {
 import { getSharedThreatIntel } from '../../src/ai/threat-intel.js';
 import { loadSemanticAuditRecordsAsync } from '../../src/ai/semantic-audit-store.js';
 import { isCalibratorSeededRecord, semanticFlagMinConfidence, type BypassContext } from '../../src/ai/threat-lab.js';
+import { resolveSwarmOutputDir } from '../../src/tenant/swarm-tenant-paths.js';
 
 await exitUnlessProFeature('swarm');
 
 const REPO = process.cwd();
-const OUT_DIR = join(REPO, 'reports', 'security-swarm');
+const OUT_DIR = resolveSwarmOutputDir();
 
 function loadJson(path: string): unknown {
   if (!existsSync(path)) return null;

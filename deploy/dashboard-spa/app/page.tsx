@@ -1,5 +1,5 @@
-import { GuardianSOCDashboardWrapper } from './components/GuardianSOCDashboardWrapper';
+import { DashboardPageClient } from './components/DashboardPageClient';
 
 export default function DashboardPage() {
-  return <GuardianSOCDashboardWrapper />;
+  return <DashboardPageClient />;
 }

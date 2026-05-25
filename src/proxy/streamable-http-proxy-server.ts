@@ -18,6 +18,8 @@ import { createSessionCache, validateSessionToken, type GuardianSessionCache } f
 import type { CallContext } from '../policy/policy-types.js';
 import type { IDatabase } from '../database/database-interface.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
+import { TokenCounter } from '../utils/token-counter.js';
+import { resolveModelIdForServer } from '../config/llm-config.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { injectRotatedSessionIntoResult } from '../utils/mcp-session-meta.js';
@@ -43,6 +45,7 @@ export class StreamableHttpProxyServer {
   private httpServer: ReturnType<typeof createServer> | null = null;
   private boundPort = 0;
   private sessionCache: GuardianSessionCache | null;
+  private tokenCounter = new TokenCounter();
 
   constructor(opts: StreamableHttpProxyOptions) {
     this.opts = opts;
@@ -295,12 +298,20 @@ export class StreamableHttpProxyServer {
       arguments?: Record<string, unknown>;
       _meta?: Record<string, unknown>;
     } | undefined;
+    const reqMsg = { params: { name: params?.name, arguments: params?.arguments } };
+    const model = resolveModelIdForServer(this.opts.serverName);
+    const tokenCounts = this.tokenCounter.countProxyCall({
+      requestText: JSON.stringify(reqMsg),
+      responseText: '',
+      model,
+      requestPayload: reqMsg,
+    });
     const context: CallContext = {
       serverName: this.opts.serverName,
       toolName: params?.name || 'unknown',
       arguments: params?.arguments,
       requestId: String(msg.id ?? randomUUID()),
-      requestTokens: JSON.stringify(msg).length,
+      requestTokens: tokenCounts.requestTokens,
       timestamp: new Date().toISOString(),
       tenantId,
       idempotencyKey: idempotencyKeyFromRequest(params?._meta),
@@ -333,9 +344,11 @@ export class StreamableHttpProxyServer {
           serverName: this.opts.serverName,
           toolName: context.toolName,
           timestamp: context.timestamp,
-          requestTokens: context.requestTokens,
-          responseTokens: 0,
-          totalTokens: context.requestTokens,
+          requestTokens: tokenCounts.requestTokens,
+          responseTokens: tokenCounts.responseTokens,
+          totalTokens: tokenCounts.totalTokens,
+          tokenSource: tokenCounts.tokenSource,
+          model,
           durationMs: 0,
           tenantId,
         },

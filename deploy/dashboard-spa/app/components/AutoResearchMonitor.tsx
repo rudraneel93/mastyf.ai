@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import type { AutoCorpusEntry, ThreatDiscoveryStatus } from '@/lib/guardian-api';
 import { SOURCE_LABELS } from '@/lib/threat-discovery-copy';
+import { CHART_AXIS, CHART_GRID } from '@/lib/chartTheme';
 import { ThreatCandidateDrawer } from './ThreatCandidateDrawer';
 
 type Props = {
@@ -67,8 +68,8 @@ export function AutoResearchMonitor({ entries, status }: Props) {
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={timeline}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                <CartesianGrid {...CHART_GRID} />
+                <XAxis dataKey="label" {...CHART_AXIS} />
                 <YAxis hide domain={[0, 1]} />
                 <Tooltip />
                 <Line type="monotone" dataKey="confidence" stroke="#38bdf8" dot={{ r: 4 }} />

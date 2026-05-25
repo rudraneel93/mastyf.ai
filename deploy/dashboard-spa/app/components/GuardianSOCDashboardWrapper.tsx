@@ -1,7 +1,10 @@
 'use client';
 
-import { GuardianSOCDashboard } from './GuardianSOCDashboard';
+/**
+ * @deprecated Use DashboardPageClient — SOC shell is merged into DashboardClient.
+ */
+import { DashboardPageClient } from './DashboardPageClient';
 
 export function GuardianSOCDashboardWrapper() {
-  return <GuardianSOCDashboard />;
+  return <DashboardPageClient />;
 }

@@ -55,6 +55,15 @@ export type AggregateMetrics = {
   error?: string;
 };
 
+export type CostCoverage = {
+  pricedCalls: number;
+  unpricedCalls: number;
+  totalCalls: number;
+  coveragePct: number;
+  measuredUsd: number;
+  disclaimer: string;
+};
+
 export type CostResponse = {
   available?: boolean;
   totalCost: number | null;
@@ -63,6 +72,8 @@ export type CostResponse = {
   budgetUsd?: number | null;
   pricingModel?: string;
   windowDays?: number;
+  costCoverage?: CostCoverage;
+  disclaimer?: string;
   serverReports?: Array<{
     name: string;
     cost: number;
@@ -72,6 +83,35 @@ export type CostResponse = {
   }>;
   budgetAlerts?: string[];
   meta?: ChartMeta;
+  error?: string;
+};
+
+export type GuardianFullAnalysisResponse = {
+  available?: boolean;
+  generatedAt?: string;
+  windowDays?: number;
+  verdict?: 'healthy' | 'attention' | 'critical';
+  plainEnglishSummary?: string;
+  markdown?: string;
+  sections?: {
+    protection: string[];
+    traffic: string[];
+    security: string[];
+    learning: string[];
+    nextSteps: string[];
+  };
+  citations?: Array<{ id: string; source: string; text: string }>;
+  source?: 'measured' | 'llm';
+  provider?: string;
+  model?: string;
+  narrative?: string;
+  costCoverage?: {
+    pricedCalls: number;
+    unpricedCalls: number;
+    coveragePct: number;
+    disclaimer: string;
+    measuredUsd?: number;
+  };
   error?: string;
 };
 
@@ -667,6 +707,176 @@ export async function downloadInsightsBriefing(
   URL.revokeObjectURL(url);
 }
 
+export type McpHealthReportResponse = {
+  available?: boolean;
+  generatedAt?: string;
+  windowDays?: number;
+  verdict?: 'healthy' | 'attention' | 'critical';
+  headline?: string;
+  executiveSummary?: string[];
+  servers?: Array<{
+    name: string;
+    latencyMs: number | null;
+    successRatePct: number | null;
+    toolCount: number;
+    circuitBreaker: string;
+    totalCalls: number;
+    blockedCalls: number;
+    summary: string;
+  }>;
+  performance?: {
+    avgLatencyMs: number | null;
+    passRatePct: number;
+    totalRequests: number;
+    blockedRequests: number;
+    totalCostUsd: number;
+  };
+  securityPosture?: {
+    policyMode: string;
+    ruleSummary: string;
+    topBlockRules: string[];
+  };
+  recommendations?: Array<{ priority: number; action: string }>;
+  markdown?: string;
+  citations?: Array<{ id: string; source: string; text: string }>;
+  source?: 'measured' | 'llm';
+  provider?: string;
+  model?: string;
+  narrative?: string;
+  error?: string;
+};
+
+async function parseApiErrorMessage(
+  res: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    if (body?.error?.includes('Dashboard API disabled')) {
+      return (
+        'Dashboard REST API is disabled (Pro license gate). From the repo run: ' +
+        'pnpm build:guardian && pnpm dashboard:proxy -- guardian-configs/filesystem.json ' +
+        '(sets GUARDIAN_CI_BYPASS_LICENSE). Open http://localhost:4000/ — not a separate Next dev port unless you use ?apiBase=http://localhost:4000'
+      );
+    }
+    if (body?.error) return body.error;
+  } catch {
+    /* non-JSON 404 (e.g. Next.js dev without apiBase) */
+  }
+  if (res.status === 404 && typeof window !== 'undefined') {
+    const base = resolveApiBase();
+    if (!base && !window.location.port.includes('4000')) {
+      return (
+        `${fallback} You may be on the wrong origin (${window.location.origin}). ` +
+        'Use http://localhost:4000/ or add ?apiBase=http://localhost:4000'
+      );
+    }
+  }
+  return fallback;
+}
+
+export async function fetchMcpHealthReport(
+  windowDays = 7,
+  useLlm = false,
+): Promise<{ report: McpHealthReportResponse | null; error?: string }> {
+  const res = await guardianFetch(
+    `/api/reports/mcp-health?window=${windowDays}&useLlm=${useLlm ? 'true' : 'false'}`,
+  );
+  if (res.status === 404) {
+    return {
+      report: null,
+      error: await parseApiErrorMessage(
+        res,
+        'Health report API not found — run `pnpm build:guardian`, restart the proxy with DASHBOARD_ENABLED=true, then refresh.',
+      ),
+    };
+  }
+  let body: McpHealthReportResponse;
+  try {
+    body = (await res.json()) as McpHealthReportResponse;
+  } catch {
+    return { report: null, error: `Invalid response (HTTP ${res.status})` };
+  }
+  if (!res.ok) {
+    return { report: null, error: body.error || `HTTP ${res.status}` };
+  }
+  if (body.available === false) {
+    return {
+      report: null,
+      error:
+        body.error
+        || 'Report unavailable — ensure the proxy is running with DASHBOARD_ENABLED=true and history.db is writable.',
+    };
+  }
+  return { report: body };
+}
+
+export async function downloadMcpHealthReport(windowDays = 7, useLlm = false): Promise<void> {
+  const res = await guardianFetch(
+    `/api/reports/mcp-health/download?window=${windowDays}&useLlm=${useLlm ? 'true' : 'false'}`,
+  );
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `guardian-mcp-health-${date}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function fetchFullAnalysis(
+  windowDays = 7,
+  useLlm = true,
+): Promise<{ analysis: GuardianFullAnalysisResponse | null; error?: string }> {
+  const res = await guardianFetch(
+    `/api/analysis/full?window=${windowDays}&useLlm=${useLlm ? 'true' : 'false'}`,
+  );
+  if (res.status === 404) {
+    return {
+      analysis: null,
+      error: await parseApiErrorMessage(
+        res,
+        'Full analysis API not found — run `pnpm build:guardian`, restart the proxy with DASHBOARD_ENABLED=true, then refresh.',
+      ),
+    };
+  }
+  let body: GuardianFullAnalysisResponse;
+  try {
+    body = (await res.json()) as GuardianFullAnalysisResponse;
+  } catch {
+    return { analysis: null, error: `Invalid response (HTTP ${res.status})` };
+  }
+  if (!res.ok) {
+    return { analysis: null, error: body.error || `HTTP ${res.status}` };
+  }
+  if (body.available === false) {
+    return {
+      analysis: null,
+      error:
+        body.error
+        || 'Analysis unavailable — ensure the proxy is running with DASHBOARD_ENABLED=true and history.db has traffic.',
+    };
+  }
+  return { analysis: body };
+}
+
+export async function downloadFullAnalysis(windowDays = 7, useLlm = true): Promise<void> {
+  const res = await guardianFetch(
+    `/api/analysis/full/download?window=${windowDays}&useLlm=${useLlm ? 'true' : 'false'}`,
+  );
+  if (!res.ok) return;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `guardian-full-analysis-${date}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function fetchAuditHeatmap(windowDays = 7, region?: string): Promise<AuditHeatmapResponse | null> {
   const res = await guardianFetch(`/api/audit/heatmap?${withWindowRegionQuery(windowDays, region)}`);
   if (!res.ok) return null;
@@ -686,7 +896,17 @@ export async function fetchHealth(): Promise<HealthResponse | null> {
   if (!data) return null;
   return {
     ...data,
+    avgLatencyMs: data.avgLatencyMs ?? data.avgLatency ?? null,
     overallStatus: data.overallStatus || data.status || 'unknown',
+    serverReports: (data.serverReports ?? []).map((s) => ({
+      ...s,
+      latency: s.latency ?? 0,
+      successRate: s.successRate ?? null,
+      circuitBreaker: String(s.circuitBreaker ?? 'closed').toUpperCase(),
+      tools: (s as { tools?: number; toolCount?: number }).tools
+        ?? (s as { tools?: number; toolCount?: number }).toolCount
+        ?? 0,
+    })),
   };
 }
 
@@ -999,6 +1219,38 @@ export async function fetchSwarmStatus(): Promise<SwarmJobStatus | null> {
   const res = await guardianFetch('/api/security-swarm/status');
   if (!res.ok) return null;
   return (await res.json()) as SwarmJobStatus;
+}
+
+export type SwarmJobLogResponse = {
+  available?: boolean;
+  log?: string;
+  steps?: unknown[];
+  hasLog?: boolean;
+  error?: string;
+};
+
+export async function fetchSwarmJobLog(): Promise<SwarmJobLogResponse | null> {
+  const res = await guardianFetch('/api/security-swarm/job-log');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as SwarmJobLogResponse);
+}
+
+export type SoarPlaybook = {
+  id: string;
+  name: string;
+  description?: string;
+  triggers?: string[];
+  actions?: string[];
+};
+
+export async function fetchSoarPlaybooks(): Promise<{
+  enabled: boolean;
+  playbooks: SoarPlaybook[];
+} | null> {
+  const res = await guardianFetch('/api/soar/playbooks');
+  if (!res.ok) return null;
+  const body = (await res.json()) as { enabled?: boolean; playbooks?: SoarPlaybook[] };
+  return { enabled: !!body.enabled, playbooks: body.playbooks ?? [] };
 }
 
 export async function fetchSwarmReportPreview(): Promise<string | null> {
@@ -1482,6 +1734,225 @@ export async function fetchOnboardingStatus(): Promise<OnboardingStatus | null> 
   const res = await guardianFetch('/api/onboarding/status');
   if (!res.ok) return null;
   return (await res.json()) as OnboardingStatus;
+}
+
+export type AnalyticsSummaryResponse = {
+  available?: boolean;
+  windowDays?: number;
+  generatedAt?: string;
+  totalRequests?: number;
+  avgLatencyMs?: number;
+  errorRatePct?: number;
+  tokensUsed?: number;
+  budgetUsd?: number | null;
+  budgetUtilizationPct?: number | null;
+  trafficSeries?: Array<{ bucket: string; requests: number; blocked: number }>;
+  costSeries?: Array<{ bucket: string; costUsd: number; label: string }>;
+  modelUsage?: Array<{ model: string; label: string; calls: number; tokens: number; pct: number }>;
+  providerCosts?: Array<{
+    provider: string;
+    label: string;
+    costUsd: number;
+    colorKey: 'openai' | 'anthropic' | 'google' | 'other';
+  }>;
+  emptyReason?: string;
+  error?: string;
+};
+
+export async function fetchAnalyticsSummary(
+  window: string = '7d',
+): Promise<AnalyticsSummaryResponse | null> {
+  const res = await guardianFetch(`/api/analytics/summary?window=${encodeURIComponent(window)}`);
+  if (!res.ok) return null;
+  return (await res.json()) as AnalyticsSummaryResponse;
+}
+
+export type SecurityDashboardThreat = {
+  id: string;
+  type: string;
+  source: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  status: 'blocked' | 'monitored' | 'resolved';
+};
+
+export type SecurityDashboardResponse = {
+  available?: boolean;
+  windowDays?: number;
+  generatedAt?: string;
+  securityScore?: number | null;
+  scoreLabel?: string;
+  layers?: Array<{ id: string; label: string; status: 'secure' | 'alert' }>;
+  executiveSummary?: string[];
+  threats?: SecurityDashboardThreat[];
+  activeThreatCount?: number;
+  semanticEngineActive?: boolean;
+  autoBlockOn?: boolean;
+  auditLatencyMs?: number | null;
+  rbacPolicy?: string;
+  roles?: string[];
+  error?: string;
+  emptyReason?: string;
+};
+
+export async function fetchSecurityDashboard(
+  window: string = '24h',
+): Promise<SecurityDashboardResponse | null> {
+  const res = await guardianFetch(`/api/security/dashboard?window=${encodeURIComponent(window)}`);
+  if (!res.ok) return null;
+  return (await res.json()) as SecurityDashboardResponse;
+}
+
+export async function quarantineAllThreats(): Promise<{ ok: boolean; quarantined?: number; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/security/threats/quarantine', { method: 'POST', headers });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error || `HTTP ${res.status}` };
+  }
+  return (await res.json()) as { ok: boolean; quarantined?: number };
+}
+
+export type SetupGuardianConfig = {
+  upstreamUrl?: string;
+  listenPort?: number;
+  authTokenPreview?: string | null;
+  configured?: boolean;
+};
+
+export type SetupStatusResponse = {
+  available?: boolean;
+  completedCount?: number;
+  totalSteps?: number;
+  guardianConfig?: SetupGuardianConfig & { done?: boolean };
+  database?: { done?: boolean; engine?: string; version?: string; latencyMs?: number | null };
+  proxyTraffic?: { done?: boolean; totalCalls?: number; healthy?: boolean };
+  cloud?: { connected?: boolean; controlPlaneUrl?: string | null };
+  onboarding?: OnboardingStatus;
+  error?: string;
+};
+
+export async function fetchSetupStatus(): Promise<SetupStatusResponse | null> {
+  const res = await guardianFetch('/api/setup/status');
+  if (!res.ok) return null;
+  return (await res.json()) as SetupStatusResponse;
+}
+
+export async function saveSetupGuardianConfig(body: {
+  upstreamUrl: string;
+  listenPort: number;
+  authToken?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/setup/guardian-config', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+export type SetupCloudStatus = {
+  connected?: boolean;
+  controlPlaneUrl?: string | null;
+  ssoEnabled?: boolean;
+  policyStrictnessPct?: number;
+  apiKeyRotationEnabled?: boolean;
+};
+
+export async function fetchSetupCloudStatus(): Promise<SetupCloudStatus | null> {
+  const res = await guardianFetch('/api/setup/cloud-status');
+  if (!res.ok) return null;
+  return (await res.json()) as SetupCloudStatus;
+}
+
+export async function connectSetupCloud(body: {
+  controlPlaneUrl: string;
+  ssoEnabled?: boolean;
+  policyStrictnessPct?: number;
+  apiKeyRotationEnabled?: boolean;
+}): Promise<{ ok: boolean; launchUrl?: string; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/setup/cloud/connect', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: data.error || `HTTP ${res.status}` };
+  }
+  return (await res.json()) as { ok: boolean; launchUrl?: string };
+}
+
+export type AutopilotStatus = {
+  timestamp?: string;
+  autopilotEnabled?: boolean;
+  config?: Record<string, unknown>;
+  license?: { pro?: boolean; swarm?: boolean; ai?: boolean; dashboard?: boolean };
+  protection?: { historyDbAttached?: boolean; policyAutoApply?: boolean };
+  learning?: {
+    aiEnabled?: boolean;
+    pendingSuggestions?: number;
+    threatResearchEnabled?: boolean;
+    threatResearchQueue?: { queued?: number; writesThisHour?: number; maxPerHour?: number };
+  };
+  scheduler?: { running?: boolean; nextRunAt?: string | null; lastRunAt?: string | null };
+  lastDigest?: { generatedAt?: string; healthPath?: string; securityPath?: string };
+  recentEvents?: Array<{ timestamp: string; type: string; detail: string }>;
+  llm?: { ok?: boolean; reason?: string };
+  messages?: string[];
+  available?: boolean;
+  error?: string;
+};
+
+export async function fetchAutopilotStatus(): Promise<AutopilotStatus | null> {
+  const res = await guardianFetch('/api/autopilot/status');
+  if (!res.ok) return null;
+  return (await res.json()) as AutopilotStatus;
+}
+
+export async function fetchLatestDigest(): Promise<{
+  healthMarkdown?: string;
+  securityJson?: Record<string, unknown>;
+  generatedAt?: string;
+}> {
+  const res = await guardianFetch('/api/reports/digests/latest');
+  if (!res.ok) return {};
+  const body = (await res.json()) as {
+    healthMarkdown?: string;
+    securityJson?: Record<string, unknown>;
+    generatedAt?: string;
+    available?: boolean;
+  };
+  return {
+    healthMarkdown: body.healthMarkdown,
+    securityJson: body.securityJson,
+    generatedAt: body.generatedAt,
+  };
+}
+
+export async function generateDigestNow(): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await guardianFetch('/api/reports/generate', { method: 'POST', headers });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, error: body.error || `HTTP ${res.status}` };
+  }
+  return { ok: true };
+}
+
+export async function fetchPendingSuggestions(): Promise<{
+  count: number;
+  suggestions: unknown[];
+}> {
+  const res = await guardianFetch('/api/ai/suggestions/pending');
+  if (!res.ok) return { count: 0, suggestions: [] };
+  const body = (await res.json()) as { count?: number; suggestions?: unknown[] };
+  return { count: body.count ?? 0, suggestions: body.suggestions ?? [] };
 }
 
 export async function fetchServerRegistry(): Promise<ServerRegistryEntry[]> {

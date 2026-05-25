@@ -34,9 +34,6 @@ function measuredOverview(summary: ExecutiveSummary): string[] {
   bullets.push(
     `${summary.totalRequests.toLocaleString()} measured proxy calls across ${summary.activeServers} server(s); pass rate ${summary.passRatePct}%.`,
   );
-  if (summary.totalCostUsd > 0) {
-    bullets.push(`Measured spend: $${summary.totalCostUsd.toFixed(4)} from priced calls.`);
-  }
   if (summary.budgetUsd != null && summary.budgetUtilizationPct != null) {
     bullets.push(
       `Budget utilization ${summary.budgetUtilizationPct}% of $${summary.budgetUsd.toFixed(2)} daily cap (measured spend only).`,

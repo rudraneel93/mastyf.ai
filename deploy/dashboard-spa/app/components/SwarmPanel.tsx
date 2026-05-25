@@ -1,34 +1,53 @@
 'use client';
 
+import { FlowPipelineStrip } from './FlowPipelineStrip';
 import { SwarmResultsView } from './SwarmResultsView';
+import { SwarmRunControls } from './SwarmRunControls';
 import type { PipelineState } from '@/lib/flow-types';
+import type { SwarmJobStatus } from '@/lib/guardian-api';
 
 type Props = {
   roles?: string[];
   pipeline?: PipelineState;
   swarmDoneTick?: number;
+  swarmJobStatus?: SwarmJobStatus | null;
+  onSwarmStatus?: (job: SwarmJobStatus | null) => void;
+  onOpenThreats?: (view: string) => void;
+  onGoAnalysis?: () => void;
 };
 
-/** Analysis tab — results only; run analysis from Agent flow (single canonical surface). */
-export function SwarmPanel({ pipeline, swarmDoneTick = 0 }: Props) {
+export function SwarmPanel({
+  roles,
+  pipeline,
+  swarmDoneTick = 0,
+  swarmJobStatus,
+  onSwarmStatus,
+  onOpenThreats,
+  onGoAnalysis,
+}: Props) {
   const resultsKey =
     swarmDoneTick + (pipeline?.state === 'done' ? 1000 : 0);
 
   return (
-    <section aria-label="Security analysis">
-      <h2>Security analysis</h2>
+    <section aria-label="Security analysis results">
+      <h2>Swarm results</h2>
       <p className="hint">
-        Run analysis from the <strong>Agent flow</strong> tab (one canonical button). This tab shows
-        your plain-English report, traffic summary, regression gates, and visuals.
+        Mirror of the latest session analysis.{' '}
+        <button type="button" className="linkish" onClick={onGoAnalysis}>
+          Run or watch pipeline in Activity → Security analysis
+        </button>
+        .
       </p>
 
-      {pipeline?.state === 'running' ? (
-        <p className="status">
-          Analysis in progress — {pipeline.phaseLabel || pipeline.activePhaseId}…
-        </p>
-      ) : null}
+      <SwarmRunControls
+        roles={roles}
+        pipeline={pipeline}
+        onSwarmStatus={onSwarmStatus}
+        showDownload
+      />
+      {pipeline ? <FlowPipelineStrip pipeline={pipeline} logTail={swarmJobStatus?.logTail} /> : null}
 
-      <SwarmResultsView refreshKey={resultsKey} showReport className="swarm-results-tab" />
+      <SwarmResultsView refreshKey={resultsKey} showReport className="swarm-results-tab" onOpenThreats={onOpenThreats} />
     </section>
   );
 }

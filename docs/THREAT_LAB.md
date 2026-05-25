@@ -70,6 +70,7 @@ pnpm security-swarm:analyze
 - `reports/security-swarm/threat-lab-candidates.json` — signed manifest with provenance (`source`, `llmUsed`)
 - `adversarial-harness/fixtures/custom-attacks/adv-NNN.json` — harness fixtures for every queued candidate
 - Dashboard **Swarm** tab → **Threat Lab candidates** (accept/reject)
+- **Enterprise AI → Open in Threat Lab** reopens the incident investigation drawer on the Threat Lab workbench and links `semantic-tp` candidates by `provenance.inputFingerprint` (semantic audit id)
 
 ## Promotion workflow
 

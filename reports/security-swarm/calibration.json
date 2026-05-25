@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-05-24T16:38:23.377Z",
+  "timestamp": "2026-05-25T19:40:42.751Z",
   "windowDays": 7,
   "storage": "jsonl",
   "llmConfigured": true,
   "totals": {
-    "records": 62,
-    "flagged": 60,
+    "records": 64,
+    "flagged": 62,
     "labeled": 29,
     "truePositive": 28,
     "falsePositive": 1
   },
   "metrics": {
-    "avgFlagConfidence": 0.78,
+    "avgFlagConfidence": 0.781,
     "labeledFpRate": 0.034
   },
   "thresholds": {
@@ -27,22 +27,6 @@
   },
   "profile": "hybrid",
   "sampleFlagged": [
-    {
-      "id": "1779624740715-5slq6g1",
-      "toolName": "run",
-      "confidence": 0.75,
-      "categories": [
-        "prompt-injection"
-      ]
-    },
-    {
-      "id": "1779626077833-a8zuf3i",
-      "toolName": "run",
-      "confidence": 0.75,
-      "categories": [
-        "prompt-injection"
-      ]
-    },
     {
       "id": "1779630525779-mhcz5nx",
       "toolName": "run",
@@ -65,6 +49,22 @@
       "confidence": 0.75,
       "categories": [
         "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779657809404-mi3g01b",
+      "toolName": "run",
+      "confidence": 0.75,
+      "categories": [
+        "prompt-injection"
+      ]
+    },
+    {
+      "id": "1779736473586-zh5lsrl",
+      "toolName": "read_file",
+      "confidence": 0.88,
+      "categories": [
+        "path-traversal"
       ]
     }
   ],

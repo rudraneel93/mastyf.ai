@@ -24,6 +24,8 @@ import { scanForSecrets } from '../scanners/secret-scanner.js';
 import { findingsToMessages, isResponseScanSkipped } from '../utils/streaming-inspector.js';
 import { gateToolResponseText } from '../utils/response-security-gate.js';
 import { persistCallRecord } from '../utils/call-record-cost.js';
+import { TokenCounter } from '../utils/token-counter.js';
+import { resolveModelIdForServer } from '../config/llm-config.js';
 import * as Metrics from '../utils/metrics.js';
 import { idempotencyKeyFromRequest } from '../policy/idempotency-store.js';
 import type { AgentIdentity } from '../auth/auth-types.js';
@@ -51,6 +53,7 @@ export class WebSocketProxyServer {
   private pendingToolTenants = new Map<string | number, string>();
   private pendingSessionTokens = new Map<string | number, string>();
   private sessionCache: GuardianSessionCache | null;
+  private tokenCounter = new TokenCounter();
 
   constructor(opts: WebSocketProxyOptions) {
     this.opts = opts;
@@ -411,12 +414,20 @@ export class WebSocketProxyServer {
       }
     }
 
+    const reqMsg = { params: { name: params?.name, arguments: params?.arguments } };
+    const model = resolveModelIdForServer(this.opts.serverName);
+    const tokenCounts = this.tokenCounter.countProxyCall({
+      requestText: JSON.stringify(reqMsg),
+      responseText: '',
+      model,
+      requestPayload: reqMsg,
+    });
     const context: CallContext = {
       serverName: this.opts.serverName,
       toolName: params?.name || 'unknown',
       arguments: params?.arguments,
       requestId: String(msg.id ?? randomUUID()),
-      requestTokens: JSON.stringify(msg).length,
+      requestTokens: tokenCounts.requestTokens,
       timestamp: new Date().toISOString(),
       tenantId,
       agentIdentity,
@@ -486,9 +497,11 @@ export class WebSocketProxyServer {
           serverName: this.opts.serverName,
           toolName: context.toolName,
           timestamp: context.timestamp,
-          requestTokens: context.requestTokens,
-          responseTokens: 0,
-          totalTokens: context.requestTokens,
+          requestTokens: tokenCounts.requestTokens,
+          responseTokens: tokenCounts.responseTokens,
+          totalTokens: tokenCounts.totalTokens,
+          tokenSource: tokenCounts.tokenSource,
+          model,
           durationMs: 0,
           tenantId,
         },

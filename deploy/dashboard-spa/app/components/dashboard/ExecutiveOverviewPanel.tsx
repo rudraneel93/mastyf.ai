@@ -22,7 +22,6 @@ import {
   CHART_GRID,
   CHART_SERIES,
   formatAxisTime,
-  formatUsd,
   topNBuckets,
 } from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
@@ -60,14 +59,6 @@ export function ExecutiveOverviewPanel({ refreshKey = 0, metrics: metricsProp, s
     [visuals?.traffic?.hourly, granularity],
   );
 
-  const costByServer = useMemo(
-    () =>
-      (visuals?.traffic?.byServer ?? [])
-        .filter((s) => (s.costUsd ?? 0) > 0)
-        .map((s) => ({ name: s.serverName, costUsd: s.costUsd ?? 0 })),
-    [visuals?.traffic?.byServer],
-  );
-
   const ruleData = useMemo(() => {
     const raw = (visuals?.traffic?.topBlockRules ?? []).slice(0, 8).map((r) => ({
       name: r.rule.slice(0, 20),
@@ -82,12 +73,13 @@ export function ExecutiveOverviewPanel({ refreshKey = 0, metrics: metricsProp, s
     color: CHART_COLORS[i % CHART_COLORS.length],
   }));
 
-  const passRate =
+  const passRateRaw =
     summary?.passRatePct ??
     metricsProp?.passRate ??
     (metricsProp && metricsProp.totalRequests
       ? ((metricsProp.passedRequests ?? 0) / metricsProp.totalRequests) * 100
       : null);
+  const passRate = passRateRaw != null && Number.isFinite(passRateRaw) ? passRateRaw : null;
 
   const cmp = summary?.comparison;
   const spark = summary?.sparklines;
@@ -142,30 +134,6 @@ export function ExecutiveOverviewPanel({ refreshKey = 0, metrics: metricsProp, s
                 : '—'
             }
             explanation="Mean proxy evaluation + upstream latency per call."
-          />
-          <KpiCard
-            label="Total cost"
-            value={
-              summary?.totalCostUsd != null
-                ? formatUsd(summary.totalCostUsd)
-                : metricsProp?.totalCost != null
-                  ? formatUsd(metricsProp.totalCost)
-                  : '—'
-            }
-            comparison={cmp?.totalCostUsd ? { ...cmp.totalCostUsd, label: 'vs prior window' } : undefined}
-            sparkline={spark?.costUsd?.length ? <KpiSparkline data={spark.costUsd} color={CHART_SERIES.cost} ariaLabel="Cost trend" /> : undefined}
-            explanation="Measured USD from priced MCP calls."
-          />
-          <KpiCard
-            label="Burn / hr"
-            value={
-              summary?.burnRatePerHour != null
-                ? formatUsd(summary.burnRatePerHour)
-                : metricsProp?.burnRatePerHour != null
-                  ? formatUsd(metricsProp.burnRatePerHour)
-                  : '—'
-            }
-            explanation="Current hourly spend velocity."
           />
           <KpiCard
             label="Semantic flags"
@@ -224,26 +192,7 @@ export function ExecutiveOverviewPanel({ refreshKey = 0, metrics: metricsProp, s
               <ChartLegend items={ruleLegend} />
             </ChartCard>
           </div>
-          <div className="dash-grid-span-6">
-            <ChartCard
-              title="Cost by server"
-              subtitle="Where MCP spend concentrates"
-              loading={loading}
-              empty={costByServer.length === 0}
-              meta={trafficMeta}
-            >
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={costByServer}>
-                  <CartesianGrid {...CHART_GRID} />
-                  <XAxis dataKey="name" {...CHART_AXIS} />
-                  <YAxis {...CHART_AXIS} tickFormatter={(v) => formatUsd(Number(v), 2)} />
-                  <Tooltip content={<ChartTooltip valueFormatter={(v) => formatUsd(v)} />} />
-                  <Bar dataKey="costUsd" fill={CHART_SERIES.cost} name="Cost" />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </div>
-          <div className="dash-grid-span-6">
+          <div className="dash-grid-span-12">
             <ChartCard
               title="Top tools"
               subtitle="Highest call volume — baseline for anomaly detection"

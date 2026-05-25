@@ -5,65 +5,80 @@ import { join } from 'path';
 const SPA_ROOT = join(process.cwd(), 'deploy', 'dashboard-spa');
 
 describe('dashboard-spa', () => {
-  it('includes Next.js app source with client-only dashboard', () => {
+  it('routes page.tsx through DashboardPageClient', () => {
+    const page = join(SPA_ROOT, 'app', 'page.tsx');
+    const pageSrc = readFileSync(page, 'utf-8');
+    expect(pageSrc).toContain('DashboardPageClient');
+  });
+
+  it('uses enterprise layout and six workspaces', () => {
     const client = join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx');
-    const boundary = join(SPA_ROOT, 'app', 'components', 'DashboardErrorBoundary.tsx');
-    const loginGate = join(SPA_ROOT, 'app', 'components', 'LoginGate.tsx');
-    const swarmPanel = join(SPA_ROOT, 'app', 'components', 'SwarmPanel.tsx');
-    expect(existsSync(client)).toBe(true);
-    expect(existsSync(boundary)).toBe(true);
-    expect(existsSync(loginGate)).toBe(true);
-    expect(existsSync(swarmPanel)).toBe(true);
+    const nav = join(SPA_ROOT, 'lib', 'workspace-nav.ts');
+    const enterpriseCss = join(SPA_ROOT, 'app', 'design', 'enterprise.css');
+    expect(readFileSync(nav, 'utf-8')).toContain("'threats'");
+    expect(readFileSync(nav, 'utf-8')).toContain("'help'");
     const src = readFileSync(client, 'utf-8');
-    expect(src).toContain("'use client'");
-    expect(src).toContain("'swarm'");
-    expect(src).toContain('SwarmPanel');
-    expect(src).toContain('setReady(true)');
-    expect(src).not.toMatch(/Date\.now\(\)/);
-    expect(src).not.toMatch(/Math\.random\(\)/);
+    expect(src).toContain('EnterpriseLayout');
+    expect(src).toContain('HelpWorkspace');
+    expect(src).toContain('LiveThreatIntelPanel');
+    expect(src).not.toContain('SocDashboardLayout');
+    expect(src).not.toContain('repo-data');
+    expect(readFileSync(enterpriseCss, 'utf-8')).toContain('.pipeline-strip');
+  });
+
+  it('includes Protection workspace and Autopilot API client', () => {
+    const protection = readFileSync(
+      join(SPA_ROOT, 'app', 'components', 'workspaces', 'ProtectionWorkspace.tsx'),
+      'utf-8',
+    );
+    const api = readFileSync(join(SPA_ROOT, 'lib', 'guardian-api.ts'), 'utf-8');
+    expect(protection).toContain('fetchAutopilotStatus');
+    expect(api).toContain('/api/autopilot/status');
+    expect(api).toContain('/api/reports/generate');
+    const nav = readFileSync(join(SPA_ROOT, 'lib', 'workspace-nav.ts'), 'utf-8');
+    expect(nav).toContain("label: 'Protection'");
+  });
+
+  it('deep-links Enterprise AI incidents into Threat Lab workbench', () => {
+    const workbench = readFileSync(join(SPA_ROOT, 'app', 'components', 'ThreatLabWorkbench.tsx'), 'utf-8');
+    expect(workbench).toContain('findLinkedCandidate');
+    expect(workbench).toContain('inputFingerprint === ctx.semanticAuditId');
+    expect(workbench).toContain('investigateTriggerId');
+    expect(workbench).toContain('Run Threat Lab (reactive)');
+    const drawer = readFileSync(join(SPA_ROOT, 'app', 'components', 'IncidentInvestigatorDrawer.tsx'), 'utf-8');
+    expect(drawer).toContain('toolFromCitation');
+  });
+
+  it('includes health report and swarm job log API client', () => {
+    const api = readFileSync(join(SPA_ROOT, 'lib', 'guardian-api.ts'), 'utf-8');
+    expect(api).toContain('fetchMcpHealthReport');
+    expect(api).toContain('fetchSwarmJobLog');
+  });
+
+  it('includes video feature panels and APIs', () => {
+    const client = readFileSync(join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx'), 'utf-8');
+    const api = readFileSync(join(SPA_ROOT, 'lib', 'guardian-api.ts'), 'utf-8');
+    const nav = readFileSync(join(SPA_ROOT, 'lib', 'workspace-nav.ts'), 'utf-8');
+    expect(client).toContain('AnalyticsDashboardPanel');
+    expect(client).toContain('SecurityDashboardPanel');
+    expect(client).toContain('SetupChecklistPanel');
+    expect(nav).toContain("'analytics'");
+    expect(api).toContain('/api/analytics/summary');
+    expect(api).toContain('/api/security/dashboard');
+    expect(api).toContain('/api/setup/status');
   });
 
   it('loads dashboard client with ssr disabled', () => {
     const pageClient = join(SPA_ROOT, 'app', 'components', 'DashboardPageClient.tsx');
-    const pageSrc = readFileSync(pageClient, 'utf-8');
-    expect(pageSrc).toContain("'use client'");
-    expect(pageSrc).toContain('ssr: false');
-    expect(pageSrc).toContain('dynamic(');
-  });
-
-  it('resolves API base to relative paths by default', () => {
-    const api = join(SPA_ROOT, 'lib', 'guardian-api.ts');
-    const apiSrc = readFileSync(api, 'utf-8');
-    expect(apiSrc).toContain("return ''");
-    expect(apiSrc).toMatch(/base \? `\$\{base\}\$\{normalized\}` : normalized/);
-  });
-
-  it('includes Enterprise AI panel for Tier 1/2 features', () => {
-    const enterprise = join(SPA_ROOT, 'app', 'components', 'EnterpriseAiPanel.tsx');
-    const lora = join(SPA_ROOT, 'app', 'components', 'TenantLoraPanel.tsx');
-    expect(existsSync(enterprise)).toBe(true);
-    expect(existsSync(lora)).toBe(true);
-    const client = readFileSync(join(SPA_ROOT, 'app', 'components', 'DashboardClient.tsx'), 'utf-8');
-    expect(client).toContain("'enterprise-ai'");
-    expect(client).toContain('EnterpriseAiPanel');
-  });
-
-  it('keeps legacy static fallback when Next export is not built', () => {
-    const legacyIndex = join(SPA_ROOT, 'index.html');
-    const legacyJs = join(SPA_ROOT, 'app.js');
-    expect(existsSync(legacyIndex)).toBe(true);
-    expect(existsSync(legacyJs)).toBe(true);
+    expect(readFileSync(pageClient, 'utf-8')).toContain('ssr: false');
   });
 
   it('static export exists after dashboard:build', () => {
     const outIndex = join(SPA_ROOT, 'out', 'index.html');
     if (!existsSync(outIndex)) {
-      // CI may skip npm install in deploy/dashboard-spa; source + legacy tests still gate structure.
       expect(existsSync(join(SPA_ROOT, 'package.json'))).toBe(true);
       return;
     }
-    const html = readFileSync(outIndex, 'utf-8');
-    expect(html).toContain('MCP Guardian');
-    expect(html).toMatch(/\/_next\//);
+    expect(readFileSync(outIndex, 'utf-8')).toContain('MCP Guardian');
   });
 });

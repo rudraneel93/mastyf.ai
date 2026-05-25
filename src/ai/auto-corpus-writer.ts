@@ -11,6 +11,7 @@ import {
 } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { resolveSwarmOutputDir } from '../tenant/swarm-tenant-paths.js';
 import type { ThreatLabDiscovery } from './threat-lab.js';
 
 export type AutoCorpusSource =
@@ -36,7 +37,7 @@ export interface AutoCorpusWriteResult {
 }
 
 const DEFAULT_CUSTOM = join(process.cwd(), 'adversarial-harness', 'fixtures', 'custom-attacks');
-const DEFAULT_MANIFEST = join(process.cwd(), 'reports', 'security-swarm', 'auto-corpus-manifest.json');
+const DEFAULT_MANIFEST = join(resolveSwarmOutputDir(), 'auto-corpus-manifest.json');
 
 export function candidateFingerprint(discovery: ThreatLabDiscovery): string {
   return createHash('sha256')

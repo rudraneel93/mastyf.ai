@@ -121,6 +121,32 @@ function updateState(patch: Partial<SchedulerState>): SchedulerState {
   return inMemoryState;
 }
 
+async function maybeTriggerReactiveThreatLab(tenantId: string): Promise<void> {
+  try {
+    const { readAutopilotConfig } = await import('./autopilot-config.js');
+    const cfg = readAutopilotConfig();
+    if (cfg?.threatLabOnSemanticTp === false) return;
+    const { countLearningEventsSince } = await import('./learning-events.js');
+    const tpCount = countLearningEventsSince('semantic_tp', 7 * 24 * 60 * 60 * 1000, tenantId);
+    if (tpCount < 1) return;
+    const { isThreatDiscoveryJobRunning, startThreatLabJob } = await import('./threat-discovery-runner.js');
+    if (isThreatDiscoveryJobRunning(tenantId, 'threat-lab')) return;
+    const result = startThreatLabJob(tenantId, { mode: 'reactive' });
+    if (result.ok) {
+      const { appendLearningEvent } = await import('./learning-events.js');
+      appendLearningEvent(
+        { type: 'threat_lab_triggered', detail: 'Reactive Threat Lab after semantic true positives' },
+        tenantId,
+      );
+      Logger.info(`[scheduler] Started reactive Threat Lab for tenant=${tenantId}`);
+    }
+  } catch (err) {
+    Logger.debug(
+      `[scheduler] Threat Lab trigger skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
 async function runOnce(tenantId: string): Promise<void> {
   Logger.info(`[scheduler] Running Auto-Threat-Research for tenant=${tenantId}`);
   try {
@@ -137,6 +163,7 @@ async function runOnce(tenantId: string): Promise<void> {
         totalErrors: (inMemoryState?.totalErrors ?? 0) + (benign ? 0 : 1),
         nextRunAt: new Date(Date.now() + readIntervalMs()).toISOString(),
       });
+      if (benign) await maybeTriggerReactiveThreatLab(tenantId);
       return;
     }
     updateState({
@@ -146,6 +173,7 @@ async function runOnce(tenantId: string): Promise<void> {
       totalRuns: (inMemoryState?.totalRuns ?? 0) + 1,
       nextRunAt: new Date(Date.now() + readIntervalMs()).toISOString(),
     });
+    await maybeTriggerReactiveThreatLab(tenantId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     Logger.error(`[scheduler] Run failed: ${msg}`);

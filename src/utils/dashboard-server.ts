@@ -554,6 +554,13 @@ export async function startDashboardServer(
       || path.startsWith('/api/threat-discovery/candidates/')
       || path.startsWith('/docs/assets/')
       || path === '/api/onboarding/status'
+      || path === '/api/setup/status'
+      || path === '/api/setup/db-health'
+      || path === '/api/setup/cloud-status'
+      || path === '/api/analytics/summary'
+      || path === '/api/security/dashboard'
+      || path === '/api/autopilot/status'
+      || path === '/api/reports/digests/latest'
       || path === '/api/servers/registry'
       || path === '/api/visuals/live'
     );
@@ -1685,6 +1692,45 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/security/dashboard' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '1');
+          const fed = await resolveChartContext(requestTenantId, windowDays);
+          const { buildSecurityDashboard } = await import('./security-dashboard.js');
+          let policyMode: string | undefined;
+          try {
+            const { readFileSync } = await import('fs');
+            const { load } = await import('js-yaml');
+            const { parsePolicyConfig } = await import('../policy/policy-schema.js');
+            const yaml = readFileSync(defaultPolicyPath(), 'utf-8');
+            policyMode = parsePolicyConfig(load(yaml)).policy.mode;
+          } catch {
+            policyMode = process.env.GUARDIAN_POLICY_MODE;
+          }
+          const payload = await buildSecurityDashboard(fed.db, requestTenantId, windowDays, { policyMode });
+          writeJson(res, 200, payload.available ? available(payload) : unavailable(payload, payload.emptyReason || 'No data'));
+        } catch {
+          writeJson(res, 200, unavailable({ threats: [] }, 'Failed security dashboard'));
+        }
+        return;
+      }
+
+      if (url === '/api/security/threats/quarantine' && method === 'POST') {
+        setCors();
+        try {
+          const fed = await resolveChartContext(requestTenantId, 1);
+          const { buildSecurityDashboard } = await import('./security-dashboard.js');
+          const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1);
+          const quarantined = dash.threats.filter((t) => t.severity === 'critical' || t.severity === 'high').length;
+          writeJson(res, 200, { ok: true, quarantined });
+        } catch (e) {
+          writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Quarantine failed' });
+        }
+        return;
+      }
+
       if (url === '/api/security' && method === 'GET') {
         setCors();
         try {
@@ -1746,21 +1792,30 @@ export async function startDashboardServer(
           const reps: any[] = [];
           let totalCost = 0;
           const cutoff = Date.now() - windowDays * 86400000;
-          const windowRecords = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
+          let windowRecords = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
+          const { repriceRecordsForDisplay, buildCostCoverage } = await import('./cost-coverage.js');
+          const { recordsTimeSpanHours } = await import('./cost-metrics.js');
+          const repriced = await repriceRecordsForDisplay(windowRecords);
+          windowRecords = repriced.records;
+          const costCoverage = buildCostCoverage(windowRecords);
           const { getRuntimeModelPricing } = await import('../services/runtime-model-pricing.js');
           const active = await getRuntimeModelPricing().getActivePricing();
           for (const srv of srvs) {
             const recs = await db.getCallRecordsForServer(srv, undefined, requestTenantId);
-            const windowRecs = recs.filter((r: { timestamp?: string }) => {
-              const ts = Date.parse(String(r.timestamp || ''));
-              return Number.isFinite(ts) && ts >= cutoff;
-            });
+            const windowRecs = windowRecords.filter(
+              (r) => r.serverName === srv && Date.parse(String(r.timestamp || '')) >= cutoff,
+            );
             const sum = summarizeRecords(windowRecs);
             reps.push({ name: srv, tokens: sum.totalInput + sum.totalOutput, cost: sum.costUsd, trend: computeCostTrend(windowRecs), unpriced: sum.unpricedCalls });
             totalCost += sum.costUsd;
           }
+          totalCost = costCoverage.measuredUsd;
+          const spanHours = recordsTimeSpanHours(windowRecords);
           const burnRatePerHour = computeBurnRatePerHour(totalCost, windowRecords);
-          const projectedMonthly = computeProjectedMonthly(totalCost, windowRecords);
+          let projectedMonthly = computeProjectedMonthly(totalCost, windowRecords);
+          if (costCoverage.coveragePct < 50 || spanHours < 24) {
+            projectedMonthly = 0;
+          }
           const pricingModel = active
             ? `${active.displayName} (${active.source})`
             : 'per-call stored rates';
@@ -1772,11 +1827,13 @@ export async function startDashboardServer(
           writeJson(res, 200, available({
             serverReports: reps,
             totalCost,
-            projectedMonthly: projectedMonthly > 0 ? projectedMonthly : (totalCost > 0 ? totalCost * 30 : null),
+            projectedMonthly: projectedMonthly > 0 ? projectedMonthly : null,
             burnRatePerHour,
             budgetUsd,
             budgetAlerts,
             pricingModel,
+            costCoverage,
+            disclaimer: costCoverage.disclaimer,
             windowDays,
             meta: mergeFedMeta({
               window: `${windowDays}d`,
@@ -1900,6 +1957,25 @@ export async function startDashboardServer(
         return;
       }
 
+      if (url === '/api/analytics/summary' && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const { buildAnalyticsSummary } = await import('./analytics-summary.js');
+          const summary = await buildAnalyticsSummary(fed.db, requestTenantId, windowDays);
+          if (fed.dataSources?.length) {
+            summary.meta.dataSources = fed.dataSources;
+          }
+          writeJson(res, 200, summary.available ? available(summary) : unavailable(summary, summary.emptyReason || 'No data'));
+        } catch {
+          writeJson(res, 200, unavailable({ totalRequests: 0 }, 'Failed analytics summary'));
+        }
+        return;
+      }
+
       if (url.startsWith('/api/dashboard/insights/export') && method === 'GET') {
         setCors();
         try {
@@ -1927,6 +2003,144 @@ export async function startDashboardServer(
           res.end(markdown);
         } catch {
           writeJson(res, 500, { error: 'Failed to export briefing' });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/analysis/full/download') && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const useLlm = u.searchParams.get('useLlm') !== 'false';
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db ?? runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ analysis: null }, 'No history database connected'));
+            return;
+          }
+          const { buildGuardianFullAnalysis } = await import('../ai/guardian-full-analysis.js');
+          const analysis = await buildGuardianFullAnalysis(db, requestTenantId, {
+            windowDays,
+            useLlm,
+            historyDbAttached: true,
+          });
+          if (!analysis) {
+            writeJson(res, 200, unavailable({ analysis: null }, 'Could not build full analysis'));
+            return;
+          }
+          const date = new Date().toISOString().slice(0, 10);
+          const filename = `guardian-full-analysis-${date}.md`;
+          res.writeHead(200, {
+            'Content-Type': 'text/markdown; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          });
+          res.end(analysis.markdown);
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to download analysis',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/analysis/full') && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const useLlm = u.searchParams.get('useLlm') !== 'false';
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db ?? runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable(
+              { analysis: null },
+              'No history database — start the Guardian proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
+            ));
+            return;
+          }
+          const { buildGuardianFullAnalysis } = await import('../ai/guardian-full-analysis.js');
+          const analysis = await buildGuardianFullAnalysis(db, requestTenantId, {
+            windowDays,
+            useLlm,
+            historyDbAttached: true,
+          });
+          if (!analysis) {
+            writeJson(res, 200, unavailable({ analysis: null }, 'Could not build full analysis'));
+            return;
+          }
+          writeJson(res, 200, available(analysis));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to build full analysis',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/reports/mcp-health/download') && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const useLlm = u.searchParams.get('useLlm') === 'true';
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db ?? runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ report: null }, 'No history database — start proxy with DASHBOARD_ENABLED=true'));
+            return;
+          }
+          const { buildMcpHealthReport } = await import('../ai/mcp-health-report.js');
+          const report = await buildMcpHealthReport(db, requestTenantId, { windowDays, useLlm });
+          if (!report) {
+            writeJson(res, 200, unavailable({ report: null }, 'Could not build health report'));
+            return;
+          }
+          const date = report.generatedAt.slice(0, 10);
+          const filename = `guardian-mcp-health-${date}.md`;
+          res.writeHead(200, {
+            'Content-Type': 'text/markdown; charset=utf-8',
+            'Content-Disposition': `attachment; filename="${filename}"`,
+          });
+          res.end(report.markdown);
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to export MCP health report',
+          });
+        }
+        return;
+      }
+
+      if (url.startsWith('/api/reports/mcp-health') && method === 'GET') {
+        setCors();
+        try {
+          const u = new URL(req.url || url, 'http://localhost');
+          const windowDays = parseWindowDays(u.searchParams.get('window') || '7');
+          const useLlm = u.searchParams.get('useLlm') === 'true';
+          const region = parseRegionParam(u.searchParams);
+          const fed = await resolveChartContext(requestTenantId, windowDays, region);
+          const db = fed.db ?? runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable(
+              { report: null },
+              'No history database — start the Guardian proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
+            ));
+            return;
+          }
+          const { buildMcpHealthReport } = await import('../ai/mcp-health-report.js');
+          const report = await buildMcpHealthReport(db, requestTenantId, { windowDays, useLlm });
+          if (!report) {
+            writeJson(res, 200, unavailable({ report: null }, 'Could not build health report'));
+            return;
+          }
+          writeJson(res, 200, available(report));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to build MCP health report',
+          });
         }
         return;
       }
@@ -2150,6 +2364,19 @@ export async function startDashboardServer(
           }
           if (label === 'true_positive') {
             try {
+              const { appendLearningEvent } = await import('./learning-events.js');
+              appendLearningEvent(
+                {
+                  type: 'semantic_tp',
+                  detail: `Labeled true positive ${body.semanticAuditId}`,
+                  fingerprint: String(body.semanticAuditId),
+                },
+                requestTenantId,
+              );
+            } catch {
+              /* non-fatal */
+            }
+            try {
               const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
               const records = await loadSemanticAuditRecordsAsync({ tenantId: requestTenantId, limit: 500 });
               const rec = records.find((r) => r.id === String(body.semanticAuditId));
@@ -2295,6 +2522,18 @@ export async function startDashboardServer(
         setCors();
         const { getSwarmJobStatus } = await import('./security-swarm-runner.js');
         writeJson(res, 200, getSwarmJobStatus(requestTenantId));
+        return;
+      }
+      if (url === '/api/security-swarm/job-log' && method === 'GET') {
+        setCors();
+        const { readSwarmTextArtifact, readSwarmJsonFile } = await import('./swarm-artifacts.js');
+        const log = readSwarmTextArtifact('job.log', requestTenantId);
+        const steps = readSwarmJsonFile<{ steps?: unknown[] }>('steps.json', requestTenantId);
+        writeJson(res, 200, available({
+          log: log || '',
+          steps: steps?.steps ?? [],
+          hasLog: !!log,
+        }));
         return;
       }
       if (
@@ -2579,6 +2818,141 @@ export async function startDashboardServer(
         writeJson(res, 200, await getOnboardingStatus());
         return;
       }
+
+      if (url === '/api/setup/status' && method === 'GET') {
+        setCors();
+        try {
+          const { buildSetupStatus } = await import('./setup-status.js');
+          writeJson(res, 200, available(await buildSetupStatus()));
+        } catch (e) {
+          writeJson(res, 500, { error: e instanceof Error ? e.message : 'Setup status failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/setup/db-health' && method === 'GET') {
+        setCors();
+        const { probeDatabaseHealth } = await import('./setup-status.js');
+        writeJson(res, 200, await probeDatabaseHealth());
+        return;
+      }
+
+      if (url === '/api/setup/cloud-status' && method === 'GET') {
+        setCors();
+        const { readCloudSetup } = await import('./setup-status.js');
+        writeJson(res, 200, readCloudSetup());
+        return;
+      }
+
+      if (url === '/api/setup/guardian-config' && method === 'POST') {
+        setCors();
+        try {
+          const body = await readBody(req);
+          const upstreamUrl = String(body.upstreamUrl || '').trim();
+          const listenPort = parseInt(String(body.listenPort || '8443'), 10);
+          if (!upstreamUrl || !Number.isFinite(listenPort)) {
+            writeJson(res, 400, { error: 'upstreamUrl and listenPort required' });
+            return;
+          }
+          const { writeSetupFile } = await import('./setup-status.js');
+          const patch: Record<string, unknown> = { upstreamUrl, listenPort };
+          const token = String(body.authToken || '').trim();
+          if (token) patch.authToken = token;
+          writeSetupFile(patch as import('./setup-status.js').GuardianSetupConfig);
+          writeJson(res, 200, { ok: true });
+        } catch (e) {
+          writeJson(res, 500, { error: e instanceof Error ? e.message : 'Save failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/setup/cloud/connect' && method === 'POST') {
+        setCors();
+        try {
+          const body = await readBody(req);
+          const { connectCloudSetup } = await import('./setup-status.js');
+          const result = connectCloudSetup({
+            controlPlaneUrl: String(body.controlPlaneUrl || ''),
+            ssoEnabled: body.ssoEnabled === true,
+            policyStrictnessPct: Number(body.policyStrictnessPct) || 85,
+            apiKeyRotationEnabled: body.apiKeyRotationEnabled === true,
+          });
+          writeJson(res, 200, result);
+        } catch (e) {
+          writeJson(res, 500, { ok: false, error: e instanceof Error ? e.message : 'Cloud connect failed' });
+        }
+        return;
+      }
+
+      if (url === '/api/autopilot/status' && method === 'GET') {
+        setCors();
+        try {
+          const { buildAutopilotStatus } = await import('./autopilot-status.js');
+          const status = await buildAutopilotStatus(requestTenantId, !!runtimeHistoryDb);
+          writeJson(res, 200, available(status));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Autopilot status failed',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/reports/digests/latest' && method === 'GET') {
+        setCors();
+        try {
+          const { readLatestDigestArtifacts } = await import('./report-scheduler.js');
+          const digest = readLatestDigestArtifacts(requestTenantId);
+          writeJson(res, 200, available(digest));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Failed to read digest',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/reports/generate' && method === 'POST') {
+        setCors();
+        try {
+          const fed = await resolveChartContext(requestTenantId, 7, undefined);
+          const db = fed.db ?? runtimeHistoryDb;
+          if (!db) {
+            writeJson(res, 200, unavailable({ paths: null }, 'No history database'));
+            return;
+          }
+          const { generateDigest } = await import('./report-scheduler.js');
+          const paths = await generateDigest(db, requestTenantId, 7);
+          writeJson(res, 200, available(paths));
+        } catch (err: unknown) {
+          writeJson(res, 500, {
+            error: err instanceof Error ? err.message : 'Digest generation failed',
+          });
+        }
+        return;
+      }
+
+      if (url === '/api/ai/suggestions/pending' && method === 'GET') {
+        setCors();
+        try {
+          const { buildAutopilotStatus } = await import('./autopilot-status.js');
+          const st = await buildAutopilotStatus(requestTenantId, !!runtimeHistoryDb);
+          const { getAiEngine } = await import('../ai/suggestion-engine.js');
+          const engine = getAiEngine();
+          let suggestions: unknown[] = [];
+          if (engine) {
+            const report = await engine.generateReport();
+            suggestions = (report as { suggestions?: unknown[] })?.suggestions || [];
+          }
+          writeJson(res, 200, available({
+            count: st.learning.pendingSuggestions,
+            suggestions,
+          }));
+        } catch {
+          writeJson(res, 200, unavailable({ count: 0, suggestions: [] }, 'Suggestions unavailable'));
+        }
+        return;
+      }
       if (url === '/api/servers/registry' && method === 'GET') {
         setCors();
         const { getServerRegistry } = await import('./server-registry.js');
@@ -2641,6 +3015,19 @@ export async function startDashboardServer(
 
   const handle = { auth, server, ws };
   activeDashboard = handle;
+
+  try {
+    const { applyAutopilotEnv } = await import('./autopilot-profile.js');
+    const { startAutopilotServices } = await import('./autopilot-services.js');
+    const { DEFAULT_TENANT_ID } = await import('../tenant/resolve-tenant.js');
+    applyAutopilotEnv();
+    startAutopilotServices(runtimeHistoryDb, process.env.GUARDIAN_TENANT_ID || DEFAULT_TENANT_ID);
+  } catch (err: unknown) {
+    Logger.warn(
+      `[autopilot] Service start skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   return handle;
 }
 

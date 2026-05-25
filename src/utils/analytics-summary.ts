@@ -1,0 +1,296 @@
+/**
+ * Aggregated analytics for the MCP Guardian Analytics dashboard (video Feature 1).
+ */
+import type { IDatabase } from '../database/database-interface.js';
+import type { ProxyCallRecord } from '../types.js';
+import { detectProvider, type TokenProvider } from './token-counter.js';
+import { summarizeRecords } from './db-aggregate.js';
+import { loadAllRecordsInWindow } from './cost-timeseries.js';
+import { buildChartMeta, type ChartMetaEnvelope } from './chart-meta.js';
+import {
+  bucketGranularityForWindow,
+  fillTimeSeries,
+  generateTimeBuckets,
+  parseRecordTimestamp,
+  parseWindowDays,
+  windowRangeMs,
+} from './time-buckets.js';
+import { parseCostBudgetUsd } from './dashboard-live-data.js';
+
+export type AnalyticsTrafficPoint = {
+  bucket: string;
+  requests: number;
+  blocked: number;
+};
+
+export type AnalyticsCostPoint = {
+  bucket: string;
+  costUsd: number;
+  label: string;
+};
+
+export type AnalyticsModelUsage = {
+  model: string;
+  label: string;
+  calls: number;
+  tokens: number;
+  pct: number;
+};
+
+export type AnalyticsProviderCost = {
+  provider: string;
+  label: string;
+  costUsd: number;
+  colorKey: 'openai' | 'anthropic' | 'google' | 'other';
+};
+
+export type AnalyticsSummary = {
+  available: boolean;
+  windowDays: number;
+  generatedAt: string;
+  totalRequests: number;
+  avgLatencyMs: number;
+  errorRatePct: number;
+  tokensUsed: number;
+  budgetUsd: number | null;
+  budgetUtilizationPct: number | null;
+  trafficSeries: AnalyticsTrafficPoint[];
+  costSeries: AnalyticsCostPoint[];
+  modelUsage: AnalyticsModelUsage[];
+  providerCosts: AnalyticsProviderCost[];
+  meta: ChartMetaEnvelope;
+  emptyReason?: string;
+};
+
+const PROVIDER_LABELS: Record<TokenProvider, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google AI',
+  unknown: 'Other',
+};
+
+const PROVIDER_COLOR: Record<TokenProvider, AnalyticsProviderCost['colorKey']> = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  google: 'google',
+  unknown: 'other',
+};
+
+function friendlyModelLabel(modelId: string): string {
+  const m = modelId.toLowerCase();
+  if (m.includes('gpt-4o') || m.includes('gpt-4')) return 'GPT-4o';
+  if (m.includes('claude-3.5') || m.includes('claude-3')) return 'Claude 3.5';
+  if (m.includes('claude')) return 'Claude';
+  if (m.includes('gemini')) return 'Gemini Pro';
+  if (m.includes('gpt')) return 'GPT';
+  return modelId.length > 24 ? `${modelId.slice(0, 22)}…` : modelId;
+}
+
+function bucketKey(ts: number, granularity: 'hour' | 'day'): string {
+  const d = new Date(ts);
+  if (granularity === 'hour') return d.toISOString().slice(0, 13) + ':00:00.000Z';
+  return d.toISOString().slice(0, 10);
+}
+
+function dayLabel(isoDay: string): string {
+  const d = new Date(isoDay + 'T12:00:00.000Z');
+  return d.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+function buildTrafficSeries(
+  records: ProxyCallRecord[],
+  sinceMs: number,
+  endMs: number,
+  granularity: 'hour' | 'day',
+): AnalyticsTrafficPoint[] {
+  const buckets = generateTimeBuckets(sinceMs, endMs, granularity);
+  const rawMap = new Map<string, { requests: number; blocked: number }>();
+
+  for (const r of records) {
+    const ts = parseRecordTimestamp(r.timestamp);
+    if (!Number.isFinite(ts) || ts < sinceMs || ts > endMs) continue;
+    const key = bucketKey(ts, granularity);
+    const cur = rawMap.get(key) || { requests: 0, blocked: 0 };
+    cur.requests++;
+    if (r.blocked) cur.blocked++;
+    rawMap.set(key, cur);
+  }
+
+  const raw = buckets.map((b) => {
+    const cur = rawMap.get(b) || { requests: 0, blocked: 0 };
+    return { bucket: b, requests: cur.requests, blocked: cur.blocked };
+  });
+
+  const filled = fillTimeSeries(raw, 'bucket', buckets, ['requests', 'blocked']);
+  return filled.points.map((p) => ({
+    bucket: String(p.bucket),
+    requests: Number(p.requests) || 0,
+    blocked: Number(p.blocked) || 0,
+  }));
+}
+
+function buildCostSeries(
+  records: ProxyCallRecord[],
+  sinceMs: number,
+  endMs: number,
+): AnalyticsCostPoint[] {
+  const buckets = generateTimeBuckets(sinceMs, endMs, 'day');
+  const rawMap = new Map<string, number>();
+
+  for (const r of records) {
+    const ts = parseRecordTimestamp(r.timestamp);
+    if (!Number.isFinite(ts) || ts < sinceMs || ts > endMs) continue;
+    const key = bucketKey(ts, 'day');
+    rawMap.set(key, (rawMap.get(key) || 0) + (Number(r.costUsd) || 0));
+  }
+
+  return buckets.map((b) => {
+    const costUsd = Math.round((rawMap.get(b) || 0) * 100) / 100;
+    return { bucket: b, costUsd, label: dayLabel(b.slice(0, 10)) };
+  });
+}
+
+function aggregateModelUsage(records: ProxyCallRecord[]): AnalyticsModelUsage[] {
+  const byModel = new Map<string, { calls: number; tokens: number }>();
+  let totalTokens = 0;
+
+  for (const r of records) {
+    const model = (r.model || 'unknown').trim() || 'unknown';
+    const tokens = (r.requestTokens || 0) + (r.responseTokens || 0) || (r.totalTokens || 0);
+    const cur = byModel.get(model) || { calls: 0, tokens: 0 };
+    cur.calls++;
+    cur.tokens += tokens;
+    byModel.set(model, cur);
+    totalTokens += tokens;
+  }
+
+  const denom = totalTokens > 0 ? totalTokens : records.length || 1;
+  const sorted = [...byModel.entries()]
+    .map(([model, v]) => ({
+      model,
+      label: friendlyModelLabel(model),
+      calls: v.calls,
+      tokens: v.tokens,
+      pct: Math.round((totalTokens > 0 ? v.tokens / denom : v.calls / denom) * 1000) / 10,
+    }))
+    .sort((a, b) => b.tokens - a.tokens || b.calls - a.calls);
+
+  const top = sorted.slice(0, 6);
+  const rest = sorted.slice(6);
+  if (rest.length) {
+    const otherCalls = rest.reduce((s, x) => s + x.calls, 0);
+    const otherTokens = rest.reduce((s, x) => s + x.tokens, 0);
+    const otherPct = Math.round((totalTokens > 0 ? otherTokens / denom : otherCalls / denom) * 1000) / 10;
+    top.push({
+      model: 'other',
+      label: 'Other',
+      calls: otherCalls,
+      tokens: otherTokens,
+      pct: otherPct,
+    });
+  }
+  return top;
+}
+
+function aggregateProviderCosts(records: ProxyCallRecord[]): AnalyticsProviderCost[] {
+  const byProvider = new Map<TokenProvider, number>();
+
+  for (const r of records) {
+    const model = (r.model || '').trim();
+    const provider = model ? detectProvider(model) : 'unknown';
+    byProvider.set(provider, (byProvider.get(provider) || 0) + (Number(r.costUsd) || 0));
+  }
+
+  return (['openai', 'anthropic', 'google', 'unknown'] as TokenProvider[])
+    .map((provider) => ({
+      provider,
+      label: PROVIDER_LABELS[provider],
+      costUsd: Math.round((byProvider.get(provider) || 0) * 100) / 100,
+      colorKey: PROVIDER_COLOR[provider],
+    }))
+    .filter((p) => p.costUsd > 0 || records.some((r) => detectProvider(r.model || '') === p.provider))
+    .sort((a, b) => b.costUsd - a.costUsd);
+}
+
+export async function buildAnalyticsSummary(
+  db: IDatabase | null,
+  tenantId: string | undefined,
+  windowDaysInput: number | string,
+): Promise<AnalyticsSummary> {
+  const windowDays = parseWindowDays(windowDaysInput);
+  const { startMs, endMs } = windowRangeMs(windowDays);
+  const granularity = bucketGranularityForWindow(windowDays);
+  const empty: AnalyticsSummary = {
+    available: false,
+    windowDays,
+    generatedAt: new Date().toISOString(),
+    totalRequests: 0,
+    avgLatencyMs: 0,
+    errorRatePct: 0,
+    tokensUsed: 0,
+    budgetUsd: parseCostBudgetUsd(),
+    budgetUtilizationPct: null,
+    trafficSeries: [],
+    costSeries: [],
+    modelUsage: [],
+    providerCosts: [],
+    meta: buildChartMeta({
+      windowDays,
+      recordCount: 0,
+      sparse: true,
+      dataSources: [],
+      emptyReason: 'No history database — start proxy with MCP_GUARDIAN_DB_PATH',
+    }),
+    emptyReason: 'No history database — start proxy with MCP_GUARDIAN_DB_PATH',
+  };
+
+  if (!db) return empty;
+
+  const records = await loadAllRecordsInWindow(db, tenantId, windowDays);
+  if (!records.length) {
+    return {
+      ...empty,
+      available: true,
+      emptyReason: 'No proxy traffic in the selected window — use MCP tools through Guardian',
+      meta: buildChartMeta({
+        windowDays,
+        recordCount: 0,
+        sparse: true,
+        dataSources: ['history.db'],
+        emptyReason: 'No proxy traffic in the selected window — use MCP tools through Guardian',
+      }),
+    };
+  }
+
+  const sum = summarizeRecords(records);
+  const tokensUsed = sum.totalInput + sum.totalOutput;
+  const avgLatencyMs = sum.total > 0 ? Math.round(sum.totalLatency / sum.total) : 0;
+  const errorRatePct = sum.total > 0 ? Math.round((sum.blocked / sum.total) * 1000) / 10 : 0;
+  const budgetUsd = parseCostBudgetUsd();
+  const budgetUtilizationPct =
+    budgetUsd != null && budgetUsd > 0
+      ? Math.min(100, Math.round((sum.costUsd / budgetUsd) * 1000) / 10)
+      : null;
+
+  return {
+    available: true,
+    windowDays,
+    generatedAt: new Date().toISOString(),
+    totalRequests: sum.total,
+    avgLatencyMs,
+    errorRatePct,
+    tokensUsed,
+    budgetUsd,
+    budgetUtilizationPct,
+    trafficSeries: buildTrafficSeries(records, startMs, endMs, granularity),
+    costSeries: buildCostSeries(records, startMs, endMs),
+    modelUsage: aggregateModelUsage(records),
+    providerCosts: aggregateProviderCosts(records),
+    meta: buildChartMeta({
+      windowDays,
+      recordCount: records.length,
+      sparse: records.length < 5,
+      dataSources: ['history.db'],
+    }),
+  };
+}

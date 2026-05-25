@@ -52,6 +52,15 @@ export function windowToLabel(days: number): DashboardWindow {
   return '90d';
 }
 
+/** Parse call_records.created_at — SQLite stores UTC without a Z suffix. */
+export function parseRecordTimestamp(raw: string | undefined | null): number {
+  const s = String(raw ?? '').trim();
+  if (!s) return NaN;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) return Date.parse(s);
+  if (s.includes('T')) return Date.parse(s);
+  return Date.parse(s.replace(' ', 'T') + 'Z');
+}
+
 export function windowRangeMs(windowDays: number, nowMs = Date.now()): {
   startMs: number;
   endMs: number;

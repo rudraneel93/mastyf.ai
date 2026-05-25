@@ -13,6 +13,7 @@ import {
   fetchThreatLabCandidates,
   fetchToolIntegrityReport,
   fetchAutoCorpusManifest,
+  fetchSwarmJobLog,
   type PlainEnglishReport,
   type SwarmFigureEntry,
   type SwarmLatest,
@@ -21,14 +22,12 @@ import {
   type TrafficSummary,
 } from '@/lib/guardian-api';
 import { InfrastructureVisualsPanel } from './InfrastructureVisualsPanel';
-import { DashboardWindowProvider } from './dashboard/DashboardWindowContext';
-import { VisualsProvider } from './dashboard/VisualsProvider';
 import { PlainEnglishReportView } from './PlainEnglishReportView';
-
 type Props = {
   refreshKey?: number;
   showReport?: boolean;
   className?: string;
+  onOpenThreats?: (view: string) => void;
 };
 
 function gateLabel(ok: unknown): string {
@@ -43,6 +42,7 @@ export function SwarmResultsView({
   refreshKey = 0,
   showReport = true,
   className = '',
+  onOpenThreats,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [latest, setLatest] = useState<SwarmLatest | null>(null);
@@ -57,13 +57,16 @@ export function SwarmResultsView({
   const [toolIntegrity, setToolIntegrity] = useState<Record<string, unknown> | null>(null);
   const [showFullReport, setShowFullReport] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [jobLog, setJobLog] = useState('');
   const sectionRef = useRef<HTMLElement>(null);
+
+  const goThreats = (view: string) => onOpenThreats?.(view);
 
   const loadArtifacts = useCallback(async () => {
     setLoading(true);
     setLoadError('');
     try {
-      const [r, l, f, s, pr, tr, us, tl, ac, tw] = await Promise.all([
+      const [r, l, f, s, pr, tr, us, tl, ac, tw, jl] = await Promise.all([
         showReport ? fetchSwarmReportPreview() : Promise.resolve(''),
         fetchSwarmLatest(),
         fetchSwarmFigures(),
@@ -74,6 +77,7 @@ export function SwarmResultsView({
         fetchThreatLabCandidates(),
         fetchAutoCorpusManifest(),
         fetchToolIntegrityReport(),
+        fetchSwarmJobLog(),
       ]);
       setReport(r || '');
       setLatest(l);
@@ -85,6 +89,7 @@ export function SwarmResultsView({
       setThreatLabCandidates(tl);
       setAutoCorpusEntries(ac);
       setToolIntegrity(tw);
+      setJobLog(jl?.log ?? '');
       if (!pr && !l && !f.length && !s && !r) {
         setLoadError(
           'No batch artifacts for this dashboard session. Run Security Swarm from Agent flow — committed CI reports are hidden until then.',
@@ -137,11 +142,7 @@ export function SwarmResultsView({
         <PlainEnglishReportView report={plainReport} />
       ) : null}
 
-      <DashboardWindowProvider>
-        <VisualsProvider refreshKey={refreshKey} pollMs={30_000}>
-          <InfrastructureVisualsPanel refreshKey={refreshKey} />
-        </VisualsProvider>
-      </DashboardWindowProvider>
+      <InfrastructureVisualsPanel refreshKey={refreshKey} />
 
       {!loading && !hasPlainReport && hasTechnical ? (
         <p className="hint">
@@ -211,11 +212,31 @@ export function SwarmResultsView({
               ? `${autoCorpusEntries.length} auto corpus fixture(s)`
               : null}
           </p>
-          <p className="hint">
-            Open the <strong>Threat Discovery</strong> tab for interactive architecture, run controls,
-            detailed statistics, and accept/reject workflow.
+          <p className="btn-row">
+            <button type="button" className="primary btn-sm" onClick={() => goThreats('threat-lab')}>
+              Open Threat Lab
+            </button>
+            <button type="button" className="secondary btn-sm" onClick={() => goThreats('auto-research')}>
+              Auto Research audit
+            </button>
           </p>
         </div>
+      ) : null}
+
+      {!loading && latest?.bypasses ? (
+        <div className="bypasses-block">
+          <h4>Policy bypasses detected</h4>
+          <p className="hint">
+            Detected: {latest.bypasses.detected ?? 0} · Net new: {latest.bypasses.netNew ?? 0}
+          </p>
+        </div>
+      ) : null}
+
+      {!loading && jobLog ? (
+        <details className="job-log-block">
+          <summary>Job log (tail)</summary>
+          <pre className="code-block">{jobLog.split('\n').slice(-40).join('\n')}</pre>
+        </details>
       ) : null}
 
       {!loading && latest ? (

@@ -11,6 +11,12 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export const LEGACY_SWARM_DIR = join(REPO_ROOT, 'reports', 'security-swarm');
 
+/** Output dir for swarm / Threat Lab / auto-research (dashboard sets GUARDIAN_SWARM_DIR). */
+export function resolveSwarmOutputDir(): string {
+  const override = process.env.GUARDIAN_SWARM_DIR?.trim();
+  return override || LEGACY_SWARM_DIR;
+}
+
 /** Writable/read path for a tenant's swarm artifacts. */
 export function resolveTenantSwarmDir(tenantId: string): string {
   const tid = validateTenantId(tenantId);
@@ -23,6 +29,10 @@ export function getEffectiveSwarmDir(tenantId: string): string {
   const tenantDir = resolveTenantSwarmDir(tid);
   const hasTenantArtifacts =
     existsSync(join(tenantDir, 'job.json'))
+    || existsSync(join(tenantDir, 'threat-lab-job.json'))
+    || existsSync(join(tenantDir, 'auto-research-job.json'))
+    || existsSync(join(tenantDir, 'threat-lab-candidates.json'))
+    || existsSync(join(tenantDir, 'auto-corpus-manifest.json'))
     || existsSync(join(tenantDir, 'latest.json'))
     || existsSync(join(tenantDir, 'visuals-data.json'))
     || existsSync(join(tenantDir, 'report.json'));

@@ -15,7 +15,7 @@ import type { NextConfig } from 'next';
  * expected to be on the same host/port (e.g. nginx proxies /api → backend).
  */
 
-const SOC_API_PORT = process.env['SOC_API_PORT'] ?? '4040';
+const SOC_API_PORT = process.env['SOC_API_PORT'] ?? process.env['GUARDIAN_PORT'] ?? '4000';
 const SOC_API_ORIGIN = `http://localhost:${SOC_API_PORT}`;
 
 const isDev = process.env.NODE_ENV === 'development';

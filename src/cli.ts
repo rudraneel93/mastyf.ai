@@ -709,9 +709,30 @@ program
       console.error(chalk.dim('AI learning disabled (GUARDIAN_AI_ENABLED=false)'));
     }
 
+    try {
+      const { applyAutopilotEnv, isAutopilotMode } = await import('./utils/autopilot-profile.js');
+      applyAutopilotEnv();
+      const { startAutopilotServices } = await import('./utils/autopilot-services.js');
+      const { resolveCliTenantId } = await import('./tenant/resolve-tenant.js');
+      startAutopilotServices(db, resolveCliTenantId({}));
+      if (isAutopilotMode()) {
+        console.error(chalk.green('Guardian Autopilot services started (scheduler + reports)'));
+      }
+    } catch (err: unknown) {
+      console.error(chalk.yellow(`Autopilot services warning: ${err instanceof Error ? err.message : String(err)}`));
+    }
+
     console.error(chalk.green('MCP Guardian proxy running. Press Ctrl+C to stop.'));
     const cleanup = async () => {
       await manager.stopAll();
+      try {
+        const { stopReportScheduler } = await import('./utils/report-scheduler.js');
+        const { stopScheduler } = await import('./utils/threat-discovery-scheduler.js');
+        stopReportScheduler();
+        stopScheduler();
+      } catch {
+        /* ignore */
+      }
       const { flushAuditWriteQueue } = await import('./database/audit-write-queue.js');
       await flushAuditWriteQueue();
       await shutdownEnterprise();
@@ -755,6 +776,82 @@ program
 // ── Default action: when piped stdin (Glama/mcp-proxy), start MCP server ──
 const isPiped = !process.stdin.isTTY;
 const isServer = process.env['MCP_GUARDIAN_MODE'] === 'server';
+
+program
+  .command('analyze')
+  .description('Full plain-English security and health analysis (optional Ollama narrative)')
+  .option('--window <days>', 'Analysis window in days', '7')
+  .option('--no-llm', 'Skip Ollama narrative (measured facts only)', false)
+  .option('--output <path>', 'Save report to file')
+  .option('-f, --format <format>', 'Output format: md (default) or json', 'md')
+  .option('--tenant <id>', 'Tenant id (default: GUARDIAN_TENANT_ID)')
+  .option('--project-root <path>', 'Project root for default report paths', process.cwd())
+  .action(async (opts: {
+    window: string;
+    noLlm: boolean;
+    output?: string;
+    format: string;
+    tenant?: string;
+    projectRoot: string;
+  }) => {
+    const { runAnalyze } = await import('./cli/analyze.js');
+    const format = opts.format === 'json' ? 'json' : 'md';
+    await runAnalyze({
+      window: parseInt(opts.window, 10) || 7,
+      noLlm: opts.noLlm,
+      output: opts.output,
+      format,
+      tenantId: opts.tenant,
+      projectRoot: opts.projectRoot,
+    });
+  });
+
+const autopilotCmd = program
+  .command('autopilot')
+  .description('Plug-and-play autonomous protection, learning, and scheduled reports');
+
+autopilotCmd
+  .command('init')
+  .description('Wrap MCP configs (block policy), write ~/.mcp-guardian/autopilot.json')
+  .option('--client <name>', 'Client: cline, cursor, claude-desktop, windsurf, auto', 'auto')
+  .option('-c, --config <path>', 'Explicit MCP client config path')
+  .option('--apply', 'Patch live client MCP JSON', false)
+  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .action(async (opts: {
+    client: string;
+    config?: string;
+    apply: boolean;
+    projectRoot: string;
+  }) => {
+    const { runAutopilotInit } = await import('./cli/autopilot.js');
+    type WrapClient = import('./wrap/client-wrap.js').WrapClient;
+    const client = opts.client as WrapClient;
+    await runAutopilotInit({
+      client,
+      configPath: opts.config,
+      projectRoot: opts.projectRoot,
+      apply: opts.apply,
+    });
+  });
+
+autopilotCmd
+  .command('start')
+  .description('Start proxy with Autopilot env (dashboard, learning, scheduler)')
+  .option('-c, --config <path>', 'Guardian MCP config JSON')
+  .option('--policy <path>', 'Policy YAML', 'default-policy.yaml')
+  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .action(async (opts: { config?: string; policy?: string; projectRoot: string }) => {
+    const { runAutopilotStart } = await import('./cli/autopilot.js');
+    runAutopilotStart(opts);
+  });
+
+autopilotCmd
+  .command('status')
+  .description('Show Autopilot protection, learning, and digest status')
+  .action(async () => {
+    const { runAutopilotStatus } = await import('./cli/autopilot.js');
+    await runAutopilotStatus(false);
+  });
 
 program.action(async () => {
   if (isServer || isPiped) {
