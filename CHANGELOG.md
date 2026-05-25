@@ -2,6 +2,29 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [3.2.7] - 2026-05-26
+
+### Added
+
+- **Dashboard v3 workspaces** — Protection, Activity, Threats, Security, Operations, Settings, Help (`deploy/dashboard-spa/lib/workspace-nav.ts`)
+- **Operations analytics API** — `GET /api/analytics/summary` with 1h/12h/24h/7d windows (`src/utils/analytics-summary.ts`)
+- **Security dashboard API** — `GET /api/security/dashboard`, `POST /api/security/threats/quarantine`
+- **Setup APIs** — `/api/setup/status`, db-health, cloud-status, guardian-config, cloud connect
+- **Guardian Autopilot** — `mcp-guardian autopilot` CLI, profile, schedulers, `GET /api/autopilot/status` ([AUTOPILOT.md](docs/AUTOPILOT.md))
+- **Full analysis** — `mcp-guardian analyze` / `pnpm analyze` (`src/ai/guardian-full-analysis.ts`, `src/ai/mcp-health-report.ts`)
+- **Real-life shared DB** — `MCP_GUARDIAN_DB_PATH` in `createLiveProxySession()` so `real-life:*` traffic feeds the dashboard DB
+- **Adversarial fixtures** — `adv-220` through `adv-261` in `adversarial-harness/fixtures/custom-attacks/`
+
+### Changed
+
+- **SOC dashboard** — split into modular SOC/live panels, `SocDashboardLayout`, enterprise design tokens
+- **Dashboard proxy** — `pnpm dashboard:proxy` rebuilds dist when dashboard API sources change
+- **README** — v3 quick start, live attack runbook, simplified feature list
+
+### Fixed
+
+- **Analytics 1h window** — `parseRecordTimestamp()` for SQLite `created_at` without timezone (`src/utils/time-buckets.ts`)
+
 ## [3.2.6] - 2026-05-24
 
 ### Fixed

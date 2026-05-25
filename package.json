@@ -153,8 +153,8 @@
     "postinstall": "node scripts/postinstall-windows.cjs"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^3.2.5",
-    "@mcp-guardian/plugin-sdk": "workspace:^3.2.5",
+    "@mcp-guardian/core": "workspace:^3.2.7",
+    "@mcp-guardian/plugin-sdk": "workspace:^3.2.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",
