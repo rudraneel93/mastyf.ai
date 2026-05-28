@@ -134,6 +134,7 @@ describe('ThreatLab', () => {
     const mockLlm = {
       isAvailable: () => true,
       healthCheck: vi.fn().mockResolvedValue(true),
+      healthCheckDetailed: vi.fn().mockResolvedValue({ ok: true, model: 'test-model' }),
       generate: vi.fn().mockResolvedValue({ text: llmResponse, model: 'test', tokensUsed: 1, durationMs: 1 }),
       generatePolicyRule: vi.fn().mockResolvedValue(null),
       getModel: () => 'test-model',
@@ -204,6 +205,7 @@ describe('ThreatLab', () => {
     const mockLlm = {
       isAvailable: () => true,
       healthCheck: vi.fn().mockResolvedValue(true),
+      healthCheckDetailed: vi.fn().mockResolvedValue({ ok: true, model: 'test-model' }),
       generate: vi.fn().mockResolvedValue({ text: llmResponse, model: 'test', tokensUsed: 1, durationMs: 1 }),
       generatePolicyRule: vi.fn().mockResolvedValue(null),
       getModel: () => 'test-model',

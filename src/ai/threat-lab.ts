@@ -193,15 +193,21 @@ export async function ensureThreatLabLlmReady(
       reason: 'LLM disabled — set GUARDIAN_LLM_ENABLED=true and configure Ollama',
     };
   }
-  const healthy = await assistant.healthCheck();
-  if (!healthy) {
-    return {
-      ok: false,
-      llm: assistant,
-      reason: 'Ollama unreachable — start Ollama and verify OLLAMA_BASE_URL',
-    };
+  const maxAttempts = 3;
+  let lastReason = 'unknown';
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const health = await assistant.healthCheckDetailed();
+    if (health.ok) return { ok: true, llm: assistant };
+    lastReason = health.reason || 'unknown';
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+    }
   }
-  return { ok: true, llm: assistant };
+  return {
+    ok: false,
+    llm: assistant,
+    reason: `Ollama unreachable (${lastReason}) at ${assistant.getOllamaUrl()} — start Ollama and verify OLLAMA_BASE_URL`,
+  };
 }
 
 export function validateCorpusCandidateSchema(candidate: unknown): string[] {

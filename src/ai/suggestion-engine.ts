@@ -23,6 +23,8 @@ import { isAiAutoApplyEnabled, isAiLearningEnabled, isAiLearningOnCliCommands } 
 import { getAllActiveServerNames } from '../utils/db-aggregate.js';
 import { HistoryDatabase } from '../database/history-db.js';
 import { getLlmConfig } from '../config/llm-config.js';
+import { scorePolicyImpact } from './policy-impact-scoring.js';
+import { evaluateAutopilotSafety } from './autopilot-safety-contract.js';
 
 export interface UnifiedSuggestion {
   id: string;
@@ -31,6 +33,12 @@ export interface UnifiedSuggestion {
   reason: string;
   source: 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack';
   estimatedSavings?: number;
+  autopilot?: {
+    safetyAllowed: boolean;
+    safetyBlockers: string[];
+    impactOverall: number;
+    recommendation: 'promote' | 'canary_only' | 'hold';
+  };
 }
 
 export interface SuggestionEngineConfig {
@@ -255,6 +263,36 @@ export class SuggestionEngine {
     // ── 6. Adjust confidence via self-improvement ────────
     for (const s of allSuggestions) {
       s.confidence = this.selfImprovement.adjustConfidence(s.confidence, s.source);
+      const impact = scorePolicyImpact({
+        confidence: s.confidence,
+        replayCoverage: Math.max(0.6, Math.min(1, 0.7 + (s.confidence * 0.3))),
+        predictedFalsePositiveDelta: s.source === 'cost' ? 0.01 : 0.005,
+        predictedBypassDelta: s.source === 'threat' || s.source === 'attack' ? 0 : 0.002,
+        blastRadiusPercent: s.source === 'threat' ? 0.04 : 0.08,
+        rollbackConfidence: Math.max(0.75, Math.min(0.99, 0.7 + (s.confidence * 0.3))),
+      });
+      const safety = evaluateAutopilotSafety({
+        suggestionId: s.id,
+        source: s.source,
+        stage: impact.recommendation === 'promote' ? 'enforce' : 'canary',
+        rule: s.rule,
+        evidence: {
+          simulationPassed: impact.recommendation !== 'hold',
+          replayCoverage: Math.max(0.6, Math.min(1, 0.7 + (s.confidence * 0.3))),
+          confidence: s.confidence,
+          predictedFalsePositiveDelta: s.source === 'cost' ? 0.01 : 0.005,
+          predictedBypassDelta: s.source === 'threat' || s.source === 'attack' ? 0 : 0.002,
+          blastRadiusPercent: s.source === 'threat' ? 0.04 : 0.08,
+          rollbackConfidence: Math.max(0.75, Math.min(0.99, 0.7 + (s.confidence * 0.3))),
+          canarySizePercent: 0.05,
+        },
+      });
+      s.autopilot = {
+        safetyAllowed: safety.allowed,
+        safetyBlockers: safety.blockers,
+        impactOverall: impact.overall,
+        recommendation: impact.recommendation,
+      };
     }
 
     // Sort by confidence descending
@@ -267,6 +305,8 @@ export class SuggestionEngine {
       const toApply = allSuggestions.filter((s) => {
         const minConfidence = s.source === 'attack' ? Math.max(threshold, attackMinConfidence()) : threshold;
         if (s.confidence < minConfidence) return false;
+        if (!s.autopilot?.safetyAllowed) return false;
+        if (s.autopilot?.recommendation === 'hold') return false;
         const patterns = s.rule.argPatterns?.join(' ') || '';
         if (wouldDisableDangerousBlocking(s.rule.name, patterns, true)) {
           Logger.warn(`[SuggestionEngine] Skipping auto-apply of dangerous unblock: ${s.rule.name}`);
@@ -361,6 +401,7 @@ export class SuggestionEngine {
           reason: s.reason,
           source: s.source,
           estimatedSavings: s.estimatedSavings,
+          autopilot: s.autopilot,
         })),
       }, null, 2));
       void import('../utils/metrics.js').then(({ setSuggestionQueueDepth }) => {

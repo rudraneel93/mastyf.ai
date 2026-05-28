@@ -254,7 +254,7 @@ function spawnDiscoveryJob(
 
   broadcastJobEvent(tenantId, kind, 'threat-discovery:started', { jobId, startedAt });
 
-  const child = spawn('pnpm', ['exec', 'tsx', script], {
+  const child = spawn('node', ['--import', 'tsx/esm', script], {
     cwd: REPO_ROOT,
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],

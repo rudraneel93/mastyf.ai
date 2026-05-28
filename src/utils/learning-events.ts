@@ -12,14 +12,20 @@ export type LearningEventType =
   | 'threat_research_write'
   | 'suggestion_queued'
   | 'threat_lab_triggered'
-  | 'digest_generated';
+  | 'digest_generated'
+  | 'autopilot_decision'
+  | 'autopilot_rollout'
+  | 'autopilot_rollback';
 
 export type LearningEvent = {
+  schemaVersion?: '2026-05-1';
   timestamp: string;
   type: LearningEventType;
   detail: string;
   fingerprint?: string;
   confidence?: number;
+  tenantId?: string;
+  metadata?: Record<string, unknown>;
 };
 
 function eventsPath(tenantId?: string): string {
@@ -34,11 +40,14 @@ export function appendLearningEvent(
   const path = eventsPath(tenantId);
   mkdirSync(dirname(path), { recursive: true });
   const line: LearningEvent = {
+    schemaVersion: '2026-05-1',
     timestamp: event.timestamp || new Date().toISOString(),
     type: event.type,
     detail: event.detail,
     fingerprint: event.fingerprint,
     confidence: event.confidence,
+    tenantId: tenantId || DEFAULT_TENANT_ID,
+    metadata: (event as LearningEvent).metadata,
   };
   appendFileSync(path, JSON.stringify(line) + '\n', 'utf-8');
 }

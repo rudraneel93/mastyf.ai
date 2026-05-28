@@ -11,6 +11,8 @@ import { getLlmConfig } from '../config/llm-config.js';
 import { getLlmCache } from './llm-cache.js';
 import { Logger } from '../utils/logger.js';
 import { getSemanticTimeoutMs } from '../utils/semantic-timeout.js';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 
 export interface LlmAssistantConfig {
   model: string;
@@ -24,11 +26,58 @@ export interface LlmAssistantConfig {
   hotPath?: boolean;
 }
 
+const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
+
+export function resolveOllamaBaseUrl(explicit?: string): string {
+  const candidate = (explicit || process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).trim();
+  const withScheme = /^[a-z]+:\/\//i.test(candidate) ? candidate : `http://${candidate}`;
+  try {
+    const parsed = new URL(withScheme);
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return DEFAULT_OLLAMA_BASE_URL;
+  }
+}
+
+function classifyHealthFailure(err: unknown): string {
+  const text = err instanceof Error ? err.message : String(err || '');
+  if (/timed out|timeout|aborted/i.test(text)) return 'timeout';
+  if (/ENOTFOUND|EAI_AGAIN|dns/i.test(text)) return 'dns';
+  if (/ECONNREFUSED|fetch failed|connect/i.test(text)) return 'connect';
+  return 'unknown';
+}
+
+function probeWithHttpClient(endpoint: string, timeoutMs = 5000): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const target = new URL(`${endpoint}/api/tags`);
+      const requester = target.protocol === 'https:' ? httpsRequest : httpRequest;
+      const req = requester(
+        target,
+        { method: 'GET', timeout: timeoutMs, headers: { Accept: 'application/json' } },
+        (res) => {
+          const ok = (res.statusCode || 500) >= 200 && (res.statusCode || 500) < 300;
+          res.resume();
+          resolve(ok);
+        },
+      );
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+      req.on('error', () => resolve(false));
+      req.end();
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 function configFromEnv(): LlmAssistantConfig {
   const llm = getLlmConfig();
   return {
     model: llm.model,
-    ollamaUrl: llm.ollamaBaseUrl,
+    ollamaUrl: resolveOllamaBaseUrl(llm.ollamaBaseUrl),
     timeoutMs: llm.timeoutMs,
     enabled: llm.enabled,
     maxRetries: 2,
@@ -51,6 +100,12 @@ export interface LlmResponse {
   durationMs: number;
 }
 
+export interface LlmHealthStatus {
+  ok: boolean;
+  reason?: string;
+  endpoint: string;
+}
+
 export class LlmAssistant {
   private config: LlmAssistantConfig;
 
@@ -60,13 +115,25 @@ export class LlmAssistant {
 
   /** Check if Ollama is reachable */
   async healthCheck(): Promise<boolean> {
+    const status = await this.healthCheckDetailed();
+    return status.ok;
+  }
+
+  async healthCheckDetailed(): Promise<LlmHealthStatus> {
+    const endpoint = this.config.ollamaUrl;
     try {
-      const response = await fetch(`${this.config.ollamaUrl}/api/tags`, {
+      const response = await fetch(`${endpoint}/api/tags`, {
         signal: AbortSignal.timeout(5000),
       });
-      return response.ok;
-    } catch {
-      return false;
+      if (!response.ok) {
+        return { ok: false, reason: `http_${response.status}`, endpoint };
+      }
+      return { ok: true, endpoint };
+    } catch (err: unknown) {
+      // Some local environments report fetch ECONNREFUSED while direct HTTP probes succeed.
+      const fallbackOk = await probeWithHttpClient(endpoint, 5000);
+      if (fallbackOk) return { ok: true, endpoint };
+      return { ok: false, reason: classifyHealthFailure(err), endpoint };
     }
   }
 
@@ -298,5 +365,9 @@ Focus on interconnected risks and top-priority actions. Be direct.`;
 
   getModel(): string {
     return this.config.model;
+  }
+
+  getOllamaUrl(): string {
+    return this.config.ollamaUrl;
   }
 }

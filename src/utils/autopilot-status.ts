@@ -13,6 +13,7 @@ import { DEFAULT_TENANT_ID, validateTenantId } from '../tenant/resolve-tenant.js
 import { getLicenseClient } from '../license/license-client.js';
 import { isCiLicenseBypass } from '../license/feature-tiers.js';
 import { isCiTokenCached } from '../license/ci-token.js';
+import { resolveOllamaBaseUrl } from '../ai/llm-assistant.js';
 
 export type AutopilotStatus = {
   timestamp: string;
@@ -72,7 +73,10 @@ export async function buildAutopilotStatus(
     messages.push('No proxy history DB — route MCP traffic through Guardian.');
   }
   if (!llmOk) {
-    messages.push(`LLM unavailable: ${llmReason || 'install Ollama and pull qwen3:8b'}`);
+    const endpoint = resolveOllamaBaseUrl(process.env.OLLAMA_BASE_URL);
+    messages.push(
+      `LLM unavailable: ${llmReason || 'install Ollama and pull qwen3:8b'} (endpoint: ${endpoint})`,
+    );
   }
   if (process.env.GUARDIAN_AI_AUTO_APPLY === 'true') {
     messages.push('Policy auto-apply is ON — Autopilot recommends human review (false).');
