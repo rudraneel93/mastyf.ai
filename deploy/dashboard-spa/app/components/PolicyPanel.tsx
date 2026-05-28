@@ -110,16 +110,21 @@ export function PolicyPanel({ roles, lastBlocked, onAction, copilotInitialTab }:
           </>
         ) : null}
       </p>
+      <p className="hint">
+        You are in <strong>Policy Studio</strong>. Primary goal: create and validate safe policy changes.
+        Next step: generate or edit rule, run policy test, then save and reload.
+      </p>
 
       <PolicyCopilotPanel roles={roles} onAction={onAction} initialTab={copilotInitialTab} />
 
       <div className="btn-row">
+        <strong style={{ marginRight: 8 }}>Deploy</strong>
         <button
           type="button"
           disabled={!canMutate || !dirty || saving}
           onClick={() => void onSave()}
         >
-          {saving ? 'Saving…' : 'Save policy'}
+          {saving ? 'Saving…' : 'Save policy changes'}
         </button>
         <button
           type="button"
@@ -127,11 +132,14 @@ export function PolicyPanel({ roles, lastBlocked, onAction, copilotInitialTab }:
           disabled={!canMutate || !dirty || saving}
           onClick={onDiscard}
         >
-          Discard
+          Discard draft changes
         </button>
         <button type="button" disabled={!canMutate} onClick={() => void onReload()}>
-          Reload policy watcher
+          Reload policy on proxy
         </button>
+      </div>
+      <div className="btn-row">
+        <strong style={{ marginRight: 8 }}>Validate</strong>
         <button
           type="button"
           className="secondary"
@@ -144,7 +152,7 @@ export function PolicyPanel({ roles, lastBlocked, onAction, copilotInitialTab }:
             void runTest();
           }}
         >
-          Test last blocked call
+          Validate with last blocked example
         </button>
       </div>
 
@@ -162,7 +170,7 @@ export function PolicyPanel({ roles, lastBlocked, onAction, copilotInitialTab }:
         />
       </label>
       <button type="button" className="secondary" disabled={!canTest} onClick={() => void runTest()}>
-        Run policy test
+        Run manual policy test
       </button>
 
       {policy?.yaml || canMutate ? (

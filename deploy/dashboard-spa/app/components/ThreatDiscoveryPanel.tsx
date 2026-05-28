@@ -12,7 +12,7 @@ import type { AuthStatus } from '@/lib/guardian-api';
 
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
-type SubTab = 'overview' | 'threat-lab' | 'auto-research' | 'automation' | 'architecture';
+type SubTab = 'overview' | 'threat-lab' | 'auto-research';
 
 type Props = {
   roles?: string[];
@@ -29,8 +29,6 @@ const SUB_TABS: { id: SubTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'threat-lab', label: 'Threat Lab' },
   { id: 'auto-research', label: 'Auto Research' },
-  { id: 'automation', label: 'Automation' },
-  { id: 'architecture', label: 'Architecture' },
 ];
 
 export function ThreatDiscoveryPanel({
@@ -108,14 +106,24 @@ export function ThreatDiscoveryPanel({
       {loadError ? <p className="status status-error">{loadError}</p> : null}
 
       {subTab === 'overview' ? (
-        <ThreatDiscoveryOverview
-          status={status}
-          loading={loading}
-          loadError={loadError}
-          roles={roles}
-          onRunStarted={onAction}
-          onRefresh={() => void load()}
-        />
+        <>
+          <ThreatDiscoveryOverview
+            status={status}
+            loading={loading}
+            loadError={loadError}
+            roles={roles}
+            onRunStarted={onAction}
+            onRefresh={() => void load()}
+          />
+          <details className="security-manifest-detail">
+            <summary>Automation and scheduler details</summary>
+            <ThreatDiscoveryAutomation />
+          </details>
+          <details className="security-manifest-detail">
+            <summary>Threat architecture reference</summary>
+            <ThreatArchitectureView />
+          </details>
+        </>
       ) : null}
 
       {subTab === 'threat-lab' ? (
@@ -142,8 +150,6 @@ export function ThreatDiscoveryPanel({
         <AutoResearchMonitor entries={autoEntries} status={status} />
       ) : null}
 
-      {subTab === 'automation' ? <ThreatDiscoveryAutomation /> : null}
-      {subTab === 'architecture' ? <ThreatArchitectureView /> : null}
     </section>
   );
 }

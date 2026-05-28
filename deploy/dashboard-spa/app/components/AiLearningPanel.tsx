@@ -18,6 +18,7 @@ import {
   quarantineThreatIntel,
   dismissThreatIntel,
   rollbackAiLearning,
+  trackAdvancedAnalyticsEvent,
   type AiSuggestion,
   type SemanticOutcome,
   type ThreatIntelStatus,
@@ -30,6 +31,7 @@ import { DashboardSection } from './dashboard/DashboardSection';
 import { KpiCard } from './dashboard/KpiCard';
 import { ChartCard } from './dashboard/ChartCard';
 import { CHART_COLORS } from '@/lib/chartTheme';
+import { computeWorkloadPriority } from '@/lib/advanced-analytics';
 
 type Props = {
   roles?: string[];
@@ -157,6 +159,20 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
   };
 
   const threatEntries = threats?.entries ?? [];
+  const prioritizedQueue = computeWorkloadPriority(
+    ((activeLearning?.reviewQueue as Array<Record<string, unknown>>) || []),
+    abuseScores,
+  );
+
+  useEffect(() => {
+    if (!prioritizedQueue.length) return;
+    void trackAdvancedAnalyticsEvent({
+      feature: 'analyst_workload_optimizer',
+      metric: 'topPriorityScore',
+      confidence: 'medium',
+      value: Number(prioritizedQueue[0].priorityScore.toFixed(2)),
+    });
+  }, [prioritizedQueue]);
 
   const onQuarantineThreat = async (id: string) => {
     if (!canMutate) {
@@ -214,14 +230,22 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
         title="AI copilot & learning"
         subtitle="Policy suggestions, semantic labels, and threat intel — closes the attack-learning loop"
       >
+      <p className="hint">
+        You are in <strong>AI Copilot</strong>. Primary goal: review AI-generated findings safely.
+        Next step: inspect pending suggestions, then approve or reject.
+      </p>
 
       <div className="btn-row">
+        <strong style={{ marginRight: 8 }}>Inspect</strong>
         <button type="button" className="secondary" onClick={() => void refresh()}>
-          Refresh
+          Refresh AI data
         </button>
+      </div>
+      <div className="btn-row">
+        <strong style={{ marginRight: 8 }}>Danger Zone</strong>
         {canAi ? (
           <button type="button" className="secondary" onClick={() => void onRollback()}>
-            Rollback AI snapshots
+            Roll back AI snapshots
           </button>
         ) : null}
       </div>
@@ -248,6 +272,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
       )}
 
       <div className="btn-row">
+        <strong style={{ marginRight: 8 }}>Run</strong>
         {canAi ? (
           <button
             type="button"
@@ -255,7 +280,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
             disabled={threatPollBusy || !!threats?.pollingDisabled}
             onClick={() => void onPollThreats()}
           >
-            {threatPollBusy ? 'Polling feeds…' : 'Poll threat feeds now'}
+            {threatPollBusy ? 'Polling feeds…' : 'Run threat feed poll now'}
           </button>
         ) : null}
       </div>
@@ -293,13 +318,18 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
                       >
                         Quarantine
                       </button>
-                      <button
-                        type="button"
-                        className="secondary btn-sm"
-                        onClick={() => void onRemoveThreat(entry.id)}
-                      >
-                        Remove
-                      </button>
+                      <details>
+                        <summary className="secondary btn-sm">More</summary>
+                        <div className="btn-row inline">
+                          <button
+                            type="button"
+                            className="secondary btn-sm"
+                            onClick={() => void onRemoveThreat(entry.id)}
+                          >
+                            Remove entry
+                          </button>
+                        </div>
+                      </details>
                     </span>
                   ) : '—'}
                 </td>
@@ -385,6 +415,34 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
           ) : null}
         </>
       ) : null}
+      {prioritizedQueue.length > 0 ? (
+        <>
+          <h3>Analyst workload optimizer</h3>
+          <p className="hint">
+            Priority score = uncertainty x severity x abuse-context / effort. Focus top rows first for highest expected risk reduction.
+          </p>
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>Queue ID</th>
+                <th>Tool</th>
+                <th>Priority</th>
+                <th>Estimated risk reduction</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prioritizedQueue.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.id}</td>
+                  <td>{row.toolName}</td>
+                  <td>{row.priorityScore.toFixed(1)}</td>
+                  <td>{row.estimatedRiskReduction.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
 
       <p className="hint">
         Swarm tribunal, compliance briefing, and LoRA pipeline → open the <strong>Enterprise AI</strong> tab.
@@ -446,17 +504,22 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
                   {canAi ? (
                     <span className="btn-row inline">
                       <button type="button" className="secondary" onClick={() => setInvestigateId(r.id)}>
-                        Investigate
+                        Open investigation
                       </button>
-                      <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'true_positive')}>
-                        TP
-                      </button>
-                      <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'false_positive')}>
-                        FP
-                      </button>
-                      <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'ignored')}>
-                        Ignore
-                      </button>
+                      <details>
+                        <summary className="secondary">Review actions</summary>
+                        <div className="btn-row inline">
+                          <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'true_positive')}>
+                            Mark true positive
+                          </button>
+                          <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'false_positive')}>
+                            Mark false positive
+                          </button>
+                          <button type="button" className="secondary" onClick={() => void onLabel(r.id, 'ignored')}>
+                            Mark ignored
+                          </button>
+                        </div>
+                      </details>
                     </span>
                   ) : (
                     '—'

@@ -699,6 +699,27 @@ export async function fetchDashboardInsights(
   return body;
 }
 
+export async function trackAdvancedAnalyticsEvent(event: {
+  feature: string;
+  metric?: string;
+  confidence?: 'high' | 'medium' | 'low';
+  value?: number | string;
+}): Promise<void> {
+  const headers = await buildMutatingHeaders();
+  try {
+    await guardianFetch('/api/dashboard/analytics/telemetry', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...event,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+  } catch {
+    /* best-effort analytics only */
+  }
+}
+
 export async function downloadInsightsBriefing(
   scope: 'overview' | 'cost' | 'security' | 'audit' | 'ai',
   windowDays = 7,
@@ -2267,6 +2288,61 @@ export async function fetchAutopilotStatus(): Promise<AutopilotStatus | null> {
   const res = await guardianFetch('/api/autopilot/status');
   if (!res.ok) return null;
   return (await res.json()) as AutopilotStatus;
+}
+
+export type SimilarEnvironmentBenchmark = {
+  serverName: string;
+  totalCalls: number;
+  blockedRate: number;
+  avgLatencyMs: number;
+  avgTokens: number;
+  peerBlockedRateP50: number;
+  peerBlockedRateP90: number;
+  peerLatencyP50: number;
+  peerLatencyP90: number;
+  status: 'outperforming' | 'neutral' | 'needs_attention';
+};
+
+export type SimilarEnvironmentBenchmarksResponse = {
+  tenantId: string;
+  benchmarks: SimilarEnvironmentBenchmark[];
+  available?: boolean;
+};
+
+export async function fetchSimilarEnvironmentBenchmarks(): Promise<SimilarEnvironmentBenchmarksResponse | null> {
+  const res = await guardianFetch('/api/benchmarks/similar-environment');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as SimilarEnvironmentBenchmarksResponse);
+}
+
+export type ContinuousAssuranceReport = {
+  generatedAt: string;
+  tenantId: string;
+  controls: {
+    trafficProtected: boolean;
+    llmReachable: boolean;
+    pendingSuggestions: number;
+    threatResearchQueue: number;
+  };
+  metrics: {
+    totalCalls: number;
+    blockedCalls: number;
+    blockedRate: number;
+    avgLatencyMs: number;
+  };
+  benchmarkSummary: {
+    servers: number;
+    needsAttention: number;
+    outperforming: number;
+  };
+  attestations: string[];
+  available?: boolean;
+};
+
+export async function fetchContinuousAssuranceReport(): Promise<ContinuousAssuranceReport | null> {
+  const res = await guardianFetch('/api/assurance/continuous');
+  if (!res.ok) return null;
+  return liveOrNull((await res.json()) as ContinuousAssuranceReport);
 }
 
 export async function fetchLatestDigest(): Promise<{

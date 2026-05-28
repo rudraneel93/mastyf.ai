@@ -6,6 +6,7 @@ import {
   fetchThreatDiscoveryStatus,
   rejectThreatLabCandidate,
   runThreatLab,
+  trackAdvancedAnalyticsEvent,
   type AutoCorpusEntry,
   type ThreatLabCandidate,
 } from '@/lib/guardian-api';
@@ -13,6 +14,7 @@ import { SOURCE_LABELS } from '@/lib/threat-discovery-copy';
 import { ThreatCandidateDrawer } from './ThreatCandidateDrawer';
 import { IncidentInvestigatorDrawer } from './IncidentInvestigatorDrawer';
 import { hasPermission } from '@/lib/dashboard-roles';
+import { computeThreatConversionFromCandidates } from '@/lib/advanced-analytics';
 
 import type { ThreatLabContext } from './IncidentInvestigatorDrawer';
 
@@ -90,6 +92,21 @@ export function ThreatLabWorkbench({
   const bannerRef = useRef<HTMLElement>(null);
   const canMutate = hasPermission(roles, 'policy_mutate');
   const canRun = hasPermission(roles, 'policy_test');
+  const semanticTpCount = new Set(
+    candidates
+      .filter((c) => c.provenance?.source === 'semantic-tp' && c.provenance?.inputFingerprint)
+      .map((c) => String(c.provenance?.inputFingerprint)),
+  ).size;
+  const conversion = computeThreatConversionFromCandidates(candidates, semanticTpCount);
+
+  useEffect(() => {
+    void trackAdvancedAnalyticsEvent({
+      feature: 'threat_policy_conversion',
+      metric: 'conversionRatePct',
+      confidence: conversion.caveat.confidence,
+      value: Number(conversion.conversionRatePct.toFixed(2)),
+    });
+  }, [conversion.caveat.confidence, conversion.conversionRatePct]);
 
   const onAccept = async (id: string) => {
     const ok = await acceptThreatLabCandidate(id);
@@ -191,6 +208,10 @@ export function ThreatLabWorkbench({
 
   return (
     <div className="threat-lab-workbench">
+      <p className="hint">
+        You are in <strong>Threat Lab</strong>. Primary goal: review candidates and accept only safe,
+        high-confidence policy updates.
+      </p>
       {preloadedContext ? (
         <aside ref={bannerRef} className="threat-lab-context-banner">
           <strong>Incident context</strong>
@@ -216,10 +237,35 @@ export function ThreatLabWorkbench({
             disabled={runBusy}
             onClick={() => void runThreatLabReactive()}
           >
-            {runBusy ? 'Running…' : 'Run Threat Lab (reactive)'}
+            {runBusy ? 'Running…' : 'Start Threat Lab discovery'}
           </button>
         ) : null}
       </div>
+      <div className="kpi-row">
+        <article className="kpi-card">
+          <p className="kpi-card-label">Threat-to-policy conversion</p>
+          <p className="kpi-card-value">{conversion.conversionRatePct.toFixed(1)}%</p>
+          <p className="kpi-card-sub">Accepted candidates / total generated candidates</p>
+        </article>
+        <article className="kpi-card">
+          <p className="kpi-card-label">Median accepted confidence</p>
+          <p className="kpi-card-value">{conversion.medianConfidencePct.toFixed(1)}%</p>
+          <p className="kpi-card-sub">Confidence distribution for accepted policy candidates</p>
+        </article>
+        <article className="kpi-card">
+          <p className="kpi-card-label">Backlog pressure</p>
+          <p className="kpi-card-value">{conversion.reviewBacklogPct.toFixed(1)}%</p>
+          <p className="kpi-card-sub">
+            Coverage {conversion.semanticTpToCandidateCoveragePct.toFixed(1)}% · {conversion.caveat.confidence}
+          </p>
+        </article>
+      </div>
+      {conversion.caveat.confidence === 'low' ? (
+        <p className="alert">
+          Confidence is low (n={conversion.caveat.sampleSize}, coverage {conversion.caveat.coveragePct}%).
+          Treat conversion metrics as directional.
+        </p>
+      ) : null}
       {manifestMeta?.runNote || manifestMeta?.skipped ? (
         <p className="hint status-warning">{manifestMeta.runNote || manifestMeta.skipped}</p>
       ) : null}
@@ -280,7 +326,7 @@ export function ThreatLabWorkbench({
                     <td>
                       <div className="btn-row" style={{ marginTop: 0 }}>
                         <button type="button" className="secondary btn-sm" onClick={() => setSelected(c)}>
-                          Details
+                          Review candidate
                         </button>
                         <button
                           type="button"
@@ -290,7 +336,7 @@ export function ThreatLabWorkbench({
                             setSelected(null);
                           }}
                         >
-                          Investigate
+                          Open investigation
                         </button>
                       </div>
                     </td>

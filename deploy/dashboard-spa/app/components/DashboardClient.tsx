@@ -55,6 +55,7 @@ import { HealthReliabilityPanel } from './dashboard/HealthReliabilityPanel';
 import { AuditExplorerPanel } from './dashboard/AuditExplorerPanel';
 import { FleetOverviewPanel } from './dashboard/FleetOverviewPanel';
 import { AnalyticsChartsHub } from './dashboard/AnalyticsChartsHub';
+import { AdvancedAnalyticsPanel } from './dashboard/AdvancedAnalyticsPanel';
 import {
   DashboardWindowProvider,
   DashboardWindowSelector,
@@ -84,6 +85,41 @@ const DEFAULT_VIEWS: Record<WorkspaceId, string | undefined> = {
   operations: 'overview',
   settings: 'setup',
   help: undefined,
+};
+
+const WORKSPACE_VIEW_TABS: Partial<Record<WorkspaceId, Array<{ id: string; label: string }>>> = {
+  activity: [
+    { id: 'analysis', label: 'Security Analysis' },
+    { id: 'audit', label: 'Live Audit' },
+  ],
+  threats: [
+    { id: 'overview', label: 'Overview' },
+    { id: 'threat-lab', label: 'Threat Lab' },
+    { id: 'auto-research', label: 'Auto Research' },
+    { id: 'intel', label: 'Intel Catalog' },
+  ],
+  security: [
+    { id: 'overview', label: 'Overview' },
+    { id: 'policy', label: 'Policy' },
+    { id: 'enterprise-ai', label: 'Enterprise AI' },
+    { id: 'ai-copilot', label: 'AI Copilot' },
+    { id: 'quarantined-intel', label: 'Quarantined Intel' },
+  ],
+  operations: [
+    { id: 'advanced', label: 'Advanced Analytics' },
+    { id: 'analytics', label: 'Analytics' },
+    { id: 'overview', label: 'Overview' },
+    { id: 'cost', label: 'Cost' },
+    { id: 'health', label: 'Health' },
+    { id: 'fleet', label: 'Fleet' },
+    { id: 'benchmarks', label: 'Benchmarks' },
+    { id: 'swarm', label: 'Swarm' },
+  ],
+  settings: [
+    { id: 'setup', label: 'Setup' },
+    { id: 'mcp-servers', label: 'MCP Servers' },
+    { id: 'admin', label: 'Admin' },
+  ],
 };
 
 export function DashboardClient() {
@@ -116,7 +152,7 @@ export function DashboardClient() {
   const [refreshTick, setRefreshTick] = useState(0);
   const [threatLabContext, setThreatLabContext] = useState<ThreatLabContext | null>(null);
   const [threatDiscoverySubTab, setThreatDiscoverySubTab] = useState<
-    'overview' | 'threat-lab' | 'auto-research' | 'architecture' | undefined
+    'overview' | 'threat-lab' | 'auto-research' | undefined
   >();
   const [policyCopilotTab, setPolicyCopilotTab] = useState<'generate' | 'counterfactual'>('generate');
 
@@ -139,7 +175,10 @@ export function DashboardClient() {
 
   const applyView = useCallback((wsId: WorkspaceId, view?: string, topic?: string) => {
     if (wsId === 'security' && view) setSecurityView(view as SecurityView);
-    if (wsId === 'threats' && view) setThreatsView(view as ThreatsView);
+    if (wsId === 'threats' && view) {
+      const normalizedThreatsView = view === 'automation' || view === 'architecture' ? 'overview' : view;
+      setThreatsView(normalizedThreatsView as ThreatsView);
+    }
     if (wsId === 'operations' && view) setOperationsView(view as OperationsView);
     if (wsId === 'settings' && view) setSettingsView(view as SettingsView);
     if (wsId === 'activity' && view) {
@@ -412,10 +451,7 @@ export function DashboardClient() {
               {workspace === 'activity' && (
                 <>
                   <WorkspaceSubNav
-                    tabs={[
-                      { id: 'analysis', label: 'Security analysis' },
-                      { id: 'audit', label: 'Live audit' },
-                    ]}
+                    tabs={WORKSPACE_VIEW_TABS.activity || []}
                     active={activityView}
                     onChange={(v) => {
                       setActivityView(v as ActivityView);
@@ -452,14 +488,7 @@ export function DashboardClient() {
               {workspace === 'threats' && (
                 <>
                   <WorkspaceSubNav
-                    tabs={[
-                      { id: 'overview', label: 'Overview' },
-                      { id: 'threat-lab', label: 'Threat Lab' },
-                      { id: 'auto-research', label: 'Auto Research' },
-                      { id: 'automation', label: 'Automation' },
-                      { id: 'architecture', label: 'Architecture' },
-                      { id: 'intel', label: 'Intel catalog' },
-                    ]}
+                    tabs={WORKSPACE_VIEW_TABS.threats || []}
                     active={threatsView}
                     onChange={(v) => {
                       setThreatsView(v as ThreatsView);
@@ -474,9 +503,7 @@ export function DashboardClient() {
                       authStatus={authStatus}
                       refreshKey={ws.threatDiscoveryTick}
                       onAction={(m) => setActionMsg(m)}
-                      externalView={
-                        threatsView as 'overview' | 'threat-lab' | 'auto-research' | 'automation' | 'architecture'
-                      }
+                      externalView={threatsView as 'overview' | 'threat-lab' | 'auto-research'}
                       initialSubTab={threatDiscoverySubTab}
                       threatLabContext={threatLabContext}
                       onClearThreatLabContext={() => setThreatLabContext(null)}
@@ -488,16 +515,10 @@ export function DashboardClient() {
               {workspace === 'security' && (
                 <>
                   <WorkspaceSubNav
-                    tabs={[
-                      { id: 'overview', label: 'Dashboard' },
-                      { id: 'policy', label: 'Policy' },
-                      { id: 'enterprise-ai', label: 'Enterprise AI' },
-                      { id: 'ai-copilot', label: 'AI copilot' },
-                      { id: 'quarantined-intel', label: 'Quarantined' },
-                    ]}
+                    tabs={WORKSPACE_VIEW_TABS.security || []}
                     active={securityView}
                     onChange={(v) => {
-                      setSecurityView(v);
+                      setSecurityView(v as SecurityView);
                       syncNavToUrl({ workspace: 'security', view: v });
                     }}
                   />
@@ -560,23 +581,18 @@ export function DashboardClient() {
               {workspace === 'operations' && (
                 <>
                   <WorkspaceSubNav
-                    tabs={[
-                      { id: 'analytics', label: 'Analytics' },
-                      { id: 'overview', label: 'Overview' },
-                      { id: 'cost', label: 'Cost' },
-                      { id: 'health', label: 'Health' },
-                      { id: 'fleet', label: 'Fleet' },
-                      { id: 'benchmarks', label: 'Benchmarks' },
-                      { id: 'swarm', label: 'Swarm' },
-                    ]}
+                    tabs={WORKSPACE_VIEW_TABS.operations || []}
                     active={operationsView}
                     onChange={(v) => {
-                      setOperationsView(v);
+                      setOperationsView(v as OperationsView);
                       syncNavToUrl({ workspace: 'operations', view: v });
                     }}
                   />
                   {operationsView === 'analytics' && (
                     <AnalyticsDashboardPanel refreshKey={refreshTick} wsConnected={ws.connected} />
+                  )}
+                  {operationsView === 'advanced' && (
+                    <AdvancedAnalyticsPanel refreshKey={refreshTick} />
                   )}
                   {operationsView === 'overview' && (
                     <AnalyticsChartsHub refreshKey={refreshTick} />
@@ -607,14 +623,10 @@ export function DashboardClient() {
               {workspace === 'settings' && (
                 <>
                   <WorkspaceSubNav
-                    tabs={[
-                      { id: 'setup', label: 'Setup' },
-                      { id: 'mcp-servers', label: 'MCP servers' },
-                      { id: 'admin', label: 'Admin' },
-                    ]}
+                    tabs={WORKSPACE_VIEW_TABS.settings || []}
                     active={settingsView}
                     onChange={(v) => {
-                      setSettingsView(v);
+                      setSettingsView(v as SettingsView);
                       syncNavToUrl({ workspace: 'settings', view: v });
                     }}
                   />

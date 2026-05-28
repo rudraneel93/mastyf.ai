@@ -23,14 +23,13 @@ export type ThreatsView =
   | 'overview'
   | 'threat-lab'
   | 'auto-research'
-  | 'automation'
-  | 'architecture'
   | 'intel';
 
 export type SecurityView = 'overview' | 'policy' | 'enterprise-ai' | 'ai-copilot' | 'quarantined-intel';
 
 export type OperationsView =
   | 'analytics'
+  | 'advanced'
   | 'overview'
   | 'cost'
   | 'health'
@@ -96,6 +95,8 @@ export const LEGACY_TAB_MAP: Record<string, { workspace: WorkspaceId; view?: str
   readiness: { workspace: 'home' },
   'threat-discovery': { workspace: 'threats', view: 'overview' },
   threats: { workspace: 'threats', view: 'overview' },
+  automation: { workspace: 'threats', view: 'overview' },
+  architecture: { workspace: 'threats', view: 'overview' },
   'threat-intel': { workspace: 'threats', view: 'intel' },
   policy: { workspace: 'security', view: 'policy' },
   compliance: { workspace: 'security', view: 'overview' },
@@ -108,6 +109,8 @@ export const LEGACY_TAB_MAP: Record<string, { workspace: WorkspaceId; view?: str
   security: { workspace: 'security', view: 'overview' },
   'cost-health': { workspace: 'operations', view: 'analytics' },
   analytics: { workspace: 'operations', view: 'analytics' },
+  'advanced-analytics': { workspace: 'operations', view: 'advanced' },
+  advanced: { workspace: 'operations', view: 'advanced' },
   cost: { workspace: 'operations', view: 'cost' },
   health: { workspace: 'operations', view: 'health' },
   fleet: { workspace: 'operations', view: 'fleet' },

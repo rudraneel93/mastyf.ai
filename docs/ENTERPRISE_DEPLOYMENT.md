@@ -57,3 +57,23 @@ Legacy broad caching: `GUARDIAN_POLICY_EVAL_CACHE_LEGACY_HEURISTIC=true` (not re
 2. Two replicas without Redis — strict enterprise startup should fail.
 3. Rug-pull simulation — change tool description mid-session → block.
 4. Inflight flood — 51 concurrent calls → early reject without policy eval spike.
+
+## Split-plane shadow rollout (control + data plane)
+
+Run split-plane in shadow mode before any ingress cutover:
+
+1. Start split-plane profile:
+   - `docker compose --profile split-plane up -d --build`
+2. Keep data plane in shadow mode:
+   - `DATA_PLANE_SHADOW_MODE=true`
+   - `DATA_PLANE_FAIL_OPEN=true`
+3. Run parity harness repeatedly across live traffic windows:
+   - `node scripts/control-plane/run-parity-harness.mjs`
+4. Hard-switch ingress only when acceptance criteria hold.
+
+### Hard-switch acceptance criteria
+
+- Parity harness fixtures remain in range (20–50 representative `tools/call` cases).
+- `mismatches == 0` in at least 3 consecutive parity runs during live traffic windows.
+- `/readyz` on both control and data planes reports healthy.
+- Then cut over ingress and set `DATA_PLANE_SHADOW_MODE=false`.

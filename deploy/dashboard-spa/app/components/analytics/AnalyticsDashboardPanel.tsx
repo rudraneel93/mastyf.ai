@@ -18,6 +18,7 @@ import {
 import { Activity } from 'lucide-react';
 import {
   fetchAnalyticsSummary,
+  trackAdvancedAnalyticsEvent,
   type AnalyticsSummaryResponse,
 } from '@/lib/guardian-api';
 import { useDashboardWindow } from '../dashboard/DashboardWindowContext';
@@ -25,6 +26,7 @@ import { WindowSegmentedControl } from './WindowSegmentedControl';
 import { KpiCard } from '../dashboard/KpiCard';
 import { ChartCard } from '../dashboard/ChartCard';
 import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE } from '@/lib/chartTheme';
+import { computeDriftMetrics } from '@/lib/advanced-analytics';
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai: '#22c55e',
@@ -81,6 +83,17 @@ export function AnalyticsDashboardPanel({ refreshKey = 0, wsConnected = false }:
   const windowLabel =
     window === '1h' ? 'Last hour' : window === '24h' ? 'Last 24 hours' : window === '7d' ? 'Last 7 days' : 'Last 30 days';
 
+  const drift = computeDriftMetrics(data);
+
+  useEffect(() => {
+    void trackAdvancedAnalyticsEvent({
+      feature: 'drift_regime_shift',
+      metric: 'changeDetected',
+      confidence: drift.caveat.confidence,
+      value: drift.changeDetected ? 1 : 0,
+    });
+  }, [drift.caveat.confidence, drift.changeDetected]);
+
   return (
     <section className="analytics-dashboard" aria-label="MCP Guardian Analytics">
       <header className="analytics-dashboard-header">
@@ -120,7 +133,23 @@ export function AnalyticsDashboardPanel({ refreshKey = 0, wsConnected = false }:
           value={formatTokens(data?.tokensUsed ?? 0)}
           variant="default"
         />
+        <KpiCard
+          label="Regime shift detector"
+          value={drift.changeDetected ? 'Shift detected' : 'Stable'}
+          variant={drift.changeDetected ? 'warn' : 'success'}
+          sub={`Confidence: ${drift.caveat.confidence}`}
+          explanation="Flags major shifts in traffic, block-rate behavior, and model-mix distribution."
+        />
       </div>
+      <p className="hint">
+        Drift signals — traffic {drift.trafficShiftPct.toFixed(1)}%, block-rate {drift.blockRateShiftPct.toFixed(1)}pp, model JSD{' '}
+        {drift.modelMixJSDivergence.toFixed(3)}.
+      </p>
+      {drift.caveat.confidence === 'low' ? (
+        <p className="alert">
+          Drift detector confidence is low for this window; increase window size for more stable change-point signals.
+        </p>
+      ) : null}
 
       <div className="analytics-main-grid">
         <div className="analytics-main-col">

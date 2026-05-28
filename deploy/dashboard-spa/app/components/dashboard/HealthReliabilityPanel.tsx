@@ -17,6 +17,8 @@ import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
 import { ChartCard } from './ChartCard';
 import { DataTablePro, type Column } from './DataTablePro';
+import { computeReliabilityRiskMetrics } from '@/lib/advanced-analytics';
+import { trackAdvancedAnalyticsEvent } from '@/lib/guardian-api';
 
 type ServerRow = NonNullable<HealthResponse['serverReports']>[number];
 
@@ -70,6 +72,16 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
   ];
 
   const atRisk = health.atRisk || [];
+  const reliability = computeReliabilityRiskMetrics(health, visuals?.traffic?.byServer ?? []);
+
+  useEffect(() => {
+    void trackAdvancedAnalyticsEvent({
+      feature: 'reliability_risk_index',
+      metric: 'index',
+      confidence: reliability.caveat.confidence,
+      value: reliability.index,
+    });
+  }, [reliability.caveat.confidence, reliability.index]);
 
   return (
     <div className="health-reliability-panel">
@@ -78,6 +90,19 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
         subtitle="Latency, success rate, and circuit breaker state per upstream MCP server"
       >
         <div className="kpi-row">
+          <KpiCard
+            label="Reliability risk index"
+            value={reliability.index}
+            variant={
+              reliability.status === 'critical'
+                ? 'danger'
+                : reliability.status === 'watch'
+                  ? 'warn'
+                  : 'success'
+            }
+            sub={`Status: ${reliability.status} · confidence ${reliability.caveat.confidence}`}
+            explanation="Composite index using p95 drift, success-rate gaps, and circuit-breaker state."
+          />
           <KpiCard
             label="Avg latency"
             value={health.avgLatencyMs != null ? `${health.avgLatencyMs} ms` : health.avgLatency != null ? `${health.avgLatency} ms` : '—'}
@@ -97,6 +122,15 @@ export function HealthReliabilityPanel({ health, refreshKey = 0 }: Props) {
             explanation="Servers with latency >200ms or success rate <70%."
           />
         </div>
+        <p className="hint">
+          Risk factors — p95 drift {reliability.p95DriftPct.toFixed(1)}%, success gap{' '}
+          {reliability.successGapPct.toFixed(1)}%, open circuit-breakers {reliability.circuitBreakerOpenPct.toFixed(1)}%.
+        </p>
+        {reliability.caveat.confidence === 'low' ? (
+          <p className="alert">
+            Reliability risk confidence is low due to limited healthy sample coverage.
+          </p>
+        ) : null}
 
         <div className="dash-grid">
           <div className="dash-grid-span-8">

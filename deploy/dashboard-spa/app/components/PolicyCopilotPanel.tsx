@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchPolicyCopilot, fetchPolicyCounterfactual } from '@/lib/guardian-api';
+import { fetchCost, fetchPolicyCopilot, fetchPolicyCounterfactual, trackAdvancedAnalyticsEvent } from '@/lib/guardian-api';
 import { hasPermission } from '@/lib/dashboard-roles';
+import { computePolicyImpactMetrics, type PolicyImpactMetrics } from '@/lib/advanced-analytics';
 
 type Props = {
   roles?: string[];
@@ -53,6 +54,7 @@ export function PolicyCopilotPanel({ roles, onAction, initialTab }: Props) {
     fpRiskScore?: number;
     deltas?: CounterfactualDelta[];
   } | null>(null);
+  const [impact, setImpact] = useState<PolicyImpactMetrics | null>(null);
 
   const onGenerate = async () => {
     if (!canTest) {
@@ -98,6 +100,20 @@ export function PolicyCopilotPanel({ roles, onAction, initialTab }: Props) {
         return;
       }
       setCounterfactual(report as typeof counterfactual);
+      const cost = await fetchCost(14);
+      const blocked = Math.max(1, (cost?.serverReports || []).reduce((s, r) => s + Math.max(0, r.cost), 0));
+      const reportBlocks = (report as { newBlocks?: number }).newBlocks ?? 0;
+      const reportPasses = (report as { newPasses?: number }).newPasses ?? 0;
+      const blockedCalls = Math.max(1, reportBlocks + reportPasses);
+      const avgCostPerBlockedCall = blocked / blockedCalls;
+      const computed = computePolicyImpactMetrics(report as Record<string, unknown>, avgCostPerBlockedCall);
+      setImpact(computed);
+      await trackAdvancedAnalyticsEvent({
+        feature: 'policy_impact_simulator',
+        metric: 'simulatedBlockDelta',
+        confidence: computed.caveat.confidence,
+        value: computed.simulatedBlockDelta,
+      });
       onAction?.(String(report.summary || 'Counterfactual complete'));
     } finally {
       setBusy(false);
@@ -161,6 +177,35 @@ export function PolicyCopilotPanel({ roles, onAction, initialTab }: Props) {
                 New blocks: {counterfactual.newBlocks ?? 0} · New passes: {counterfactual.newPasses ?? 0} · FP risk:{' '}
                 {Math.round((counterfactual.fpRiskScore ?? 0) * 100)}%
               </p>
+              {impact ? (
+                <div className="kpi-row">
+                  <article className="kpi-card">
+                    <p className="kpi-card-label">Simulated protection delta</p>
+                    <p className="kpi-card-value">{impact.simulatedBlockDelta.toLocaleString()}</p>
+                    <p className="kpi-card-sub">Counterfactual blocked minus newly passed samples</p>
+                  </article>
+                  <article className="kpi-card">
+                    <p className="kpi-card-label">Estimated monthly savings</p>
+                    <p className="kpi-card-value">${impact.estimatedSavingsUsd.toFixed(2)}</p>
+                    <p className="kpi-card-sub">
+                      Range ${impact.estimatedSavingsRangeUsd.conservative.toFixed(2)} - $
+                      {impact.estimatedSavingsRangeUsd.aggressive.toFixed(2)}
+                    </p>
+                  </article>
+                  <article className="kpi-card">
+                    <p className="kpi-card-label">Confidence and caveat</p>
+                    <p className="kpi-card-value">{impact.caveat.confidence}</p>
+                    <p className="kpi-card-sub">
+                      Coverage {impact.caveat.coveragePct}% · n={impact.caveat.sampleSize}
+                    </p>
+                  </article>
+                  <article className="kpi-card">
+                    <p className="kpi-card-label">Backtest agreement</p>
+                    <p className="kpi-card-value">{impact.backtestAgreementPct.toFixed(1)}%</p>
+                    <p className="kpi-card-sub">Directional agreement on historical replay deltas</p>
+                  </article>
+                </div>
+              ) : null}
               {counterfactual.deltas?.length ? (
                 <table className="data-table compact">
                   <thead>

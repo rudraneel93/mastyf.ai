@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -10,13 +11,14 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { SecurityResponse } from '@/lib/guardian-api';
+import { fetchCost, trackAdvancedAnalyticsEvent, type CostResponse, type SecurityResponse } from '@/lib/guardian-api';
 import { CHART_AXIS, CHART_COLORS, CHART_GRID, CHART_TOOLTIP_STYLE, severityColor } from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
 import { ChartCard } from './ChartCard';
 import { InsightsNarrativeRail } from './InsightsNarrativeRail';
 import { DataTablePro, type Column } from './DataTablePro';
+import { computeCostRiskRoiMetrics } from '@/lib/advanced-analytics';
 
 type ServerRow = NonNullable<SecurityResponse['serverReports']>[number];
 
@@ -27,6 +29,10 @@ type Props = {
 };
 
 export function SecurityPosturePanel({ security, refreshKey = 0, onOpenThreatDiscovery }: Props) {
+  const [cost, setCost] = useState<CostResponse | null>(null);
+  useEffect(() => {
+    void fetchCost(7).then((resp) => setCost(resp));
+  }, [refreshKey]);
   if (!security) {
     return (
       <DashboardSection title="Security posture" subtitle="Manifest scan scores from proxy preflight">
@@ -63,6 +69,16 @@ export function SecurityPosturePanel({ security, refreshKey = 0, onOpenThreatDis
         ? 'warn'
         : 'success';
 
+  const roi = computeCostRiskRoiMetrics(cost, security);
+  useEffect(() => {
+    void trackAdvancedAnalyticsEvent({
+      feature: 'cost_of_risk_roi',
+      metric: 'netSecurityRoiUsd',
+      confidence: roi.caveat.confidence,
+      value: Number(roi.netSecurityRoiUsd.toFixed(2)),
+    });
+  }, [roi.caveat.confidence, roi.netSecurityRoiUsd]);
+
   return (
     <div className="security-posture-panel">
       <InsightsNarrativeRail scope="security" refreshKey={refreshKey} />
@@ -90,7 +106,23 @@ export function SecurityPosturePanel({ security, refreshKey = 0, onOpenThreatDis
             value={chartData.length}
             explanation="MCP servers with at least one completed security scan."
           />
+          <KpiCard
+            label="Net security ROI"
+            value={`$${roi.netSecurityRoiUsd.toFixed(2)}`}
+            variant={roi.netSecurityRoiUsd >= 0 ? 'success' : 'warn'}
+            sub={`Confidence: ${roi.caveat.confidence}`}
+            explanation="Expected incident-loss avoided minus estimated security operational overhead."
+          />
         </div>
+        <p className="hint">
+          Cost-of-risk model: avoided ${roi.expectedLossAvoidedUsd.toFixed(2)} vs operational $
+          {roi.securityOperationalCostUsd.toFixed(2)}.
+        </p>
+        {roi.caveat.confidence === 'low' ? (
+          <p className="alert">
+            ROI confidence is low because pricing coverage is limited; calibrate incident-loss assumptions before enforcement decisions.
+          </p>
+        ) : null}
 
         {security.activeThreats > 0 && onOpenThreatDiscovery ? (
           <p className="banner-inline">

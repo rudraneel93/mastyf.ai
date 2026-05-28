@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   fetchAutopilotStatus,
+  fetchContinuousAssuranceReport,
   fetchPendingSuggestions,
+  fetchSimilarEnvironmentBenchmarks,
   fetchLatestDigest,
   generateDigestNow,
   runSecuritySwarm,
   type AutopilotStatus,
   type AggregateMetrics,
   type AuditResponse,
+  type ContinuousAssuranceReport,
+  type SimilarEnvironmentBenchmarksResponse,
 } from '@/lib/guardian-api';
 import { HealthReportPanel } from '../reports/HealthReportPanel';
 import { ExecutiveOverviewPanel } from '../dashboard/ExecutiveOverviewPanel';
@@ -43,16 +47,22 @@ export function ProtectionWorkspace({
   const [pendingCount, setPendingCount] = useState(0);
   const [busy, setBusy] = useState('');
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [assurance, setAssurance] = useState<ContinuousAssuranceReport | null>(null);
+  const [benchmarks, setBenchmarks] = useState<SimilarEnvironmentBenchmarksResponse | null>(null);
 
   const load = useCallback(async () => {
-    const [st, dig, pending] = await Promise.all([
+    const [st, dig, pending, assuranceReport, benchmarkData] = await Promise.all([
       fetchAutopilotStatus(),
       fetchLatestDigest(),
       fetchPendingSuggestions(),
+      fetchContinuousAssuranceReport(),
+      fetchSimilarEnvironmentBenchmarks(),
     ]);
     setStatus(st);
     setDigestPreview(dig.healthMarkdown?.slice(0, 400) || '');
     setPendingCount(pending.count);
+    setAssurance(assuranceReport);
+    setBenchmarks(benchmarkData);
   }, []);
 
   useEffect(() => {
@@ -87,14 +97,18 @@ export function ProtectionWorkspace({
   };
 
   const semanticFlags = audit?.flagged ?? audit?.semanticAudit?.flagged ?? 0;
+  const topBenchmarks = (benchmarks?.benchmarks ?? []).slice(0, 5);
 
   return (
     <>
       <section className="briefing-hero">
         <h2>Guardian Autopilot — your MCP protection</h2>
         <p className="briefing-hero-lead">
-          Realtime blocking, autonomous threat learning, and scheduled digests. Policy rule changes
-          always need your approval.
+          Realtime blocking, autonomous threat learning, and scheduled digests.
+        </p>
+        <p className="hint">
+          You are in <strong>Protection</strong>. Primary goal: keep protection healthy. Next step:
+          run security analysis, then review AI suggestions.
         </p>
       </section>
 
@@ -125,25 +139,29 @@ export function ProtectionWorkspace({
           <p className="muted">Autopilot status unavailable — ensure proxy is running on port 4000.</p>
         )}
         <div className="btn-row">
-          <Button variant="primary" size="sm" disabled={!!busy} onClick={() => setAnalysisOpen(true)}>
-            Full analysis (plain English)
+          <strong style={{ marginRight: 8 }}>Run</strong>
+          <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => void onRunAnalysis()}>
+            {busy === 'swarm' ? 'Starting…' : 'Start security analysis'}
           </Button>
           <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => void onGenerateDigest()}>
-            {busy === 'digest' ? 'Generating…' : 'Generate digest now'}
+            {busy === 'digest' ? 'Generating…' : 'Generate health digest'}
           </Button>
-          <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => void onRunAnalysis()}>
-            {busy === 'swarm' ? 'Starting…' : 'Run full security analysis'}
-          </Button>
+        </div>
+        <div className="btn-row">
+          <strong style={{ marginRight: 8 }}>Review</strong>
           <Button
             variant="secondary"
             size="sm"
             onClick={() => onNavigateAdvanced?.('security', 'ai-copilot')}
           >
-            Review suggestions
+            Review AI policy suggestions
+          </Button>
+          <Button variant="primary" size="sm" disabled={!!busy} onClick={() => setAnalysisOpen(true)}>
+            Open full analysis report
           </Button>
           {showAdvancedNav ? (
             <Button variant="secondary" size="sm" onClick={() => onNavigateAdvanced?.('threats', 'overview')}>
-              Advanced: Threats
+              Open threat discovery
             </Button>
           ) : null}
         </div>
@@ -153,6 +171,74 @@ export function ProtectionWorkspace({
             {digestPreview.length >= 400 ? '…' : ''}
           </pre>
         ) : null}
+      </Card>
+      <Card title="Continuous assurance" subtitle="Live controls and attestation status">
+        {assurance ? (
+          <>
+            <ul className="insight-callout-list">
+              <li>
+                Protected traffic: <strong>{assurance.controls.trafficProtected ? 'yes' : 'no'}</strong> ·
+                LLM reachable: <strong>{assurance.controls.llmReachable ? 'yes' : 'no'}</strong>
+              </li>
+              <li>
+                Total calls: <strong>{assurance.metrics.totalCalls.toLocaleString()}</strong> · Blocked:{' '}
+                <strong>{assurance.metrics.blockedCalls.toLocaleString()}</strong> · Block rate:{' '}
+                <strong>{Math.round(assurance.metrics.blockedRate * 100)}%</strong>
+              </li>
+              <li>
+                Avg latency: <strong>{assurance.metrics.avgLatencyMs}ms</strong> · Pending policy suggestions:{' '}
+                <strong>{assurance.controls.pendingSuggestions}</strong>
+              </li>
+              <li>
+                Benchmarks: <strong>{assurance.benchmarkSummary.servers}</strong> servers · Needs attention:{' '}
+                <strong>{assurance.benchmarkSummary.needsAttention}</strong> · Outperforming:{' '}
+                <strong>{assurance.benchmarkSummary.outperforming}</strong>
+              </li>
+            </ul>
+            {assurance.attestations.length > 0 ? (
+              <ul className="insight-callout-list">
+                {assurance.attestations.map((note) => (
+                  <li key={note} className="hint">
+                    {note}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
+        ) : (
+          <p className="muted">Continuous assurance report unavailable.</p>
+        )}
+      </Card>
+
+      <Card title="Similar-environment benchmarks" subtitle="Adaptive server-level peer comparisons">
+        {topBenchmarks.length > 0 ? (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Server</th>
+                  <th>Calls</th>
+                  <th>Blocked</th>
+                  <th>Latency</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topBenchmarks.map((row) => (
+                  <tr key={row.serverName}>
+                    <td>{row.serverName}</td>
+                    <td>{row.totalCalls.toLocaleString()}</td>
+                    <td>{Math.round(row.blockedRate * 100)}%</td>
+                    <td>{row.avgLatencyMs}ms</td>
+                    <td>{row.status.replace('_', ' ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="muted">No benchmark rows yet — route traffic through Guardian first.</p>
+        )}
       </Card>
 
       <HealthReportPanel proxyOnline={proxyOnline} onReportLoading={onReportLoading} />

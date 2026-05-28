@@ -14,6 +14,18 @@ function HelpArticle({ topic }: { topic: HelpTopic }) {
       <h3>{topic.title}</h3>
       <h4>What it is</h4>
       <p>{topic.what}</p>
+      <h4>How it works</h4>
+      <ul>
+        {topic.how.map((h) => (
+          <li key={h}>{h}</li>
+        ))}
+      </ul>
+      <h4>How this benefits you</h4>
+      <ul>
+        {topic.benefit.map((b) => (
+          <li key={b}>{b}</li>
+        ))}
+      </ul>
       <h4>How to trigger</h4>
       <ul>
         {topic.trigger.map((t) => (

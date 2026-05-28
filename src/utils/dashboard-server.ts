@@ -1473,6 +1473,62 @@ export async function startDashboardServer(
         writeJson(res, 200, unavailable({ suggestions: [] }, 'AI engine not initialized — start proxy with GUARDIAN_AI_ENABLED')); return;
       }
 
+      if (url === '/api/ai/simulation-pack' && method === 'GET') {
+        setCors();
+        try {
+          const serverNames = runtimeHistoryDb
+            ? await getAllActiveServerNames(runtimeHistoryDb, requestTenantId)
+            : [];
+          const records = runtimeHistoryDb
+            ? await loadAllCallRecords(runtimeHistoryDb, serverNames, requestTenantId)
+            : [];
+          const { loadSemanticAuditRecordsAsync } = await import('../ai/semantic-audit-store.js');
+          const semantic = await loadSemanticAuditRecordsAsync({
+            tenantId: requestTenantId,
+            limit: 400,
+            sinceMs: 14 * 24 * 60 * 60 * 1000,
+          });
+          const simulationInputs = semantic
+            .filter((r) => r.argumentsSnapshot && Object.keys(r.argumentsSnapshot).length > 0)
+            .map((r) => ({
+              toolName: r.toolName,
+              arguments: r.argumentsSnapshot,
+              blocked: r.syncDecision?.action === 'block' || !!r.semanticAudit?.suspicious,
+            }));
+          const { buildTenantSimulationPack } = await import('../ai/tenant-simulation-pack.js');
+          const pack = buildTenantSimulationPack(requestTenantId, simulationInputs as Array<{
+            toolName?: string;
+            arguments?: Record<string, unknown>;
+            blocked?: boolean;
+          }>);
+          const toolFingerprint = pack.toolFingerprint.length > 0
+            ? pack.toolFingerprint
+            : (() => {
+                const byTool = new Map<string, { calls: number; blocked: number }>();
+                for (const r of records) {
+                  const tool = (r as { toolName?: string }).toolName || 'unknown';
+                  const cur = byTool.get(tool) || { calls: 0, blocked: 0 };
+                  cur.calls += 1;
+                  if ((r as { blocked?: boolean }).blocked) cur.blocked += 1;
+                  byTool.set(tool, cur);
+                }
+                return [...byTool.entries()].map(([toolName, v]) => ({
+                  toolName,
+                  calls: v.calls,
+                  blockedRate: v.calls > 0 ? Math.round((v.blocked / v.calls) * 1000) / 1000 : 0,
+                })).sort((a, b) => b.calls - a.calls);
+              })();
+          writeJson(res, 200, available({
+            ...pack,
+            totalRecordsScanned: Math.max(pack.totalRecordsScanned, records.length),
+            toolFingerprint,
+          } as unknown as Record<string, unknown>));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'simulation pack failed' });
+        }
+        return;
+      }
+
       if (url === '/api/ai/report' && method === 'GET') {
         setCors();
         try {
@@ -2782,18 +2838,127 @@ export async function startDashboardServer(
       if (url === '/api/policy/suggestions/accept' && method === 'POST') {
         setCors();
         const b = await readBody(req);
+        const rule = b.rule as import('../policy/policy-types.js').PolicyRule | undefined;
+        if (!rule?.name || !rule?.action) {
+          writeJson(res, 400, { error: 'invalid_rule', reason: 'rule.name and rule.action are required' });
+          return;
+        }
+        const { buildApprovalPreview } = await import('../ai/autopilot-approval.js');
         const { recordSuggestionOutcome } = await import('../ai/suggestion-engine.js');
         const policyPath = process.env['GUARDIAN_POLICY_PATH'] || process.env['MCP_GUARDIAN_POLICY_PATH'] || 'default-policy.yaml';
+        const preview = buildApprovalPreview({
+          suggestionId: String(b.suggestionId || ''),
+          source: (b.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack') || 'baseline',
+          rule,
+          actor: authResult.identity || String(b.userId || 'dashboard-user'),
+          stage: (b.stage as 'shadow' | 'canary' | 'enforce') || 'canary',
+          evidence: {
+            confidence: typeof b.confidence === 'number' ? b.confidence : 0.5,
+            replayCoverage: typeof b.replayCoverage === 'number' ? b.replayCoverage : 0.95,
+            predictedFalsePositiveDelta: typeof b.predictedFalsePositiveDelta === 'number' ? b.predictedFalsePositiveDelta : 0,
+            predictedBypassDelta: typeof b.predictedBypassDelta === 'number' ? b.predictedBypassDelta : 0,
+            blastRadiusPercent: typeof b.blastRadiusPercent === 'number' ? b.blastRadiusPercent : 0.05,
+            rollbackConfidence: typeof b.rollbackConfidence === 'number' ? b.rollbackConfidence : 0.95,
+            canarySizePercent: typeof b.canarySizePercent === 'number' ? b.canarySizePercent : 0.05,
+            simulationPassed: b.simulationPassed !== false,
+          },
+        });
+        if (process.env.GUARDIAN_AUTOPILOT_ENFORCE_SAFETY !== 'false' && !preview.safety.allowed) {
+          writeJson(res, 422, {
+            error: 'autopilot_safety_blocked',
+            blockers: preview.safety.blockers,
+            warnings: preview.safety.warnings,
+            impact: preview.impact,
+          });
+          return;
+        }
         await recordSuggestionOutcome(String(b.suggestionId || ''), 'applied', {
           ruleName: String(b.ruleName || b.suggestionId || 'unknown'),
           source: (b.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack') || 'baseline',
           confidence: typeof b.confidence === 'number' ? b.confidence : 0.5,
-          rule: b.rule as import('../policy/policy-types.js').PolicyRule | undefined,
+          rule,
           policyPath,
           policyWatcher: policyWatcher ?? null,
           userId: authResult.identity || String(b.userId || ''),
         });
-        writeJson(res, 200, { status: 'accepted', id: b.suggestionId });
+        const { appendLearningEvent } = await import('./learning-events.js');
+        appendLearningEvent({
+          type: 'autopilot_decision',
+          detail: `accepted suggestion ${String(b.suggestionId || '')}`,
+          confidence: typeof b.confidence === 'number' ? b.confidence : undefined,
+          metadata: {
+            stage: (b.stage as string) || 'canary',
+            impact: preview.impact,
+            safetyWarnings: preview.safety.warnings,
+          },
+        }, requestTenantId);
+        writeJson(res, 200, { status: 'accepted', id: b.suggestionId, preview });
+        return;
+      }
+      if (url === '/api/policy/suggestions/preview' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const rule = b.rule as import('../policy/policy-types.js').PolicyRule | undefined;
+        if (!rule?.name || !rule?.action) {
+          writeJson(res, 400, { error: 'invalid_rule', reason: 'rule.name and rule.action are required' });
+          return;
+        }
+        const { buildApprovalPreview } = await import('../ai/autopilot-approval.js');
+        const preview = buildApprovalPreview({
+          suggestionId: String(b.suggestionId || ''),
+          source: (b.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack') || 'baseline',
+          rule,
+          actor: authResult.identity || String(b.userId || 'dashboard-user'),
+          stage: (b.stage as 'shadow' | 'canary' | 'enforce') || 'canary',
+          evidence: {
+            confidence: typeof b.confidence === 'number' ? b.confidence : 0.5,
+            replayCoverage: typeof b.replayCoverage === 'number' ? b.replayCoverage : 0.95,
+            predictedFalsePositiveDelta: typeof b.predictedFalsePositiveDelta === 'number' ? b.predictedFalsePositiveDelta : 0,
+            predictedBypassDelta: typeof b.predictedBypassDelta === 'number' ? b.predictedBypassDelta : 0,
+            blastRadiusPercent: typeof b.blastRadiusPercent === 'number' ? b.blastRadiusPercent : 0.05,
+            rollbackConfidence: typeof b.rollbackConfidence === 'number' ? b.rollbackConfidence : 0.95,
+            canarySizePercent: typeof b.canarySizePercent === 'number' ? b.canarySizePercent : 0.05,
+            simulationPassed: b.simulationPassed !== false,
+          },
+        });
+        writeJson(res, 200, preview);
+        return;
+      }
+      if (url === '/api/policy/suggestions/rollback' && method === 'POST') {
+        setCors();
+        const b = await readBody(req);
+        const ruleName = String(b.ruleName || '').trim();
+        if (!ruleName) {
+          writeJson(res, 400, { error: 'ruleName is required' });
+          return;
+        }
+        const policyPath = process.env['GUARDIAN_POLICY_PATH'] || process.env['MCP_GUARDIAN_POLICY_PATH'] || 'default-policy.yaml';
+        const { removeSuggestionRuleFromPolicy } = await import('../ai/policy-applier.js');
+        const { appendRollbackLedger } = await import('../ai/autopilot-approval.js');
+        const removed = removeSuggestionRuleFromPolicy(ruleName, policyPath, policyWatcher ?? null);
+        if (!removed.removed) {
+          writeJson(res, 400, { error: 'rollback_failed', reason: removed.reason || 'rule not removed' });
+          return;
+        }
+        appendRollbackLedger({
+          suggestionId: String(b.suggestionId || `rollback:${ruleName}`),
+          ruleName,
+          actor: authResult.identity || String(b.userId || 'dashboard-user'),
+          reason: String(b.reason || 'manual rollback'),
+        });
+        const { appendLearningEvent } = await import('./learning-events.js');
+        appendLearningEvent({
+          type: 'autopilot_rollback',
+          detail: `rolled back rule ${ruleName}`,
+          metadata: { reason: String(b.reason || 'manual rollback') },
+        }, requestTenantId);
+        writeJson(res, 200, { status: 'rolled_back', id: b.suggestionId || `rollback:${ruleName}`, ruleName });
+        return;
+      }
+      if (url === '/api/policy/suggestions/rollback/ledger' && method === 'GET') {
+        setCors();
+        const { readRollbackLedger } = await import('../ai/autopilot-approval.js');
+        writeJson(res, 200, { entries: readRollbackLedger(100) });
         return;
       }
       if (url === '/api/policy/suggestions/reject' && method === 'POST') {
@@ -3510,6 +3675,63 @@ export async function startDashboardServer(
         } catch {
           writeJson(res, 200, unavailable({ count: 0, suggestions: [] }, 'Suggestions unavailable'));
         }
+        return;
+      }
+      if (url === '/api/certification/guardian-mcp' && method === 'GET') {
+        setCors();
+        const { evaluateGuardianCertification } = await import('./guardian-certified-mcp.js');
+        const data = evaluateGuardianCertification(REPO_ROOT);
+        writeJson(res, 200, available(data as unknown as Record<string, unknown>));
+        return;
+      }
+      if (url === '/api/benchmarks/similar-environment' && method === 'GET') {
+        setCors();
+        try {
+          const serverNames = runtimeHistoryDb
+            ? await getAllActiveServerNames(runtimeHistoryDb, requestTenantId)
+            : [];
+          const records = runtimeHistoryDb
+            ? await loadAllCallRecords(runtimeHistoryDb, serverNames, requestTenantId)
+            : [];
+          const { buildSimilarEnvironmentBenchmarks } = await import('../ai/similar-environment-benchmarks.js');
+          const benchmarks = buildSimilarEnvironmentBenchmarks(records);
+          writeJson(res, 200, available({ tenantId: requestTenantId, benchmarks }));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'benchmark_failed' });
+        }
+        return;
+      }
+      if (url === '/api/assurance/continuous' && method === 'GET') {
+        setCors();
+        try {
+          const serverNames = runtimeHistoryDb
+            ? await getAllActiveServerNames(runtimeHistoryDb, requestTenantId)
+            : [];
+          const records = runtimeHistoryDb
+            ? await loadAllCallRecords(runtimeHistoryDb, serverNames, requestTenantId)
+            : [];
+          const { buildAutopilotStatus } = await import('./autopilot-status.js');
+          const autopilot = await buildAutopilotStatus(requestTenantId, !!runtimeHistoryDb);
+          const { buildSimilarEnvironmentBenchmarks } = await import('../ai/similar-environment-benchmarks.js');
+          const { buildContinuousAssuranceReport } = await import('../ai/continuous-assurance.js');
+          const benchmarks = buildSimilarEnvironmentBenchmarks(records);
+          const report = buildContinuousAssuranceReport({
+            tenantId: requestTenantId,
+            records,
+            autopilot,
+            benchmarks,
+          });
+          writeJson(res, 200, available(report as unknown as Record<string, unknown>));
+        } catch (err: unknown) {
+          writeJson(res, 500, { error: err instanceof Error ? err.message : 'assurance_failed' });
+        }
+        return;
+      }
+      if (url === '/api/partners/signals' && method === 'GET') {
+        setCors();
+        const { buildPartnerSignalFeed } = await import('./guardian-certified-mcp.js');
+        const data = buildPartnerSignalFeed(REPO_ROOT);
+        writeJson(res, 200, available(data));
         return;
       }
       if (url === '/api/servers/registry' && method === 'GET') {
