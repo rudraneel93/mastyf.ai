@@ -32,6 +32,11 @@ See [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md) for Redis, multi-r
 - **Dashboard v3 upgrades** — advanced analytics panel, richer workspace UX, expanded security posture/health views, and updated API wiring
 - **Federated trust/security primitives** — new certified MCP and threat-intel v2 utilities with regression coverage
 - **Plugin SDK release alignment** — `@mcp-guardian/plugin-sdk` docs/source/tests aligned to `3.3.1`
+- **Signed policy governance** — policy watcher and dashboard mutation path now support signature envelope verification with trusted issuer enforcement
+- **Fail-closed semantic risk tiers** — high-risk tool calls fail closed when semantic LLM is degraded; medium/low are configurable
+- **External audit attestations** — hash-chain checkpoints + attestation status endpoint (`GET /api/audit/attestation`)
+- **Enterprise secret and encryption lifecycle hardening** — managed secret provider enforcement, key-versioned field encryption, rotation command, and encryption status endpoint
+- **Compliance evidence automation** — control mapping updates + signed evidence bundle outputs when evidence signing key is configured
 
 ## What's new in 3.3.0
 
@@ -100,6 +105,8 @@ Your AI assistant
 - **Semantic audit** — async LLM review of tool arguments for evasion and injection
 - **Fleet management** — manage multiple Guardian instances across servers
 - **Enterprise deployment** — Kubernetes Helm chart, PostgreSQL backend, multi-tenancy, SSO
+- **Policy integrity controls** — signed policy verification + four-eyes policy mutation workflow for production governance
+- **Attestation visibility** — audit checkpoint status API for tamper-evident operational evidence
 
 > Pro requires a license in production. Local dev: `pnpm dashboard:proxy`. See [PRO_SETUP.md](docs/PRO_SETUP.md) and [AUTOPILOT.md](docs/AUTOPILOT.md).
 

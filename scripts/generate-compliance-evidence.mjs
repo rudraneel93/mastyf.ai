@@ -22,11 +22,12 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 const REPO_ROOT = join(dirname(new URL(import.meta.url).pathname), '..');
 const COMPLIANCE_DIR = join(REPO_ROOT, 'reports', 'compliance');
 const OUTPUT_FILE = join(COMPLIANCE_DIR, `evidence-pack-${new Date().toISOString().slice(0, 10)}.json`);
+const OUTPUT_SIG_FILE = `${OUTPUT_FILE}.sig`;
 
 // ── SOC2 / ISO27001 Control Mapping ─────────────────────────────────
 
@@ -45,10 +46,10 @@ const CONTROL_MAPPING = {
   'A.18.1': { name: 'Compliance with Legal Requirements (ISO27001)', domain: 'Compliance' },
 };
 
-function collectEvidence() {
+async function collectEvidence() {
   const evidence = {
     timestamp: new Date().toISOString(),
-    version: '3.2.5',
+    version: '3.3.1',
     controls: [],
   };
 
@@ -203,14 +204,39 @@ function collectEvidence() {
   return evidence;
 }
 
+function signEvidencePayload(payloadText) {
+  const key = process.env['GUARDIAN_EVIDENCE_SIGNING_KEY'];
+  if (!key) return null;
+  return createHmac('sha256', key).update(payloadText).digest('hex');
+}
+
 async function main() {
   console.log('[compliance] Generating enterprise evidence pack...');
 
   mkdirSync(COMPLIANCE_DIR, { recursive: true });
   const evidence = await collectEvidence();
-  writeFileSync(OUTPUT_FILE, JSON.stringify(evidence, null, 2));
+  const payloadText = JSON.stringify(evidence, null, 2);
+  writeFileSync(OUTPUT_FILE, payloadText);
+  const sig = signEvidencePayload(payloadText);
+  if (sig) {
+    writeFileSync(
+      OUTPUT_SIG_FILE,
+      JSON.stringify(
+        {
+          algorithm: 'hmac-sha256',
+          signature: sig,
+          keyHint: process.env['GUARDIAN_EVIDENCE_SIGNING_KEY_ID'] || 'default',
+          generatedAt: new Date().toISOString(),
+          target: OUTPUT_FILE,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 
   console.log(`[compliance] Evidence pack written: ${OUTPUT_FILE}`);
+  if (sig) console.log(`[compliance] Evidence signature written: ${OUTPUT_SIG_FILE}`);
   console.log(`[compliance] ${evidence.controls.length} controls mapped`);
   console.log(`[compliance] Chain of custody: ${evidence.chainOfCustody.hash}`);
 }

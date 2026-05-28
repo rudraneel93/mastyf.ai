@@ -113,6 +113,8 @@
     "enterprise:sbom": "node scripts/generate-sbom.mjs",
     "enterprise:red-team": "node scripts/continuous-red-team.mjs",
     "enterprise:compliance-evidence": "node scripts/generate-compliance-evidence.mjs",
+    "enterprise:evidence-check": "node scripts/compliance-evidence-check.mjs",
+    "enterprise:rotate-encryption": "node scripts/rotate-field-encryption.mjs",
     "enterprise:preflight": "sh scripts/verify-enterprise-preflight.sh",
     "enterprise:preflight:multi-region": "sh scripts/verify-multi-region-preflight.sh",
     "enterprise:pilot": "sh scripts/verify-multi-tenant-pilot.sh",

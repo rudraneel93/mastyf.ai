@@ -26,6 +26,51 @@ Env vars:
 - `GUARDIAN_SEMANTIC_SYNC_REQUEST` — override enterprise default for request gate
 - `GUARDIAN_SEMANTIC_SYNC_REQUEST_TIMEOUT_MS` — default 2500
 - `GUARDIAN_SEMANTIC_SYNC_RESPONSE` — response gate
+- `GUARDIAN_SEMANTIC_FAIL_CLOSED_MEDIUM` — fail closed on semantic degradation for medium-risk tools
+- `GUARDIAN_SEMANTIC_FAIL_CLOSED_LOW` — fail closed on semantic degradation for low-risk tools
+
+## Signed policy governance (recommended)
+
+- Enable strict signed policy enforcement:
+  - `GUARDIAN_REQUIRE_SIGNED_POLICY=true`
+  - `GUARDIAN_POLICY_TRUSTED_ISSUERS=guardian-admin,security-automation`
+  - `GUARDIAN_POLICY_SIGNING_KEY=<shared-secret-or-kms-export>`
+- Dashboard policy updates support signed envelopes and can auto-sign when configured.
+- Policy signature sidecar path: `.<policy-file>.sig.json` next to your policy file.
+- Evidence bundle signing:
+  - `GUARDIAN_EVIDENCE_SIGNING_KEY=<hmac-secret>`
+  - optional `GUARDIAN_EVIDENCE_SIGNING_KEY_ID=<kid>`
+  - output includes `evidence-pack-YYYY-MM-DD.json.sig`
+
+## Four-eyes policy updates
+
+- Enforce dual-control on dashboard policy mutation:
+  - `GUARDIAN_POLICY_FOUR_EYES_REQUIRED=true`
+- Required headers on `PUT /api/policy`:
+  - `X-Guardian-Policy-Proposer`
+  - `X-Guardian-Policy-Approver`
+  - optional `X-Guardian-Policy-Approval-Expiry`
+- Proposer and approver must differ; expired approvals are rejected.
+
+## Audit attestation checkpoints
+
+- Enable checkpoint anchoring for audit hash-chain:
+  - `GUARDIAN_AUDIT_HASH_CHAIN=true`
+  - `GUARDIAN_AUDIT_ATTESTATION_ENABLED=true`
+  - optional `GUARDIAN_AUDIT_ATTESTATION_PATH=/secure/worm/audit-checkpoints.json`
+- Status endpoint: `GET /api/audit/attestation`
+
+## Encryption key rotation posture
+
+- Field encryption supports key-version tagging and rotation toggles:
+  - `GUARDIAN_DB_ENCRYPTION_KEY`
+  - `GUARDIAN_DB_ENCRYPTION_KEY_VERSION=v2`
+  - `GUARDIAN_DB_ENCRYPTION_KEY_V1=<old-key>`
+  - `GUARDIAN_DB_ENCRYPTION_ROTATION_ENABLED=true`
+- Runtime status endpoint: `GET /api/security/encryption-status`
+- Rotation execution:
+  - `pnpm enterprise:rotate-encryption` (uses `MCP_GUARDIAN_DB_PATH`, updates encrypted `call_records.block_reason`)
+  - dry-run: `pnpm enterprise:rotate-encryption -- --dry-run`
 
 ## License posture
 

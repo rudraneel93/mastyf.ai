@@ -6,6 +6,7 @@ import { createHash } from 'crypto';
 import { appendFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
+import { checkpointAuditChain } from './audit-attestation.js';
 
 export function isAuditHashChainEnabled(): boolean {
   return process.env['GUARDIAN_AUDIT_HASH_CHAIN'] === 'true';
@@ -93,6 +94,13 @@ export function appendChainedJsonlLine(filePath: string, payload: Record<string,
   const chain = new AuditHashChain(tip);
   const line = chain.append(payload);
   appendFileSync(filePath, `${JSON.stringify(line)}\n`, { encoding: 'utf-8' });
+  if (process.env['GUARDIAN_AUDIT_ATTESTATION_ENABLED'] === 'true') {
+    try {
+      checkpointAuditChain(line.entry_hash);
+    } catch {
+      // best effort, must not fail the main write path
+    }
+  }
   return line;
 }
 

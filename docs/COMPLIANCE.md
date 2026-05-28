@@ -16,6 +16,11 @@
 | GxP controlled vocabulary (template) | `policy-templates/gxp-compliance.yaml` |
 | Per-tenant audit isolation | `~/.mcp-guardian/tenants/{tenantId}/policy-audit.jsonl`; optional Postgres RLS (`006-tenant-rls.sql`) |
 | Dashboard access trail | `GET /api/audit?kind=access` and `GET /api/admin/access-log`; entries include `{ userId, tenantId, endpoint, timestamp, method, status, ip }` |
+| Policy integrity and provenance | Signed policy envelope verification (`GUARDIAN_REQUIRE_SIGNED_POLICY=true`) + trusted issuer allowlist |
+| Dual-control policy governance | Four-eyes dashboard mutation workflow (`GUARDIAN_POLICY_FOUR_EYES_REQUIRED=true`) |
+| Tamper-evident external attestations | Audit hash-chain checkpoints with attestation status API (`GET /api/audit/attestation`) |
+| Encryption key lifecycle | Field encryption key versioning and rotation telemetry (`GET /api/security/encryption-status`) |
+| Signed evidence bundles | `pnpm enterprise:compliance-evidence` outputs `.sig` when `GUARDIAN_EVIDENCE_SIGNING_KEY` is set |
 
 ## Data retention (default)
 

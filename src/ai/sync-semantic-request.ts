@@ -20,6 +20,10 @@ import {
 import { withSemanticTimeout } from '../utils/semantic-timeout.js';
 import type { SemanticAuditResult } from './async-semantic-audit.js';
 import * as Metrics from '../utils/metrics.js';
+import {
+  classifySemanticRiskTier,
+  shouldFailClosedOnSemanticDegrade,
+} from './semantic-risk-tier.js';
 
 const MIN_CONFIDENCE = parseFloat(
   process.env['GUARDIAN_SEMANTIC_SYNC_REQUEST_MIN_CONFIDENCE']
@@ -65,6 +69,7 @@ export async function evaluateSyncSemanticRequest(
   }
 
   const argsText = JSON.stringify(input.context.arguments ?? {});
+  const riskTier = classifySemanticRiskTier(input.context.toolName, input.context.arguments);
 
   if (isLocalSemanticEnabledForTenant(tenantId)) {
     const local = scoreLocalSemanticText(argsText, {
@@ -89,6 +94,15 @@ export async function evaluateSyncSemanticRequest(
   }
 
   if (!isSyncSemanticRequestLlmEnabledForTenant(tenantId) || !isSemanticLlmConfigured()) {
+    if (shouldFailClosedOnSemanticDegrade(riskTier)) {
+      return {
+        block: true,
+        result: noop,
+        source: 'none',
+        rule: 'semantic-degraded',
+        reason: `llm not configured (fail-closed: ${riskTier})`,
+      };
+    }
     return {
       block: false,
       result: noop,
@@ -104,13 +118,13 @@ export async function evaluateSyncSemanticRequest(
       serverName: input.context.serverName,
       toolName: input.context.toolName,
     });
-    if (isSemanticStrictMode(tenantId)) {
+    if (isSemanticStrictMode(tenantId) || shouldFailClosedOnSemanticDegrade(riskTier)) {
       return {
         block: true,
         result: noop,
         source: 'none',
         rule: 'semantic-degraded',
-        reason: 'Semantic LLM unavailable (strict mode)',
+        reason: `Semantic LLM unavailable (${isSemanticStrictMode(tenantId) ? 'strict mode' : `fail-closed: ${riskTier}`})`,
       };
     }
     return {
@@ -135,13 +149,13 @@ Respond ONLY with JSON: {"suspicious":boolean,"confidence":0-1,"categories":stri
   );
 
   if (!response?.text) {
-    if (isSemanticStrictMode(tenantId)) {
+    if (isSemanticStrictMode(tenantId) || shouldFailClosedOnSemanticDegrade(riskTier)) {
       return {
         block: true,
         result: noop,
         source: 'none',
         rule: 'semantic-degraded',
-        reason: 'Semantic LLM timeout (strict mode)',
+        reason: `Semantic LLM timeout (${isSemanticStrictMode(tenantId) ? 'strict mode' : `fail-closed: ${riskTier}`})`,
       };
     }
     return {

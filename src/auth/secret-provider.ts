@@ -142,3 +142,8 @@ export function createSecretProvider(): SecretProvider {
       return new EnvSecretProvider();
   }
 }
+
+export function isManagedSecretProviderConfigured(): boolean {
+  const providerType = process.env['GUARDIAN_SECRET_PROVIDER'] || 'env';
+  return providerType !== 'env';
+}

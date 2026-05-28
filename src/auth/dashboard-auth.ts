@@ -98,7 +98,9 @@ export class DashboardAuth {
       sessionTtlSeconds: config?.sessionTtlSeconds ?? 3600,
       allowedOrigins: config?.allowedOrigins ?? (process.env['DASHBOARD_ALLOWED_ORIGINS']
         ? process.env['DASHBOARD_ALLOWED_ORIGINS'].split(',').map(s => s.trim())
-        : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000']),
+        : (process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true'
+          ? ['https://localhost:4000']
+          : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000'])),
       maxLoginAttemptsPerMinute: config?.maxLoginAttemptsPerMinute ?? 5,
     };
 
@@ -366,12 +368,14 @@ export class DashboardAuth {
 
   /** Set-Cookie header value for the CSRF double-submit cookie. */
   csrfSetCookieHeader(token: string): string {
-    return `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict; Max-Age=3600`;
+    const secure = process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
+    return `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict; Max-Age=3600${secure}`;
   }
 
   /** Set-Cookie header value for the HttpOnly session cookie. */
   sessionSetCookieHeader(token: string): string {
-    return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${this.config.sessionTtlSeconds}`;
+    const secure = process.env['GUARDIAN_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
+    return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${this.config.sessionTtlSeconds}${secure}`;
   }
 
   /**

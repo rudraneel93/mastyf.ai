@@ -4,6 +4,7 @@
  * Enable with: POLICY_AUDIT_ENABLED=true
  */
 
+import { createHash } from 'crypto';
 import { writeFileSync, readFileSync, existsSync } from 'fs';
 import { Logger } from './logger.js';
 import { appendChainedJsonlLine, isAuditHashChainEnabled } from './audit-hash-chain.js';
@@ -62,13 +63,7 @@ export class PolicyAuditor {
   }
 
   computeHash(content: string): string {
-    let hash = 0;
-    for (let i = 0; i < content.length; i++) {
-      const char = content.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash |= 0;
-    }
-    return hash.toString(16);
+    return createHash('sha256').update(content).digest('hex');
   }
 
   hasChanged(content: string): boolean {

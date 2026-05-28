@@ -1,4 +1,4 @@
-import { createSecretProvider } from '../auth/secret-provider.js';
+import { createSecretProvider, isManagedSecretProviderConfigured } from '../auth/secret-provider.js';
 import { PolicyAuditor } from './policy-auditor.js';
 import { ExporterManager } from '../exporters/exporter-manager.js';
 import { AuditTrailSync } from '../aggregator/audit-trail-sync.js';
@@ -145,6 +145,14 @@ export function runEnterpriseSecurityPreflight(): void {
   assertEnterpriseLicensePosture();
 
   if (process.env.GUARDIAN_ENTERPRISE_MODE === 'true') {
+    if (!isManagedSecretProviderConfigured()) {
+      const msg = '[bootstrap] GUARDIAN_ENTERPRISE_MODE=true requires managed secrets provider (set GUARDIAN_SECRET_PROVIDER=hashicorp-vault|aws-secrets-manager)';
+      if (process.env.GUARDIAN_ALLOW_ENV_SECRETS_IN_ENTERPRISE === 'true') {
+        Logger.warn(`${msg} (temporary override via GUARDIAN_ALLOW_ENV_SECRETS_IN_ENTERPRISE=true)`);
+      } else {
+        throw new Error(msg);
+      }
+    }
     if (!isRedisConfigured()) {
       const msg =
         '[bootstrap] GUARDIAN_ENTERPRISE_MODE=true but REDIS_URL is unset — session flow, distributed rate limits, and policy cache are per-instance only';

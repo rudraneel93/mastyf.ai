@@ -5,6 +5,7 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 const PREFIX_V1 = 'genc1:';
 const PREFIX_V2 = 'genc2:';
+const PREFIX_V3 = 'genc3:';
 const SALT_LEN = 16;
 
 function deploymentSalt(): Buffer {
@@ -32,6 +33,28 @@ export function getFieldEncryptionKey(): string | undefined {
   return k || undefined;
 }
 
+function activeKeyVersion(): string {
+  return (process.env['GUARDIAN_DB_ENCRYPTION_KEY_VERSION'] || 'v1').trim();
+}
+
+function keyForVersion(version: string): string | undefined {
+  if (version === activeKeyVersion()) return getFieldEncryptionKey();
+  const env = process.env[`GUARDIAN_DB_ENCRYPTION_KEY_${version.toUpperCase()}`]?.trim();
+  return env || undefined;
+}
+
+export function getFieldEncryptionStatus(): {
+  enabled: boolean;
+  activeVersion: string;
+  rotationEnabled: boolean;
+} {
+  return {
+    enabled: isFieldEncryptionEnabled(),
+    activeVersion: activeKeyVersion(),
+    rotationEnabled: process.env['GUARDIAN_DB_ENCRYPTION_ROTATION_ENABLED'] === 'true',
+  };
+}
+
 /** Encrypt a sensitive column value (returns plaintext when key unset). */
 export function encryptField(plaintext: string | null | undefined): string | null {
   if (plaintext == null || plaintext === '') return plaintext ?? null;
@@ -43,7 +66,8 @@ export function encryptField(plaintext: string | null | undefined): string | nul
   const cipher = createCipheriv(ALGO, key, iv);
   const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return PREFIX_V2 + Buffer.concat([salt, iv, tag, enc]).toString('base64');
+  const payload = Buffer.concat([salt, iv, tag, enc]).toString('base64');
+  return `${PREFIX_V3}${activeKeyVersion()}:${payload}`;
 }
 
 /** Decrypt a value written by encryptField (pass-through when not encrypted). */
@@ -51,6 +75,23 @@ export function decryptField(stored: string | null | undefined): string | null {
   if (stored == null || stored === '') return stored ?? null;
   const keyRaw = getFieldEncryptionKey();
   if (!keyRaw) return stored;
+
+  if (stored.startsWith(PREFIX_V3)) {
+    const rest = stored.slice(PREFIX_V3.length);
+    const [version, b64] = rest.split(':', 2);
+    const keyVersion = version || activeKeyVersion();
+    const keyRawVersion = keyForVersion(keyVersion);
+    if (!keyRawVersion || !b64) return stored;
+    const buf = Buffer.from(b64, 'base64');
+    const salt = buf.subarray(0, SALT_LEN);
+    const iv = buf.subarray(SALT_LEN, SALT_LEN + IV_LEN);
+    const tag = buf.subarray(SALT_LEN + IV_LEN, SALT_LEN + IV_LEN + TAG_LEN);
+    const data = buf.subarray(SALT_LEN + IV_LEN + TAG_LEN);
+    const key = deriveKey(keyRawVersion, salt);
+    const decipher = createDecipheriv(ALGO, key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+  }
 
   if (stored.startsWith(PREFIX_V2)) {
     const buf = Buffer.from(stored.slice(PREFIX_V2.length), 'base64');

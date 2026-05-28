@@ -1,5 +1,6 @@
 import { watch, FSWatcher } from 'chokidar';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { dirname, basename, join } from 'path';
 import { load } from 'js-yaml';
 import { PolicyConfig } from './policy-types.js';
 import { PolicyEngine } from './policy-engine.js';
@@ -9,6 +10,10 @@ import { applyPolicyMerges } from './policy-merge.js';
 import { getPolicyAuditor } from '../utils/enterprise-bootstrap.js';
 import { registerReadinessCheck } from '../utils/readiness.js';
 import { Logger } from '../utils/logger.js';
+import {
+  type PolicySignatureEnvelope,
+  validateSignedPolicyYaml,
+} from './policy-signature.js';
 
 const RELOAD_DEBOUNCE_MS = 50;
 
@@ -49,6 +54,14 @@ export class PolicyWatcher {
   private buildEngineFromDisk(): PolicyEngine | null {
     try {
       const yaml = readFileSync(this.policyPath, 'utf-8');
+      const signaturePath = join(dirname(this.policyPath), `.${basename(this.policyPath)}.sig.json`);
+      const envelope = existsSync(signaturePath)
+        ? (JSON.parse(readFileSync(signaturePath, 'utf-8')) as PolicySignatureEnvelope)
+        : undefined;
+      const sigCheck = validateSignedPolicyYaml(yaml, envelope);
+      if (!sigCheck.ok) {
+        throw new Error(`Policy signature validation failed: ${sigCheck.reason}`);
+      }
       const auditor = getPolicyAuditor();
       if (auditor?.hasChanged(yaml)) {
         auditor.record({

@@ -2,6 +2,11 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { readFileSync, existsSync, writeFileSync, renameSync, mkdirSync, appendFileSync } from 'fs';
 import { load } from 'js-yaml';
 import { parsePolicyConfig } from '../policy/policy-schema.js';
+import {
+  type PolicySignatureEnvelope,
+  signPolicyYaml,
+  validateSignedPolicyYaml,
+} from '../policy/policy-signature.js';
 import { resolve, dirname, join, extname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
@@ -58,6 +63,9 @@ import {
   type FederatedQueryContext,
 } from './federated-data-source.js';
 import { initUnifiedDataReaderPool } from './unified-data-reader.js';
+import { getAuditAttestationStatus } from './audit-attestation.js';
+import { getFieldEncryptionStatus } from './field-encryption.js';
+import { getPolicyAuditor } from './enterprise-bootstrap.js';
 import {
   isLegacyArtifactsAllowed,
   isSwarmArtifactVisibleForSession,
@@ -925,12 +933,21 @@ export async function startDashboardServer(
       if (url === '/api/policy' && method === 'GET') {
         setCors();
         const policyPath = defaultPolicyPath();
+        const sigPath = join(dirname(policyPath), `.${policyPath.split('/').pop()}.sig.json`);
         let yaml = '';
+        let signature: PolicySignatureEnvelope | null = null;
         if (existsSync(policyPath)) {
           try {
             yaml = readFileSync(policyPath, 'utf-8');
           } catch {
             yaml = '';
+          }
+        }
+        if (existsSync(sigPath)) {
+          try {
+            signature = JSON.parse(readFileSync(sigPath, 'utf-8')) as PolicySignatureEnvelope;
+          } catch {
+            signature = null;
           }
         }
         const mode = policyWatcher?.get()?.getMode() || 'audit';
@@ -939,13 +956,35 @@ export async function startDashboardServer(
           rules: yaml ? `${yaml.split('\n').length} lines` : 'No policy file',
           yaml,
           path: policyPath,
+          signature,
         });
         return;
       }
 
       if (url === '/api/policy' && method === 'PUT') {
         setCors();
-        const body = (await readBody(req)) as { yaml?: string };
+        if (process.env['GUARDIAN_POLICY_FOUR_EYES_REQUIRED'] === 'true') {
+          const proposer = String(req.headers['x-guardian-policy-proposer'] || '').trim();
+          const approver = String(req.headers['x-guardian-policy-approver'] || '').trim();
+          const approvalExpiry = String(req.headers['x-guardian-policy-approval-expiry'] || '').trim();
+          if (!proposer || !approver) {
+            writeJson(res, 400, { error: 'four-eyes required: proposer and approver headers missing' });
+            return;
+          }
+          if (proposer === approver) {
+            writeJson(res, 403, { error: 'four-eyes violation: proposer and approver must differ' });
+            return;
+          }
+          if (approvalExpiry && Date.now() > Date.parse(approvalExpiry)) {
+            writeJson(res, 403, { error: 'approval expired' });
+            return;
+          }
+        }
+        const body = (await readBody(req)) as {
+          yaml?: string;
+          signature?: PolicySignatureEnvelope;
+          autoSign?: boolean;
+        };
         const yaml = String(body.yaml ?? '').trim();
         if (!yaml) {
           writeJson(res, 400, { error: 'yaml required' });
@@ -963,11 +1002,32 @@ export async function startDashboardServer(
           return;
         }
         const policyPath = defaultPolicyPath();
+        const sigPath = join(dirname(policyPath), `.${policyPath.split('/').pop()}.sig.json`);
+        let envelope: PolicySignatureEnvelope | undefined = body.signature;
+        if (!envelope && body.autoSign) {
+          const issuer = process.env['GUARDIAN_POLICY_SIGNING_ISSUER'] || 'guardian-admin';
+          const keyId = process.env['GUARDIAN_POLICY_SIGNING_KEY_ID'] || 'default';
+          const now = new Date().toISOString();
+          envelope = signPolicyYaml(yaml, {
+            issuer,
+            keyId,
+            issuedAt: now,
+            expiresAt: process.env['GUARDIAN_POLICY_SIGNING_EXPIRES_AT'],
+          });
+        }
+        const sigCheck = validateSignedPolicyYaml(yaml, envelope);
+        if (!sigCheck.ok) {
+          writeJson(res, 400, { error: 'Policy signature validation failed', details: sigCheck.reason });
+          return;
+        }
         try {
           mkdirSync(dirname(policyPath), { recursive: true });
           const tmpPath = `${policyPath}.dashboard-${process.pid}.tmp`;
           writeFileSync(tmpPath, yaml.endsWith('\n') ? yaml : `${yaml}\n`, 'utf-8');
           renameSync(tmpPath, policyPath);
+          if (envelope) {
+            writeFileSync(sigPath, JSON.stringify(envelope, null, 2), 'utf-8');
+          }
         } catch (err) {
           writeJson(res, 500, {
             error: 'Failed to write policy file',
@@ -980,12 +1040,34 @@ export async function startDashboardServer(
           path: policyPath,
           message: 'Policy saved; watcher reloads on file change',
         });
+        const auditor = getPolicyAuditor();
+        if (auditor) {
+          auditor.record({
+            timestamp: new Date().toISOString(),
+            actor: String(req.headers['x-guardian-policy-approver'] || authResult.identity || 'dashboard'),
+            change: 'policy_update_via_dashboard',
+            newValue: auditor.computeHash(yaml),
+            sourceHash: auditor.computeHash(yaml),
+          });
+        }
         return;
       }
 
       if (url === '/api/policy/reload' && method === 'POST') {
         setCors();
         writeJson(res, 200, { status: 'ok', message: 'Policy watcher auto-detects changes' }); return;
+      }
+
+      if (url === '/api/audit/attestation' && method === 'GET') {
+        setCors();
+        writeJson(res, 200, getAuditAttestationStatus());
+        return;
+      }
+
+      if (url === '/api/security/encryption-status' && method === 'GET') {
+        setCors();
+        writeJson(res, 200, getFieldEncryptionStatus());
+        return;
       }
 
       if (url === '/api/policy/test' && method === 'POST') {

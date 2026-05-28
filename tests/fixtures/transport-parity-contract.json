@@ -1,0 +1,26 @@
+[
+  {
+    "name": "safe read tool call",
+    "context": {
+      "serverName": "filesystem",
+      "toolName": "list_directory",
+      "arguments": { "path": "." },
+      "agentId": "a1",
+      "tenantId": "default"
+    },
+    "decision": { "action": "pass", "rule": "allow-read", "reason": "allowlist" },
+    "expectedRuleOnBlock": null
+  },
+  {
+    "name": "high risk tool degrade",
+    "context": {
+      "serverName": "shell",
+      "toolName": "execute_command",
+      "arguments": { "command": "cat /etc/passwd" },
+      "agentId": "a2",
+      "tenantId": "default"
+    },
+    "decision": { "action": "pass", "rule": "allow-shell", "reason": "test" },
+    "expectedRuleOnBlock": "semantic-degraded"
+  }
+]
