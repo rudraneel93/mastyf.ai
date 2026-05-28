@@ -1,0 +1,25 @@
+version: '1.0'
+policy:
+  mode: block
+  default_action: pass
+  semantic_shell: true
+  unicode_strict: true
+  rules:
+    - name: builder-tool-definition-integrity
+      description: Protect MCP builders from runtime tool-definition abuse.
+      action: block
+      patterns:
+        - '(?i)(override\\s+tool\\s+definition|dynamic\\s+tool\\s+mutation)'
+    - name: builder-safe-http-tools
+      description: Permit HTTP tooling with explicit transport guardrails.
+      action: block
+      tools:
+        allow: [fetch_url, call_api, get_openapi_spec]
+        enforceAllowlist: false
+      maxCallsPerMinute: 75
+    - name: builder-injection-regression
+      description: Block obvious instruction override attacks in tool args.
+      action: block
+      patterns:
+        - '(?i)developer\\s+mode'
+        - '(?i)bypass\\s+policy'

@@ -1,0 +1,21 @@
+version: '1.0'
+policy:
+  mode: block
+  default_action: pass
+  semantic_shell: true
+  unicode_strict: true
+  rules:
+    - name: enterprise-soc-deny-destructive-tools
+      description: Block high-risk destructive tools by default.
+      action: block
+      tools:
+        deny: [execute_command, run_shell, delete_file, rm_rf]
+    - name: enterprise-soc-strict-rate
+      description: Conservative call rate to reduce blast radius.
+      action: block
+      maxCallsPerMinute: 40
+      maxCallsPer10Seconds: 12
+    - name: enterprise-soc-token-guard
+      description: Enforce token budget for potentially risky tool calls.
+      action: block
+      maxTokens: 4096

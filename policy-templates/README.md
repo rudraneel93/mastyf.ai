@@ -10,6 +10,10 @@ Optional YAML fragments to merge with `default-policy.yaml` (or your own base po
 | [pci-dss-masking.yaml](./pci-dss-masking.yaml) | Cardholder data block/redact rules | Payment-adjacent MCP tools |
 | [data-residency.yaml](./data-residency.yaml) | Residency metadata flags + doc hooks | Multi-region governance |
 | [gxp-compliance.yaml](./gxp-compliance.yaml) | GxP controlled vocabulary + audit metadata | Pharma / regulated workloads |
+| [segments/enterprise-soc.yaml](./segments/enterprise-soc.yaml) | Enterprise SOC defaults | Large security teams |
+| [segments/ai-startup.yaml](./segments/ai-startup.yaml) | Fast-moving startup defaults | AI-native startup teams |
+| [segments/regulated.yaml](./segments/regulated.yaml) | Strict regulated baseline | Finance/health/public sector |
+| [segments/mcp-builder.yaml](./segments/mcp-builder.yaml) | MCP builder baseline | Tool/server developers |
 
 ## Enterprise cost governance
 

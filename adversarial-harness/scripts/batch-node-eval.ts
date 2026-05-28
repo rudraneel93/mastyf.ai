@@ -106,6 +106,12 @@ function evaluateEntry(
 }
 
 function main() {
+  const filterIds = new Set(
+    (process.env['HARNESS_FILTER_IDS'] ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
   const policy = load(readFileSync(join(REPO, 'default-policy.yaml'), 'utf-8')) as PolicyConfig;
   const defaultEngine = new PolicyEngine(policy);
   const isolatedEngines = new Map<string, PolicyEngine>();
@@ -114,7 +120,7 @@ function main() {
     ...loadFixtures(join(REPO, 'corpus'), 'corpus'),
     ...loadFixtures(join(ROOT, 'fixtures', 'matrix'), 'matrix'),
     ...loadFixtures(join(ROOT, 'fixtures', 'custom-attacks'), 'custom'),
-  ];
+  ].filter((entry) => filterIds.size === 0 || filterIds.has(entry.id));
 
   const byId: Record<string, { action: string; rule: string; reason: string; blocked: boolean }> = {};
   for (const entry of fixtures) {
@@ -122,8 +128,21 @@ function main() {
   }
 
   mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, JSON.stringify({ timestamp: new Date().toISOString(), count: fixtures.length, byId }, null, 2));
-  console.log(JSON.stringify({ count: fixtures.length, out: OUT }));
+  writeFileSync(
+    OUT,
+    JSON.stringify(
+      {
+        timestamp: new Date().toISOString(),
+        count: fixtures.length,
+        filtered: filterIds.size > 0,
+        filterIds: [...filterIds],
+        byId,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(JSON.stringify({ count: fixtures.length, filtered: filterIds.size > 0, out: OUT }));
 }
 
 main();

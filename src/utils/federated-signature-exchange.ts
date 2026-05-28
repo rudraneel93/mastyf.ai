@@ -18,6 +18,11 @@ import {
   type BloomFilter,
 } from './bloom-filter.js';
 import { catalogFromFleetRows, type RemoteSignatureCatalog } from './federated-signature-exchange-catalog.js';
+import {
+  buildFederatedShareRecords,
+  type FederatedSignatureProvenance,
+  type CompatibilityContext,
+} from './federated-threat-intel-v2.js';
 
 export type { SignatureHint, RemoteSignatureCatalog } from './federated-signature-exchange-catalog.js';
 export { buildSignatureHints, catalogFromFleetRows } from './federated-signature-exchange-catalog.js';
@@ -176,4 +181,12 @@ export function aggregateLocalWithFleet(
   fleet: ThreatSignature[],
 ): ThreatSignature[] {
   return mergeThreatSignatures(local, fleet);
+}
+
+export function buildWeightedFleetHints(
+  signatures: ThreatSignature[],
+  provenanceById: Record<string, FederatedSignatureProvenance>,
+  ctx: CompatibilityContext,
+): ReturnType<typeof buildFederatedShareRecords> {
+  return buildFederatedShareRecords(signatures, provenanceById, ctx);
 }

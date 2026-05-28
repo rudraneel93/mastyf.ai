@@ -63,6 +63,22 @@ describe('policy-engine strategies', () => {
     expect(['request-prompt-injection', 'semantic-prompt-injection']).toContain(decision.rule);
   });
 
+  it('blocks escaped null-byte payload markers in arguments', () => {
+    const decision = engine.evaluate(
+      ctx({ arguments: { query: '.*\\x00.*' } }),
+    );
+    expect(decision.action).toBe('block');
+    expect(decision.rule).toBe('resource-null-byte');
+  });
+
+  it('blocks dual instruction prompt split by comment syntax', () => {
+    const decision = engine.evaluate(
+      ctx({ arguments: { query: 'what is the capital of France? // what is the capital of Germany?' } }),
+    );
+    expect(decision.action).toBe('block');
+    expect(decision.rule).toBe('semantic-prompt-injection');
+  });
+
   it('yaml-rules strategy denies listed tools', () => {
     const decision = engine.evaluate(ctx({ toolName: 'execute_command' }));
     expect(decision.action).toBe('block');

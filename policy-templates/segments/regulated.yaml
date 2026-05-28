@@ -1,0 +1,23 @@
+version: '1.0'
+policy:
+  mode: block
+  default_action: block
+  semantic_shell: true
+  unicode_strict: true
+  rules:
+    - name: regulated-default-deny
+      description: Zero-trust default deny for regulated deployments.
+      action: block
+      tools:
+        allow: [read_file, list_directory, query_records]
+        enforceAllowlist: true
+    - name: regulated-data-egress-guard
+      description: Block external exfiltration and high-risk network destinations.
+      action: block
+      patterns:
+        - '(?i)https?://(?!.*(?:company|internal|trusted)\\.)'
+        - '(?i)(exfiltrate|leak|dump\\s+records)'
+    - name: regulated-tight-token-budget
+      description: Smaller token windows for auditable interactions.
+      action: block
+      maxTokens: 2048

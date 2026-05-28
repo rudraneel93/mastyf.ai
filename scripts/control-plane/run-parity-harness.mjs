@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { compareParity, extractBlocked, validateFixtureCount } from '../../src/control-plane/parity-harness.js';
 
 const LEGACY_PROXY_URL = process.env.LEGACY_PROXY_URL || 'http://localhost:4000';
 const DATA_PLANE_URL = process.env.DATA_PLANE_URL || 'http://localhost:9091';
@@ -9,9 +10,7 @@ const FIXTURE_PATH = process.env.PARITY_FIXTURES_PATH
   || path.resolve(process.cwd(), 'tests/fixtures/control-plane-parity-fixtures.json');
 
 const fixtures = JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'));
-if (!Array.isArray(fixtures) || fixtures.length < 20 || fixtures.length > 50) {
-  throw new Error('Parity harness requires 20-50 fixtures');
-}
+validateFixtureCount(fixtures);
 
 function toPayload(fx) {
   return {
@@ -23,13 +22,6 @@ function toPayload(fx) {
       arguments: fx.arguments || {},
     },
   };
-}
-
-function extractBlocked(responseBody, statusCode) {
-  if (statusCode >= 400) return true;
-  if (!responseBody || typeof responseBody !== 'object') return false;
-  const message = String(responseBody?.error?.message || '');
-  return /blocked|denied/i.test(message);
 }
 
 async function runTarget(baseUrl, payload) {
@@ -76,35 +68,13 @@ async function main() {
     assertReachable(DATA_PLANE_URL),
   ]);
 
-  const mismatches = [];
-  let compared = 0;
-
-  for (const fx of fixtures) {
-    const payload = toPayload(fx);
-    const [legacy, dataPlane] = await Promise.all([
-      runTarget(LEGACY_PROXY_URL, payload),
-      runTarget(DATA_PLANE_URL, payload),
-    ]);
-    compared += 1;
-    if (legacy.blocked !== dataPlane.blocked) {
-      mismatches.push({
-        id: fx.id,
-        toolName: fx.toolName,
-        legacyBlocked: legacy.blocked,
-        dataPlaneBlocked: dataPlane.blocked,
-        legacyStatus: legacy.status,
-        dataPlaneStatus: dataPlane.status,
-      });
-    }
-  }
-
-  const summary = {
-    fixtures: fixtures.length,
-    compared,
-    mismatches: mismatches.length,
-    legacyProxy: LEGACY_PROXY_URL,
-    dataPlane: DATA_PLANE_URL,
-  };
+  const { summary, mismatches } = await compareParity(
+    fixtures,
+    (fx) => runTarget(LEGACY_PROXY_URL, toPayload(fx)),
+    (fx) => runTarget(DATA_PLANE_URL, toPayload(fx)),
+    LEGACY_PROXY_URL,
+    DATA_PLANE_URL,
+  );
 
   if (mismatches.length > 0) {
     console.error(JSON.stringify({ summary, mismatches }, null, 2));

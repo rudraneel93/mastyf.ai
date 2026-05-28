@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-# Named volumes mount as root; app runs as appuser (uid 1001). K8s uses fsGroup instead.
-mkdir -p /data
-chown -R appuser:appgroup /data
-exec su-exec appuser:appgroup "$@"
+# Container already runs as uid 1001 (see Dockerfile USER).
+# Avoid su-exec/setgroups in restricted runtimes.
+mkdir -p /data 2>/dev/null || true
+exec "$@"

@@ -147,7 +147,7 @@
     "benchmark:proxy-tiers": "tsx benchmarks/proxy-slo-by-concurrency.ts",
     "benchmark:multi-proxy": "tsx benchmarks/concurrent-multi-proxy.ts",
     "benchmark:proxy-slo": "tsx benchmarks/run.ts",
-    "parity:control-data-plane": "node scripts/control-plane/run-parity-harness.mjs",
+    "parity:control-data-plane": "tsx scripts/control-plane/run-parity-harness.mjs",
     "soak:data-plane": "node scripts/control-plane/run-data-plane-soak.mjs",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",

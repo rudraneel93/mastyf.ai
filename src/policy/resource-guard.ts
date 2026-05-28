@@ -32,14 +32,19 @@ function jsonDepth(value: unknown, depth = 0): number {
 export function evaluateResourceGuard(
   ctx: CallContext,
   argsStr: string,
+  rawArguments?: Record<string, unknown> | null,
 ): PolicyDecision | null {
+  const hasEscapedNullByte = (value: string): boolean =>
+    /\\x00|\\u0000|%00|(?:^|[^a-z0-9])x00(?:[^a-z0-9]|$)/i.test(value);
   const isBenignNullByteLeaf = (value: string): boolean =>
     /^null byte\s*\x00\s*test$/i.test(value.trim());
 
   // ADV-003: null-byte injection (raw leaves; JSON.stringify escapes \0 to \\u0000)
-  const nullLeaves = walkStringLeaves(ctx.arguments ?? {}).filter(
-    (leaf) => leaf.value.includes('\0') || /\x00/.test(leaf.value),
-  );
+  const nullLeaves = [
+    ...walkStringLeaves(ctx.arguments ?? {}),
+    ...walkStringLeaves(rawArguments ?? {}),
+  ].filter((leaf) =>
+    leaf.value.includes('\0') || /\x00/.test(leaf.value) || hasEscapedNullByte(leaf.value));
   const hasMaliciousNull = nullLeaves.some((leaf) => !isBenignNullByteLeaf(leaf.value));
   if (hasMaliciousNull) {
     return {

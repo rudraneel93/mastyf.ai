@@ -1,0 +1,24 @@
+version: '1.0'
+policy:
+  mode: block
+  default_action: pass
+  semantic_shell: true
+  unicode_strict: true
+  rules:
+    - name: startup-core-allowlist
+      description: Keep startup velocity while protecting common dangerous paths.
+      action: block
+      tools:
+        allow: [read_file, list_directory, search_files, fetch_url, github_search]
+        enforceAllowlist: false
+    - name: startup-fast-canary-rate
+      description: Moderate throttling to allow quick iteration with guardrails.
+      action: block
+      maxCallsPerMinute: 90
+      maxCallsPer10Seconds: 30
+    - name: startup-prompt-injection
+      description: Baseline prompt injection blocking for tool arguments.
+      action: block
+      patterns:
+        - '(?i)ignore\\s+all\\s+previous\\s+instructions'
+        - '(?i)system\\s*:\\s*you\\s+are'

@@ -74,6 +74,7 @@ const MULTILINE_INJECTION_PATTERNS: RegExp[] = [
   /(?:ignore|disregard).{0,120}?(?:instructions|rules|guidelines|directives)/ims,
   /(?:system|assistant)[\s\S]{0,40}:\s*you\s+are/ims,
   /<\|(?:endoftext|im_start|im_end)\|>/i,
+  /\bwhat\s+is\s+the\s+capital\s+of\s+[^?]{1,80}\?\s*\/\/\s*what\s+is\s+the\s+capital\s+of\b/i,
 ];
 
 /** Header / identity spoofing in tool arguments (rate-limit bucket evasion). */

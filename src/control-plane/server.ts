@@ -9,6 +9,11 @@ import {
   type CompiledRules,
 } from './compiled-rules.js';
 
+export interface ControlPlaneServerOptions {
+  port?: number;
+  policyPath?: string;
+}
+
 function resolvePolicyPath(explicitPath?: string): string {
   if (explicitPath) return explicitPath;
   const fromEnv = process.env['CONTROL_PLANE_POLICY_PATH']
@@ -17,12 +22,8 @@ function resolvePolicyPath(explicitPath?: string): string {
   return path.resolve(process.cwd(), 'default-policy.yaml');
 }
 
-export function startControlPlaneServer(options?: {
-  port?: number;
-  policyPath?: string;
-}): void {
+export function createControlPlaneApp(options?: ControlPlaneServerOptions): express.Express {
   const app = express();
-  const port = options?.port ?? parseInt(process.env['CONTROL_PLANE_PORT'] || '3000', 10);
   const policyPath = resolvePolicyPath(options?.policyPath);
 
   let cachedRules: CompiledRules | null = null;
@@ -76,6 +77,13 @@ export function startControlPlaneServer(options?: {
     }
   });
 
+  return app;
+}
+
+export function startControlPlaneServer(options?: ControlPlaneServerOptions): void {
+  const app = createControlPlaneApp(options);
+  const port = options?.port ?? parseInt(process.env['CONTROL_PLANE_PORT'] || '3000', 10);
+  const policyPath = resolvePolicyPath(options?.policyPath);
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(

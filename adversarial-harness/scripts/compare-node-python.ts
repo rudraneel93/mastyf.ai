@@ -12,6 +12,7 @@ const ROOT = join(__dir, '..');
 const REPO = join(__dir, '../..');
 const REPORT = join(ROOT, 'reports', 'parity-report.json');
 const NODE_BATCH = join(ROOT, 'reports', 'node-batch-by-id.json');
+const TRACE = join(ROOT, 'reports', 'parity-mismatch-trace.json');
 
 interface FixtureEntry {
   id: string;
@@ -53,10 +54,22 @@ function loadFixtures(dir: string, source: string): FixtureEntry[] {
 }
 
 function main() {
+  const filterIds = new Set(
+    (process.env['HARNESS_FILTER_IDS'] ?? '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+  const filtered = filterIds.size > 0;
+
   const nodeBatch = spawnSync(
     'pnpm',
     ['exec', 'tsx', 'adversarial-harness/scripts/batch-node-eval.ts'],
-    { cwd: REPO, encoding: 'utf-8' },
+    {
+      cwd: REPO,
+      encoding: 'utf-8',
+      env: { ...process.env, HARNESS_FILTER_IDS: [...filterIds].join(',') },
+    },
   );
   if (nodeBatch.status !== 0) {
     console.error(nodeBatch.stderr || nodeBatch.stdout);
@@ -67,7 +80,7 @@ function main() {
     ...loadFixtures(join(REPO, 'corpus'), 'corpus'),
     ...loadFixtures(join(ROOT, 'fixtures', 'matrix'), 'matrix'),
     ...loadFixtures(join(ROOT, 'fixtures', 'custom-attacks'), 'custom'),
-  ];
+  ].filter((f) => !filtered || filterIds.has(f.id));
 
   const pyInput = fixtures.map((f) => ({ ...f, id: f.id }));
 
@@ -100,13 +113,34 @@ function main() {
     nodeRule?: string;
   }[] = [];
   let agree = 0;
+  let firstMismatchLogged = false;
+
+  const flushTrace = (stage: string) => {
+    mkdirSync(dirname(TRACE), { recursive: true });
+    writeFileSync(
+      TRACE,
+      JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          stage,
+          filtered,
+          filterIds: [...filterIds],
+          totalFixtures: fixtures.length,
+          agreement: agree,
+          mismatches,
+        },
+        null,
+        2,
+      ),
+    );
+  };
 
   for (const f of fixtures) {
     const nid = f.id;
     const nb = nodeOut.byId[nid]?.blocked;
     const pb = pyOut.byId[nid]?.blocked;
     if (nb === undefined || pb === undefined) {
-      mismatches.push({
+      const mismatch = {
         id: nid,
         source: f.source,
         expected: f.expected,
@@ -114,12 +148,18 @@ function main() {
         pythonBlocked: pb ?? false,
         nodeAction: nb === undefined ? 'missing' : nodeOut.byId[nid]?.action,
         pythonAction: pb === undefined ? 'missing' : pyOut.byId[nid]?.action,
-      });
+      };
+      mismatches.push(mismatch);
+      if (!firstMismatchLogged) {
+        firstMismatchLogged = true;
+        console.error(`PARITY_MISMATCH_FIRST ${JSON.stringify(mismatch)}`);
+      }
+      flushTrace('missing-decision');
       continue;
     }
     if (nb === pb) agree++;
     else {
-      mismatches.push({
+      const mismatch = {
         id: nid,
         source: f.source,
         expected: f.expected,
@@ -129,7 +169,13 @@ function main() {
         pythonAction: pyOut.byId[nid]?.action,
         nodeRule: nodeOut.byId[nid]?.rule,
         pythonRule: pyOut.byId[nid]?.rule,
-      });
+      };
+      mismatches.push(mismatch);
+      if (!firstMismatchLogged) {
+        firstMismatchLogged = true;
+        console.error(`PARITY_MISMATCH_FIRST ${JSON.stringify(mismatch)}`);
+      }
+      flushTrace('decision-mismatch');
     }
   }
 
@@ -140,6 +186,8 @@ function main() {
   const agreementRate = fixtures.length ? agree / fixtures.length : 1;
   const report = {
     timestamp: new Date().toISOString(),
+    filtered,
+    filterIds: [...filterIds],
     total: fixtures.length,
     corpusTotal: corpusFixtures.length,
     agreement: agree,
@@ -155,6 +203,7 @@ function main() {
 
   mkdirSync(dirname(REPORT), { recursive: true });
   writeFileSync(REPORT, JSON.stringify(report, null, 2));
+  flushTrace('completed');
   console.log(
     `Parity: ${agree}/${fixtures.length} (${(report.agreementRate * 100).toFixed(1)}%) mismatches=${mismatches.length}`,
   );

@@ -27,6 +27,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=appuser:appgroup /app/dist/ ./dist/
 COPY --from=builder --chown=appuser:appgroup /app/node_modules/ ./node_modules/
+COPY --from=builder --chown=appuser:appgroup /app/packages/ ./packages/
 COPY --from=builder --chown=appuser:appgroup /app/package.json ./
 COPY --from=builder --chown=appuser:appgroup /app/default-policy.yaml ./default-policy.yaml
 COPY --chown=appuser:appgroup docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
