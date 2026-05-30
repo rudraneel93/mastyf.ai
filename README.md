@@ -58,6 +58,236 @@ You stay in control: Guardian does not silently change your rules unless you app
 
 ---
 
+## Architecture
+
+This section shows how MCP Guardian is wired together: what runs where, how a tool call flows through governance, and how optional Pro pipelines connect to the proxy.
+
+**In this section:** [System overview](#system-overview) · [Tool call path](#tool-call-path-tools_call) · [Transports](#transports) · [Agentic AI](#agentic-ai-integration) · [Dashboard](#dashboard-and-observability) · [Pro pipelines](#pro-pipeline-architecture) · [Learning loop](#continuous-improvement-loop)
+
+### System overview
+
+When you run `pnpm dashboard:proxy`, one Node process typically hosts the **policy proxy**, the **dashboard API**, and (optionally) **agentic services**. All components share the same audit database (`MCP_GUARDIAN_DB_PATH`, default `~/.mcp-guardian/history.db`).
+
+```mermaid
+flowchart TB
+  subgraph clients [AI clients]
+    Cursor[Cursor / Cline / Claude]
+  end
+
+  subgraph guardian [MCP Guardian process]
+    Proxy[Proxy layer\nstdio HTTP SSE WS streamable]
+  Policy[PolicyEngine\nYAML + hot reload]
+  Agentic[Agentic container\noptional hooks]
+  DashboardAPI[Dashboard REST + WebSocket]
+  end
+
+  subgraph storage [Persistence]
+    SQLite[(history.db)]
+    SIEM[SIEM exporters\noptional]
+  end
+
+  Upstream[Upstream MCP servers\nfilesystem GitHub etc]
+
+  Cursor --> Proxy
+  Proxy --> Policy
+  Proxy --> Agentic
+  Policy --> Proxy
+  Agentic --> Proxy
+  Proxy --> Upstream
+  Upstream --> Proxy
+  Proxy --> SQLite
+  Proxy --> SIEM
+  DashboardAPI --> SQLite
+  clients -.-> DashboardAPI
+```
+
+| Component | Role | Main code |
+|-----------|------|-----------|
+| **Proxy layer** | Intercepts JSON-RPC; enforces policy on every `tools/call` | [`src/proxy/`](src/proxy/) |
+| **Policy engine** | Evaluates YAML rules, rate limits, RBAC, patterns | [`src/policy/`](src/policy/) |
+| **History DB** | Stores allow/block audit, tokens, cost | [`src/database/history-db.ts`](src/database/history-db.ts) |
+| **Dashboard** | Local UI + REST API over the same DB | [`deploy/dashboard-spa/`](deploy/dashboard-spa/), [`src/utils/dashboard-server.ts`](src/utils/dashboard-server.ts) |
+| **Agentic** | Smart features (injection scan, policy gen, trust, etc.) | [`src/agentic/`](src/agentic/) |
+
+Enterprise deployments may add **Redis** (rate limits, DPoP, circuit-breaker sync) and **PostgreSQL** instead of SQLite — see [ENTERPRISE_DEPLOYMENT.md](docs/ENTERPRISE_DEPLOYMENT.md).
+
+### Tool call path (`tools/call`)
+
+Every dangerous decision happens **before** the real MCP server runs. If Guardian blocks a call, the upstream tool never receives it.
+
+```mermaid
+sequenceDiagram
+  participant Client as AI client
+  participant Transport as Proxy transport
+  participant PreGuard as Pre-forward guard
+  participant Policy as PolicyEngine
+  participant Semantic as Semantic gate
+  participant Upstream as Upstream MCP
+  participant Audit as Audit queue
+  participant SIEM as SIEM log
+
+  Client->>Transport: tools/call JSON-RPC
+  Transport->>PreGuard: checkExpandedPayload + agentic hooks
+  alt blocked at pre-guard
+    PreGuard-->>Client: JSON-RPC error -32001
+    PreGuard->>Audit: denied record
+    PreGuard->>SIEM: tool_blocked
+  else allowed
+    PreGuard->>Policy: evaluateAsync context
+    alt policy block
+      Policy-->>Client: JSON-RPC error
+      Policy->>Audit: denied record
+      Policy->>SIEM: tool_blocked
+    else policy pass
+      Policy->>Semantic: sync semantic request gate
+      alt semantic block
+        Semantic-->>Client: JSON-RPC error
+        Semantic->>Audit: denied record
+        Semantic->>SIEM: tool_blocked
+      else forward
+        Semantic->>Upstream: forward request
+        Upstream-->>Transport: tool result
+        Transport->>Transport: response DLP gate
+        Transport-->>Client: JSON-RPC result
+        Transport->>Audit: allow record
+      end
+    end
+  end
+```
+
+**Integration details:**
+
+1. **Pre-forward guard** ([`src/proxy/tool-call-pre-guard.ts`](src/proxy/tool-call-pre-guard.ts)) — caps expanded argument size and runs agentic pre-hooks (prompt injection, etc.) on all transports.
+2. **Policy** ([`src/policy/policy-engine.ts`](src/policy/policy-engine.ts)) — your YAML rules; rate-limit counters survive hot-reload via [`src/policy/rate-limit-store.ts`](src/policy/rate-limit-store.ts).
+3. **Semantic gate** ([`src/proxy/proxy-post-policy-gates.ts`](src/proxy/proxy-post-policy-gates.ts)) — optional LLM/heuristic check on arguments before forward.
+4. **Audit** — [`persistCallRecord`](src/utils/call-record-cost.ts) → async [`audit-write-queue`](src/database/audit-write-queue.ts) → SQLite; blocks also emit [`StructuredLogger.logBlocked`](src/utils/structured-logger.ts) for SIEM.
+
+### Transports
+
+Guardian implements the same governance stack on every MCP transport your IDE might use:
+
+| Transport | Entry module | `tools/call` governance |
+|-----------|--------------|-------------------------|
+| **stdio** | [`src/proxy/proxy-server.ts`](src/proxy/proxy-server.ts) | Full pipeline (default for wrapped configs) |
+| **HTTP** | [`src/proxy/http-proxy-server.ts`](src/proxy/http-proxy-server.ts) | Full + pre-forward guard |
+| **SSE** | [`src/proxy/sse-proxy-server.ts`](src/proxy/sse-proxy-server.ts) | Full + pre-forward guard |
+| **WebSocket** | [`src/proxy/websocket-proxy-server.ts`](src/proxy/websocket-proxy-server.ts) | Full + pre-forward guard |
+| **Streamable HTTP** | [`src/proxy/streamable-http-proxy-server.ts`](src/proxy/streamable-http-proxy-server.ts) | Full + pre-forward guard |
+
+Run `mcp-guardian onboard` so client configs point at Guardian-wrapped servers. If an IDE connects to an MCP server **around** Guardian (common with raw SSE URLs), calls are **untracked** — metrics and logs will show `sse_untracked`.
+
+### Agentic AI integration
+
+Agentic features are optional modules loaded at boot ([`src/container.ts`](src/container.ts)). They do not replace your YAML policy; they add observation, scoring, and recommendations.
+
+```mermaid
+flowchart TB
+  subgraph mcp [MCP surface]
+    Tools[MCP tools in src/index.ts]
+  end
+
+  subgraph container [DI container]
+    Core[agentic/core.ts\npipeline scheduler telemetry]
+    Features[Feature modules\npolicy gen injection trust mesh]
+  end
+
+  subgraph runtime [Runtime integration]
+    Hooks[proxy-integration.ts\npre/post call hooks]
+    PreGuard[tool-call-pre-guard.ts]
+  end
+
+  subgraph ui [Dashboard]
+    API[agentic-dashboard-summary.ts]
+    Workspace[Agentic AI workspace SPA]
+  end
+
+  DB[(agentic tables\nmigration 011)]
+
+  Tools --> Core
+  Core --> Features
+  PreGuard --> Hooks
+  Hooks --> Features
+  API --> DB
+  Workspace --> API
+  Hooks --> DB
+```
+
+| Integration point | What happens |
+|-------------------|--------------|
+| **Every `tools/call`** | [`runAgenticPreForwardHooks`](src/agentic/proxy-integration.ts) can block or sanitize arguments when agentic mode is on |
+| **MCP tools** | ~35 agentic tools registered in [`src/index.ts`](src/index.ts) for automation and dashboard actions |
+| **Dashboard** | **Agentic AI** workspace reads [`/api/agentic/*`](src/utils/agentic-dashboard-summary.ts) summaries |
+| **Database** | Agentic state in [`011-agentic-tables.sql`](src/database/migrations/011-agentic-tables.sql) |
+
+Module-level detail: [docs/AGENTIC_ARCHITECTURE.md](docs/AGENTIC_ARCHITECTURE.md) · Feature guide: [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md).
+
+### Dashboard and observability
+
+```mermaid
+flowchart LR
+  Proxy[Proxy writes] --> DB[(history.db)]
+  DB --> REST[Dashboard REST API]
+  REST --> SPA[Next.js SPA\nProtection Activity Agentic]
+  REST --> WS[WebSocket push\nGUARDIAN_WS_ENABLED]
+  Proxy --> Prom[Prometheus metrics\noptional]
+  Proxy --> SIEM[SIEM exporters\nMCP_GUARDIAN_SIEM_ENABLED]
+```
+
+The dashboard is not a separate database — it reads the same `call_records` the proxy writes. Set `MCP_GUARDIAN_DB_PATH` consistently when running `pnpm real-life:filesystem` or other tests so charts match proxy traffic.
+
+### Pro pipeline architecture
+
+These Pro workflows run **alongside** the live proxy. They consume audit data, swarm reports, and LLM output to improve detection — they do not sit in the hot path of every tool call.
+
+#### Security Swarm
+
+Automated red-team loop: generate attacks, run the harness, detect bypasses, feed learning.
+
+![Security Swarm architecture — scout, harness, bypass detection, and learning feedback](docs/assets/security-swarm-architecture.png)
+
+- **What it does:** Runs scripted steps (build, corpus eval, parity, harness) and records bypasses when policy allows an attack that should be blocked.
+- **How it connects:** Reads/writes under `reports/security-swarm/`; bypasses and proposals can inform Threat Lab and runtime attack-learning.
+- **Run:** `pnpm security-swarm` (Pro license in production).
+
+#### Threat Lab (LLM discovery)
+
+Human-reviewed LLM proposals for new attack fixtures and policy ideas.
+
+![Threat Lab architecture — Ollama discovery, validation, and candidate manifest](docs/assets/llm-threat-discovery-architecture.png)
+
+- **What it does:** Collects signals (bypasses, semantic TPs, ThreatIntel), asks a local LLM for new corpus candidates, validates them, writes `threat-lab-candidates.json` for **you to accept**.
+- **How it connects:** Outputs feed the adversarial harness and optional policy-applier after review — nothing is applied silently.
+- **Run:** `pnpm security-swarm:threat-lab` (requires Ollama). See [THREAT_LAB.md](docs/THREAT_LAB.md).
+
+#### Auto Threat Research
+
+Background LLM research when the proxy blocks suspicious traffic; writes validated `adv-*.json` fixtures.
+
+![Auto Threat Research architecture — queued detections to auto corpus fixtures](docs/assets/auto-threat-research-architecture.png)
+
+- **What it does:** Debounces block events, classifies attack types, writes harness fixtures when validation passes (dedupe + rate caps).
+- **How it connects:** Uses the same auto-corpus writer as Threat Lab when both `GUARDIAN_THREAT_RESEARCH_AUTO` and `SWARM_THREAT_RESEARCH_AUTO` are enabled.
+- **Run:** Enable env flags on the proxy host; or trigger from dashboard **Threat Discovery**.
+
+### Continuous improvement loop
+
+```mermaid
+flowchart LR
+  Live[Live proxy blocks] --> Audit[(history.db)]
+  Live --> Learn[Attack learning]
+  Swarm[Security Swarm] --> Bypasses[bypasses.json]
+  Bypasses --> ThreatLab[Threat Lab]
+  ThreatLab --> Harness[adversarial harness]
+  AutoResearch[Auto Threat Research] --> Fixtures[adv fixtures]
+  Fixtures --> Harness
+  Harness --> Policy[Policy YAML updates]
+  Policy --> Live
+```
+
+Deep dive: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
 ## Features explained
 
 Below is what each major capability does, in plain language.
@@ -197,7 +427,7 @@ These are **smart assistants inside Guardian** that watch, score, and recommend 
 
 **Why it matters:** Your policy is only as strong as the attacks you have tested against; the swarm expands that set continuously.
 
-Run: `pnpm security-swarm` (license required in production). See [docs](docs/) and diagram in `docs/assets/security-swarm-architecture.png`.
+Run: `pnpm security-swarm` (license required in production). Architecture diagram: [Architecture § Pro pipeline](#pro-pipeline-architecture) above.
 
 ---
 

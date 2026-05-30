@@ -2,7 +2,7 @@
 
 Threat Lab uses local Ollama (`LlmAssistant`) to discover novel attack classes, propose corpus fixtures, and suggest YAML policy rules for Security Swarm training.
 
-![Threat Lab Architecture](../docs/assets/llm-threat-discovery-architecture.png)
+![Threat Lab Architecture](./assets/llm-threat-discovery-architecture.png)
 
 ## Overview
 
@@ -99,7 +99,7 @@ Target: ≥500 labeled rows before fine-tune is worthwhile. Export excludes cali
 
 ## Auto Threat Research (adv corpus loop)
 
-![Auto Threat Research Architecture](../docs/assets/auto-threat-research-architecture.png)
+![Auto Threat Research Architecture](./assets/auto-threat-research-architecture.png)
 
 When enabled, detections automatically flow through LLM research → taxonomy classification → validated `adv-NNN.json` writes under `adversarial-harness/fixtures/custom-attacks/` — **no dashboard accept step**. Policy rules are **not** auto-applied; only harness fixtures grow.
 
