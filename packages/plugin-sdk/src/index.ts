@@ -49,7 +49,7 @@ export function createDetectorPlugin(opts: CreatePluginOptions): DetectorPlugin 
   };
 }
 
-export const PLUGIN_SDK_VERSION = '4.0.0';
+export const PLUGIN_SDK_VERSION = '4.1.0';
 
 /** Build MTX v1 record JSON for threat mesh contribution from a plugin finding. */
 export function exportMtxRecord(params: {

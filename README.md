@@ -11,7 +11,21 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 4.0.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 4.1.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+
+### What's new in 4.1.0
+
+**Industry roadmap plan compliance** — runtime verification and dashboard wiring for all eleven fleet-wide modules (A1–C5, B1–B3):
+
+- **`guardian roadmap audit`** — CLI + `GET /api/agentic/plan-compliance/audit` verify every shipped module; exit 0 when production-ready
+- **Dashboard Agentic AI panels** — PlanCompliance, Reputation, ZeroTrust, FederatedLearning, Observatory mesh sync, SandboxWizard captured-traffic scorecard, ChainGraph (A1)
+- **Protection home strip** — roadmap compliance score on the main Protection tab with link to Agentic AI
+- **A1 ONNX graph path** — optional fleet chain classifier via `GUARDIAN_FLEET_GRAPH_ONNX_MODEL`
+- **B3 MPC-lite masking** — pairwise-masked federated gradients (`GUARDIAN_FEDERATED_MPC`)
+- **B2/B1 mesh relays** — observatory and reputation mesh publish/pull; dev stub via `GUARDIAN_OBSERVATORY_STUB`
+- **Docs & env** — `guardian roadmap *` commands documented; production env vars in `.env.example`
+
+Run `guardian roadmap audit --json` or open **Agentic AI → Overview** in the dashboard to confirm 100% compliance.
 
 ### What's new in 4.0.0
 
@@ -400,7 +414,7 @@ Below is what each major capability does, in plain language.
 
 ---
 
-## Agentic AI features (version 4.0)
+## Agentic AI features (version 4.1)
 
 These are **smart assistants inside Guardian** that watch, score, and recommend — they do not replace your policy unless you choose to apply a suggestion.
 

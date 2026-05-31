@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/cli",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "CLI binary for scanning MCP tool definitions",
   "type": "module",
   "bin": {

@@ -1,4 +1,4 @@
-# MCP Guardian — Agentic AI Features (v4.0.0)
+# MCP Guardian — Agentic AI Features (v4.1.0)
 
 MCP Guardian includes **10 core autonomous agentic features** plus the **industry-standard roadmap (11 features)** for fleet-wide MCP protection.
 

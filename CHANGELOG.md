@@ -2,6 +2,19 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [4.1.0] - 2026-05-31
+
+### Industry roadmap plan compliance (pass 7–8)
+
+- **Plan compliance audit** — runtime verification of all A1–C5 / B1–B3 modules (`plan-compliance-audit.ts`, `guardian roadmap audit`, `GET /api/agentic/plan-compliance/audit`)
+- **A1 ONNX graph inference** — optional hot-path classifier via `GUARDIAN_FLEET_GRAPH_ONNX_MODEL`
+- **B3 MPC-lite masking** — pairwise-masked gradient aggregation (`GUARDIAN_FEDERATED_MPC`)
+- **B2/B1 mesh relays** — observatory and reputation mesh publish/pull; cloud relay ingest with dev stub (`GUARDIAN_OBSERVATORY_STUB`)
+- **Dashboard panels** — PlanCompliance, Reputation, ZeroTrust, FederatedLearning, Observatory mesh sync, captured-traffic scorecard, Protection home roadmap strip (Agentic AI workspace)
+- **CLI utilities** — `guardian roadmap fleet-graph-train`, `federated-export|import`, `observatory-sync`, `reputation-sync`
+- **Migrations 016–019** — fleet alerts, twin observations, policy approvals, federated weights, web-of-trust, threat model reports
+- **Docs** — README, AGENTIC_QUICKSTART, AGENTIC_FEATURES, `.env.example` updated for audit CLI and production env vars
+
 ## [4.0.0] - 2026-05-30
 
 ### Industry Standard MCP Protection
@@ -39,15 +52,6 @@ All notable changes to MCP Guardian will be documented in this file.
 - **B2 Ecosystem Observatory** — bench/heartbeat/MTX ingest, cloud dashboard
 - **C4 Insurance Risk Quantification** — ALE modeling, underwriter PDF export
 - **B3 Federated Learning** — ε-DP delta exchange, optional ONNX, feature-flagged rollout (`GUARDIAN_FEDERATED_LEARNING=true`)
-
-### Industry-standard roadmap — compliance pass 7–8
-
-- **Plan compliance audit** — runtime verification of all A1–C5 / B1–B3 modules (`plan-compliance-audit.ts`, `guardian roadmap audit`, `GET /api/agentic/plan-compliance/audit`)
-- **A1 ONNX graph inference** — optional hot-path classifier via `GUARDIAN_FLEET_GRAPH_ONNX_MODEL`
-- **B3 MPC-lite masking** — pairwise-masked gradient aggregation (`GUARDIAN_FEDERATED_MPC`)
-- **B2/B1 mesh relays** — observatory and reputation mesh publish/pull; cloud relay ingest with dev stub (`GUARDIAN_OBSERVATORY_STUB`)
-- **Dashboard panels** — PlanCompliance, Reputation, ZeroTrust, FederatedLearning, Observatory mesh sync, captured-traffic scorecard (Agentic AI workspace)
-- **Migrations 016–019** — fleet alerts, twin observations, policy approvals, federated weights, web-of-trust, threat model reports
 
 ## [3.4.1] - 2026-05-30
 

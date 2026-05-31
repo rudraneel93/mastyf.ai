@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/server",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Security, cost, and health governance proxy for MCP infrastructure — three-layer detection engine (regex + schema + LLM), monorepo, corpus, CI/CD",
   "type": "module",
   "files": [
