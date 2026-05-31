@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Publish all @mcp-guardian packages in dependency order (v3.2.1+).
+# Publish all @mcp-guardian packages in dependency order.
+# ALWAYS publish the full chain — publishing @mcp-guardian/server alone leaves
+# workspace: deps on npm and breaks installs (manifest confusion / supply-chain alerts).
 # Requires: npm login (npm whoami) and OTP if 2FA enabled:
 #   NPM_OTP=123456 ./scripts/publish-npm-all.sh
 set -euo pipefail

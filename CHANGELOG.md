@@ -2,6 +2,15 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [4.1.1] - 2026-05-31
+
+### npm supply-chain / install hygiene
+
+- **Prepack** — rewrite `workspace:` deps to semver and strip lifecycle scripts (`postinstall`, `prepack`, etc.) from published `@mcp-guardian/server` tarballs
+- **Removed `postinstall`** — Windows SQLite guidance moved to `mcp-guardian doctor` / [docs/WINDOWS.md](docs/WINDOWS.md) (no code runs on `npm install`)
+- **Dependency overrides** — `qs>=6.15.2`, `turbo>=2.9.14` for known advisories
+- **Publish order** — document that `@mcp-guardian/core` and `@mcp-guardian/plugin-sdk` must publish before `@mcp-guardian/server`
+
 ## [4.1.0] - 2026-05-31
 
 ### Industry roadmap plan compliance (pass 7–8)

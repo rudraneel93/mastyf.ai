@@ -56,6 +56,31 @@ MCP Guardian's security posture is modeled against the STRIDE framework for each
 | Agent tricked into calling dangerous tools | Default policy denies execute_command, bash, sh, eval, exec |
 | Missing authentication on MCP servers | OAuth 2.1/OIDC JWT validation with RBAC (scopes, client IDs) |
 
+## npm install / supply-chain scanners
+
+Third-party scanners (Socket, npm audit UI, Snyk) may flag `@mcp-guardian/server` as follows. This is expected for a **network security proxy**:
+
+| Alert | Why it appears | Mitigation in 4.1.1+ |
+|---|---|---|
+| **Install scripts** | Older tarballs shipped `postinstall` / `prepack` in `package.json` | Lifecycle scripts stripped at `prepack`; no code runs on `npm install` |
+| **Manifest confusion** | 4.1.0 was published with unresolved `workspace:` deps and without `@mcp-guardian/core@4.1.x` | Publish full chain via `./scripts/publish-npm-all.sh`; deps rewritten to `^4.1.1` |
+| **Network access** | Proxy, CVE lookups (OSV/NVD), optional cloud observatory | Required by design — see threat model above |
+| **Shell access** | Policy engine detects shell injection; optional subprocess for MCP stdio servers | Required by design — does not execute on install |
+| **Dependency CVEs** | Transitive deps (e.g. `qs`, `turbo` in dev/build) | `pnpm.overrides` pin patched versions; run `pnpm audit` before release |
+
+Install only from npm:
+
+```bash
+npm install @mcp-guardian/server@latest
+```
+
+Verify tarball before publish (maintainers):
+
+```bash
+npm pack --dry-run && tar -xOf mcp-guardian-server-*.tgz package/package.json | jq '.scripts,.dependencies["@mcp-guardian/core"]'
+# Expect: scripts absent or empty; core dep "^4.1.1" not "workspace:..."
+```
+
 ## Supported Versions
 
 | Version | Status | Security Updates |

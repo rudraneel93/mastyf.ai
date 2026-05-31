@@ -11,7 +11,15 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 4.1.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 4.1.1** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+
+### What's new in 4.1.1
+
+**npm install hygiene** — fixes supply-chain scanner findings from 4.1.0:
+
+- Published tarballs no longer include `postinstall` or other lifecycle scripts
+- `workspace:` dependencies are rewritten to semver (`^4.1.1`) at pack time
+- Publish **all** packages via `./scripts/publish-npm-all.sh` (core → plugin-sdk → server → cli)
 
 ### What's new in 4.1.0
 
