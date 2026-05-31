@@ -11,11 +11,27 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 3.4.1** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 4.0.0** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
 
-### What's new in 3.4.1
+### What's new in 4.0.0
 
-Production hardening from the code review remediation: JWKS auto-refresh, payload limits on all MCP transports, rate limits that survive policy hot-reload, audit retention and optional field encryption, SIEM events on every block path, Redis circuit-breaker sync, and graceful shutdown draining.
+**Industry-standard MCP protection** — Guardian moves from per-call filtering to fleet-wide, cross-agent security:
+
+- **MTX v1** — open threat exchange format (`@mcp-guardian/mtx`) + cloud hub
+- **Guardian Certified MCP** — HMAC attestation, persistent registry, verification API
+- **Multi-step attack chains** — collusion detector + session-chain graph with proxy enforcement
+- **Capability graph & intent binding** — tool/resource graph and session intent allowlists
+- **Agent reputation ledger** — persistent scores with proxy enforcement
+- **Dynamic sandbox tiers** — shadow / redact / allow with RL-ready persistence
+- **Protocol fuzzer** — expanded corpus with real block validation and cert gates
+- **Policy simulator** — `/api/policy/simulate` + `ab_test_policy` MCP tool
+- **Incident playbooks & AI investigator** — webhook/isolate executors; Threat Lab–linked investigations
+- **Compliance evidence runner** — live policy + audit wired to SOC2/HIPAA/PCI/FedRAMP/ISO mappings
+- **guardian-bench** — `mcp-guardian bench` CLI + public leaderboard
+
+See [CHANGELOG.md](CHANGELOG.md) for 3.4.1 production hardening (JWKS refresh, payload limits, SIEM on all block paths, audit retention).
+
+**Roadmap (planned):** Cross-MCP causal attack chains, digital twin policy sandbox, agent behavioral biometrics, decentralized reputation network, federated threat detection, and more — [docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md).
 
 ---
 
@@ -216,10 +232,11 @@ flowchart TB
 |-------------------|--------------|
 | **Every `tools/call`** | [`runAgenticPreForwardHooks`](src/agentic/proxy-integration.ts) can block or sanitize arguments when agentic mode is on |
 | **MCP tools** | ~35 agentic tools registered in [`src/index.ts`](src/index.ts) for automation and dashboard actions |
+| **Modules** | 40+ agentic modules in [`src/agentic/`](src/agentic/) (prediction, policy-gen, mesh, collusion, reputation, etc.) |
 | **Dashboard** | **Agentic AI** workspace reads [`/api/agentic/*`](src/utils/agentic-dashboard-summary.ts) summaries |
 | **Database** | Agentic state in [`011-agentic-tables.sql`](src/database/migrations/011-agentic-tables.sql) |
 
-Module-level detail: [docs/AGENTIC_ARCHITECTURE.md](docs/AGENTIC_ARCHITECTURE.md) · Feature guide: [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md).
+Module-level detail: [docs/AGENTIC_ARCHITECTURE.md](docs/AGENTIC_ARCHITECTURE.md) · Shipped features: [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md) · **Roadmap:** [docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md).
 
 ### Dashboard and observability
 
@@ -372,24 +389,50 @@ Below is what each major capability does, in plain language.
 
 ---
 
-## Agentic AI features (version 3.4)
+## Agentic AI features (version 4.0)
 
 These are **smart assistants inside Guardian** that watch, score, and recommend — they do not replace your policy unless you choose to apply a suggestion.
+
+### Shipped today
 
 | Feature | What it does for you |
 |--------|----------------------|
 | **Threat prediction** | Scores how risky each MCP server is and suggests hardening before something breaks. |
 | **Policy generation** | Watches normal tool use, then drafts a tight “only what you actually need” policy you can review. |
-| **Prompt injection detection** | Scans tool arguments for text meant to hijack another AI (hidden instructions, role tricks, etc.). |
-| **Threat mesh** | Optionally shares anonymized attack patterns with other deployments — never raw payloads. |
-| **Honeypots** | Deploys fake decoy servers; if something probes them, you know you have unwanted attention. |
-| **Supply chain checks** | Verifies publishers, flags dependency confusion and typo-squat names, can export a software bill of materials. |
-| **Compliance mapping** | Maps your posture to frameworks like SOC 2, HIPAA, PCI-DSS, FedRAMP, and ISO 27001 with scores and gaps. |
-| **Drift detection** | Notices when a server’s tools or behavior change unexpectedly (possible compromise or silent update). |
-| **Red team engine** | Runs curated and mutated attacks against your setup so you see what might still get through. |
-| **Trust protocol** | Lets two AI agents negotiate limited, time-boxed trust instead of sharing full access. |
+| **Prompt injection detection** | Scans tool arguments for text meant to hijack another AI (heuristic + optional LLM). |
+| **Threat mesh (MTX)** | Opt-in anonymized attack-pattern sharing; `@mcp-guardian/mtx` open exchange format. |
+| **Honeypots** | Deploys fake decoy servers; probes trigger alerts. |
+| **Supply chain checks** | Publisher verification, dependency confusion, typo-squat detection, SBOM export. |
+| **Compliance mapping** | Maps posture to SOC 2, HIPAA, PCI-DSS, FedRAMP, ISO 27001 with evidence runner. |
+| **Drift detection** | Notices when a server’s tools or behavior change unexpectedly. |
+| **Red team & protocol fuzzer** | Curated and mutated attacks; expanded fuzz corpus with cert gates. |
+| **Trust protocol & Guardian score** | Agent-to-agent negotiation plus local trust scoring. |
+| **Collusion & attack chains** | Multi-step pattern detection across agents/tools (session-chain graph). |
+| **Capability graph & intent binding** | Maps tool/resource relationships; session intent allowlists. |
+| **Agent reputation** | Persistent reputation ledger with proxy enforcement. |
+| **Sandbox tiers** | Dynamic shadow / redact / allow per tool or server. |
+| **Guardian Certified MCP** | HMAC-signed server attestation and verification tiers. |
+| **Policy simulator** | Preview policy impact before deploy (`ab_test_policy`, REST simulate API). |
+| **Incident playbooks & investigator** | Automated playbook steps; AI incident investigation in the dashboard. |
+| **MCP lifecycle guard** | Session-gated access to `tools/list`, `resources/read`, `prompts/get`. |
+| **Response DLP** | Scans upstream tool responses and streaming output for secrets. |
+| **RL tuning** | Contextual bandits and Thompson sampling for threshold optimization. |
 
-**Dashboard:** Open **Agentic AI** in the web UI for overview charts, trust scores, audit tables, and admin tools. See [Agentic Features Guide](docs/AGENTIC_FEATURES.md) for details.
+**Dashboard:** Open **Agentic AI** in the web UI for overview charts, trust scores, audit tables, and admin tools. See [Agentic Features Guide](docs/AGENTIC_FEATURES.md).
+
+### Industry-standard roadmap (planned)
+
+Guardian’s next layer is **cross-server, cross-agent, systemic** understanding — what enterprise CISOs need to mandate Guardian fleet-wide. Eleven capabilities are planned in three tiers:
+
+| Tier | Features | Theme |
+|------|----------|--------|
+| **1 — Paradigm** | A1 Cross-MCP attack chain detection · A2 Digital twin & policy sandbox · A3 Agent behavioral biometrics | See the forest, not just the trees |
+| **2 — Ecosystem** | B1 Decentralized reputation network · B2 Ecosystem health observatory · B3 Federated threat detection | Network effects across deployments |
+| **3 — Enterprise** | C1 Config provenance chain · C2 Threat modeling as code (STRIDE/LINDDUN) · C3 Zero-trust continuous verification · C4 Insurance risk quantification · C5 Semantic policy translator | Compliance, CFO, and business stakeholders |
+
+**Build order (12 months):** Phase 1 (C5, C1, C2, A3) → Phase 2 (A1, A2, C3) → Phase 3 (B1, B2, C4) → Phase 4 research (B3).
+
+Full detail, foundations already in code, and differentiation rationale: **[docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md)**.
 
 ---
 
@@ -619,7 +662,11 @@ Or pass any MCP config: `mcp-guardian proxy --config path/to/config.json`.
 
 | Topic | Document |
 |-------|----------|
-| Agentic AI features | [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md) |
+| Agentic AI (shipped) | [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md) |
+| Agentic AI roadmap | [docs/AGENTIC_ROADMAP.md](docs/AGENTIC_ROADMAP.md) |
+| Agentic architecture | [docs/AGENTIC_ARCHITECTURE.md](docs/AGENTIC_ARCHITECTURE.md) |
+| MTX threat exchange | [docs/MTX_SPEC.md](docs/MTX_SPEC.md) |
+| MCP security reference | [docs/MCP_SECURITY_REFERENCE.md](docs/MCP_SECURITY_REFERENCE.md) |
 | Autopilot | [docs/AUTOPILOT.md](docs/AUTOPILOT.md) |
 | Pro license | [docs/PRO_SETUP.md](docs/PRO_SETUP.md) |
 | Policy reference | [docs/POLICY.md](docs/POLICY.md) |

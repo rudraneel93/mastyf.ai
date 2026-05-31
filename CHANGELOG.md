@@ -2,6 +2,25 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [4.0.0] - 2026-05-30
+
+### Industry Standard MCP Protection
+
+- **Migration 012** — certifications, MTX signatures, session chains, capability graph, intent bindings, sandbox tiers, agent reputation, fuzz runs, playbook runs, compliance controls, benchmark submissions
+- **MTX v1** — `@mcp-guardian/mtx` open threat exchange format; cloud hub at `/api/v1/mtx/*`
+- **Guardian Certified MCP** — HMAC attestation signing, persistent registry, cloud verification API
+- **guardian-bench** — `mcp-guardian bench` CLI + public leaderboard on cloud `/benchmarks`
+- **Multi-step chain detection** — collusion detector merged with session-chain graph; proxy enforcement
+- **Capability graph + intent binding** — tool/resource graph, session intent allowlists
+- **Resource/prompt poisoning guard** — lifecycle guard on `resources/read` and `prompts/get`
+- **Dynamic sandbox tiers** — shadow/redact/allow with RL-ready persistence
+- **Protocol fuzzer** — expanded corpus, real blockFn, cert gate integration
+- **Agent reputation ledger** — persistent scores with proxy enforcement
+- **Policy simulator** — unified `/api/policy/simulate` + `ab_test_policy` MCP tool
+- **Incident playbooks** — webhook/isolate executors with approval gates
+- **Compliance evidence runner** — live policy + audit wired to ControlMapper
+- **Docs** — `docs/MTX_SPEC.md`, `docs/MCP_SECURITY_REFERENCE.md`
+
 ## [3.4.1] - 2026-05-30
 
 ### Security — production readiness (code review remediation)
