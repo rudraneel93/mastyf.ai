@@ -3,7 +3,8 @@
 **A safety layer between your AI assistant and the tools it uses.**
 
 [![npm version](https://img.shields.io/npm/v/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
-[![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server?v=4.1.3)](https://www.npmjs.com/package/@mcp-guardian/server)
+[![npm downloads](https://img.shields.io/npm/dm/@mcp-guardian/server)](https://www.npmjs.com/package/@mcp-guardian/server)
+[![Socket Badge](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.3)](https://badge.socket.dev/npm/package/@mcp-guardian/server/4.1.3)
 [![Website](https://img.shields.io/badge/Website-mcp--guardian--cloud.vercel.app-0070f3)](https://mcp-guardian-cloud.vercel.app/)
 [![mcp-guardian MCP server](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian/badges/score.svg)](https://glama.ai/mcp/servers/rudraneel93/mcp-guardian)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
@@ -11,7 +12,15 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![CI](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml/badge.svg)](https://github.com/rudraneel93/mcp-guardian/actions/workflows/ci.yml)
 
-**Version 4.1.1** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+**Version 4.1.4** · [Website](https://mcp-guardian-cloud.vercel.app) · [npm](https://www.npmjs.com/package/@mcp-guardian/server) · [Changelog](CHANGELOG.md)
+
+### What's new in 4.1.4
+
+- **`mcp-guardian onboard` from global npm** — resolves the installed package root (not `cwd`); writes `guardian-configs/` under your current directory; ships `scripts/guardian-proxy.sh` and `policy-audit.yaml` in the npm tarball
+
+### What's new in 4.1.3
+
+**npm install fix** — registry manifest now matches published tarballs (`^4.1.3` semver deps, not `workspace:`). Use `@mcp-guardian/server@4.1.3` or later. Publish via `./scripts/publish-npm-all.sh` (server/CLI ship from `.tgz` so metadata stays correct).
 
 ### What's new in 4.1.1
 
@@ -566,55 +575,314 @@ Local development can use `GUARDIAN_CI_BYPASS_LICENSE=true` with `pnpm dashboard
 
 ---
 
-## Quick start
+## Getting started — install, clone, and run
 
-### Install
+This section walks through every path to a working Guardian: **npm install** for day-to-day use, **git clone** for development, and **`pnpm dashboard:proxy`** to run the **proxy + web dashboard** together on port **4000**.
+
+### What you need
+
+| Requirement | Notes |
+|-------------|--------|
+| **Node.js 18+** | Required by `@mcp-guardian/server` |
+| **npm** | For global install or running the published CLI |
+| **pnpm** | Only if you develop from a git clone (`pnpm install`, `pnpm build`) |
+| **Git** | Only for clone-from-source workflow |
+| **Ollama** (optional) | Local LLM at `http://127.0.0.1:11434` for semantic detection, Threat Lab, and Auto Threat Research in dev |
+
+---
+
+### Install from npm (recommended for users)
+
+Install the published server package. Pin **4.1.3+** — older 4.1.x releases had broken `workspace:` metadata on npm.
 
 ```bash
-npm install -g @mcp-guardian/server
+# Global CLI (mcp-guardian command on your PATH)
+npm install -g @mcp-guardian/server@4.1.4
+
+# Or install in a project directory
+npm install @mcp-guardian/server@4.1.3
 ```
 
-### Easiest path: onboard
+Verify:
 
 ```bash
-mcp-guardian onboard
+mcp-guardian --version
+mcp-guardian doctor
 ```
 
-Finds MCP configs for Cline, Claude Desktop, Cursor, and Windsurf, wraps your servers, and sets up Guardian as the proxy (~30 seconds).
+**What you get:** compiled `dist/`, default policy templates, and the `mcp-guardian` CLI (`proxy`, `onboard`, `analyze`, `doctor`, etc.). The npm package does **not** include the full monorepo dashboard SPA source — for the rich web UI from npm, use `mcp-guardian proxy` with `DASHBOARD_ENABLED=true` (see below) or develop from a git clone.
 
-### Run the proxy manually
+---
+
+### Clone and set up for development
+
+Use this when you want the full repo: dashboard SPA, agentic modules, tests, Security Swarm, and `pnpm` scripts.
 
 ```bash
-mcp-guardian proxy --policy default-policy.yaml
+git clone https://github.com/rudraneel93/mcp-guardian.git
+cd mcp-guardian
+
+# Install workspace dependencies (pnpm is required for the monorepo)
+corepack enable
+pnpm install
+
+# Copy optional environment overrides
+cp .env.example .env
+# Edit .env if you need NVD keys, LLM URLs, custom DB path, etc.
+
+# Compile TypeScript + workspace packages + dashboard SPA (first time)
+pnpm build
+pnpm dashboard:build
 ```
 
-### Dashboard + proxy together (recommended for development)
+**One-liner after clone** (install + build everything):
 
-From the repo after `pnpm build`:
+```bash
+git clone https://github.com/rudraneel93/mcp-guardian.git && cd mcp-guardian && pnpm install && pnpm build && pnpm dashboard:build
+```
+
+---
+
+### Configure environment
+
+Guardian reads environment variables at startup. For local development, defaults in `scripts/start-dashboard-proxy.sh` are usually enough.
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Purpose | Default (dev) |
+|----------|---------|----------------|
+| `MCP_GUARDIAN_DB_PATH` | SQLite audit/history DB | `~/.mcp-guardian/history.db` |
+| `DASHBOARD_ENABLED` | REST API + web UI | `true` when using `dashboard:proxy` |
+| `DASHBOARD_PORT` | Dashboard URL port | `4000` |
+| `DASHBOARD_AUTH_DISABLED` | Skip login on localhost | `true` in dev script |
+| `GUARDIAN_CI_BYPASS_LICENSE` | Unlock Pro dashboard features locally | `true` in dev script |
+| `GUARDIAN_LLM_ENABLED` | Semantic / AI features | `true` in dev script |
+| `OLLAMA_BASE_URL` | Local LLM endpoint | `http://127.0.0.1:11434` |
+| `GUARDIAN_WS_ENABLED` | Live WebSocket metrics | `true` |
+
+Example — use a repo-local database so tests and dashboard share the same file:
+
+```bash
+export MCP_GUARDIAN_DB_PATH="$PWD/reports/local-history.db"
+mkdir -p "$(dirname "$MCP_GUARDIAN_DB_PATH")"
+```
+
+Full reference: [`.env.example`](.env.example).
+
+---
+
+### Start the dashboard and proxy (recommended)
+
+From the **repo root** after `pnpm build` (and ideally `pnpm dashboard:build`):
 
 ```bash
 pnpm dashboard:proxy
 ```
 
-Open **http://localhost:4000/**. Use the same history database for tests:
+**What this does:**
+
+1. Rebuilds `dist/` if dashboard-related sources changed  
+2. Builds the dashboard SPA (`deploy/dashboard-spa/out/`) if missing  
+3. Picks a single-server MCP config (e.g. `guardian-configs/filesystem.json`) unless you pass one  
+4. Starts **one Node process** that runs:
+   - the **MCP proxy** (stdio to your upstream MCP server),
+   - the **dashboard REST API**,
+   - the **static web UI** at [http://localhost:4000/](http://localhost:4000/),
+   - optional **agentic** schedulers and WebSocket push.
+
+**Custom config or policy:**
 
 ```bash
-export MCP_GUARDIAN_DB_PATH="$HOME/.mcp-guardian/history.db"
-pnpm real-life:filesystem    # short live attack smoke test
+pnpm dashboard:proxy -- guardian-configs/filesystem.json default-policy.yaml
 ```
+
+**Expected console output:**
+
+```
+[dashboard-proxy] DB: /Users/you/.mcp-guardian/history.db
+[dashboard-proxy] Dashboard: http://localhost:4000/
+[dashboard-proxy] Config: guardian-configs/filesystem.json  Policy: default-policy.yaml  Mode: block
+```
+
+Open the browser → **Protection**, **Activity**, **Agentic AI**, etc. If charts are empty, widen the time window (e.g. **Last 7 days**) or generate traffic (next section).
+
+**Stop:** `Ctrl+C` in the terminal. If port 4000 is stuck: `lsof -ti :4000 | xargs kill`.
+
+---
+
+### Dashboard UI development (hot reload)
+
+When editing React panels under `deploy/dashboard-spa/`, run the SPA dev server separately:
+
+```bash
+# Terminal 1 — proxy + API (backend)
+pnpm dashboard:proxy
+
+# Terminal 2 — Next.js dev server for the SPA (frontend hot reload)
+pnpm dashboard:dev
+```
+
+For SOC-style split API + UI: `pnpm soc:full` (API on 4040, SPA dev server — see `package.json`).
+
+---
+
+### Easiest path: onboard (wrap your AI client)
+
+After **npm global install**, let Guardian find and wrap MCP configs for Cursor, Claude Desktop, Cline, and Windsurf:
+
+```bash
+mcp-guardian onboard
+```
+
+This rewrites your client config so tools go through Guardian (~30 seconds). Restart your AI client, then use tools normally — blocks and allows are logged.
+
+From a **git clone** (before/after build):
+
+```bash
+pnpm build
+pnpm onboard
+# or: node dist/cli.js onboard
+```
+
+---
+
+### Run proxy without the full dev script
+
+**Published CLI:**
+
+```bash
+export DASHBOARD_ENABLED=true
+export DASHBOARD_PORT=4000
+mcp-guardian proxy --config guardian-configs/filesystem.json --policy default-policy.yaml --blocking-mode block
+```
+
+**From repo:**
+
+```bash
+node dist/cli.js proxy --config guardian-configs/filesystem.json --policy default-policy.yaml
+```
+
+Without `DASHBOARD_ENABLED`, you get proxy-only (no web UI). Logs still go to `MCP_GUARDIAN_DB_PATH`.
+
+---
+
+### Generate test traffic and verify
+
+With `pnpm dashboard:proxy` running in one terminal:
+
+```bash
+# Same DB as the proxy (important for dashboard charts)
+export MCP_GUARDIAN_DB_PATH="${MCP_GUARDIAN_DB_PATH:-$HOME/.mcp-guardian/history.db}"
+
+# Short live attack smoke test against the official filesystem MCP server
+pnpm real-life:filesystem
+
+# Offline policy matrix (no live MCP server required)
+pnpm harness
+
+# Plain-English summary of current posture
+pnpm analyze
+
+# Industry roadmap module audit (CLI)
+node dist/cli.js roadmap audit
+# or after global install: mcp-guardian roadmap audit
+```
+
+Refresh **http://localhost:4000/** → **Activity** / **Protection** should show new events.
 
 Details: [scenarios/real-life/README.md](scenarios/real-life/README.md).
 
-### Useful commands
+---
+
+### Guardian Autopilot (one-command fleet setup)
+
+Wraps configs, starts proxy, dashboard, and optional background jobs:
+
+```bash
+pnpm autopilot:init -- --apply
+pnpm autopilot:start
+pnpm autopilot:status
+```
+
+See [docs/PRO_SETUP.md](docs/PRO_SETUP.md) for production licensing (local dev uses `GUARDIAN_CI_BYPASS_LICENSE=true` with `pnpm dashboard:proxy`).
+
+---
+
+### Web dashboard — what you will see
+
+| Tab / area | Purpose |
+|------------|---------|
+| **Protection** | Overall status, roadmap compliance strip (v4.1+) |
+| **Activity** | Audit log of allowed and blocked `tools/call` |
+| **Threats** | Active threats, quarantine, fleet chain graph (A1) |
+| **Security** | Score and trends |
+| **Operations** | Traffic, errors, cost charts |
+| **Agentic AI** | Trust, policy gen, observatory, federated learning, plan compliance audit |
+| **Settings** | Servers, policy, setup checklist |
+
+The dashboard reads the **same SQLite DB** as the proxy (`MCP_GUARDIAN_DB_PATH`). It is not a separate demo dataset.
+
+Agentic features: [docs/AGENTIC_QUICKSTART.md](docs/AGENTIC_QUICKSTART.md) · [docs/AGENTIC_FEATURES.md](docs/AGENTIC_FEATURES.md).
+
+---
+
+### Command reference
 
 | Command | What it does |
 |---------|----------------|
-| `pnpm dashboard:proxy` | Proxy + dashboard on port 4000 |
-| `pnpm autopilot:init` / `autopilot:start` | Wrap configs and start Autopilot |
-| `pnpm analyze` | Print a plain-English security summary |
-| `pnpm harness` | Offline policy attack matrix |
+| `npm install -g @mcp-guardian/server@4.1.4` | Install published CLI |
+| `mcp-guardian onboard` | Auto-wrap MCP client configs |
+| `mcp-guardian doctor` | Validate install, DB, policy |
+| `mcp-guardian proxy --policy default-policy.yaml` | Run proxy (add `--config` for MCP servers) |
+| `pnpm install && pnpm build` | Dev: install + compile monorepo |
+| `pnpm dashboard:build` | Dev: build static dashboard SPA |
+| `pnpm dashboard:proxy` | **Dev: proxy + API + UI on :4000** |
+| `pnpm dashboard:dev` | Dev: SPA hot reload (with proxy running) |
 | `pnpm real-life:filesystem` | Live MCP attack smoke test |
-| `mcp-guardian doctor` | Check your install and config |
+| `pnpm harness` | Offline adversarial policy matrix |
+| `pnpm analyze` | Plain-English security summary |
+| `pnpm security-swarm` | Pro: continuous adversarial testing |
+| `pnpm autopilot:init` / `autopilot:start` | Pro: wrap + start full stack |
+| `mcp-guardian roadmap audit` | Verify industry roadmap modules (A1–C5) |
+
+---
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| **`InstallError` / `workspace:` on npm** | Use `@mcp-guardian/server@4.1.3+`, not 4.1.1–4.1.2 |
+| **BundlePhobia fails on `@mcp-guardian/server`** | Expected — it is a Node server, not a browser bundle. Use [@mcp-guardian/core](https://bundlephobia.com/package/@mcp-guardian/core@4.1.3) for size analysis |
+| **Empty dashboard charts** | Set `MCP_GUARDIAN_DB_PATH` to the same path as the proxy; widen time window; run `pnpm real-life:filesystem` |
+| **Port 4000 in use** | `lsof -ti :4000 \| xargs kill` or `DASHBOARD_PORT=4001 pnpm dashboard:proxy` |
+| **Ollama warning on start** | Run `ollama serve` for semantic / Threat Lab features (optional) |
+| **No MCP config found** | Pass a config: `pnpm dashboard:proxy -- guardian-configs/filesystem.json` |
+| **Pro features locked** | Production: license per [PRO_SETUP.md](docs/PRO_SETUP.md). Dev: `GUARDIAN_CI_BYPASS_LICENSE=true` (set by `dashboard:proxy` script) |
+
+More: [SECURITY.md](SECURITY.md) (npm install hygiene) · [docs/REAL_WORLD_INTEGRATION.md](docs/REAL_WORLD_INTEGRATION.md) (multi-server proxies).
+
+---
+
+## Quick start (summary)
+
+**From npm (wrap your AI client):**
+
+```bash
+npm install -g @mcp-guardian/server@4.1.4
+mcp-guardian onboard
+```
+
+**From git (proxy + dashboard on port 4000):**
+
+```bash
+git clone https://github.com/rudraneel93/mcp-guardian.git && cd mcp-guardian
+pnpm install && pnpm build && pnpm dashboard:build
+pnpm dashboard:proxy    # → http://localhost:4000/
+```
+
+See **[Getting started — install, clone, and run](#getting-started--install-clone-and-run)** above for the full walkthrough.
 
 ---
 

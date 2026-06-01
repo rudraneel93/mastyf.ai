@@ -4,6 +4,7 @@ import { join, resolve } from 'path';
 import chalk from 'chalk';
 import { runWrap, resolveClientConfigPath, type WrapClient } from '../wrap/client-wrap.js';
 import { resolveGuardianDbPath } from '../utils/guardian-db-path.js';
+import { resolveGuardianInstallRoot } from '../utils/guardian-package-root.js';
 
 export interface OnboardArtifact {
   client: string;
@@ -36,17 +37,24 @@ export interface OnboardOptions {
   client: WrapClient;
   configPath?: string;
   policyPath: string;
-  projectRoot: string;
+  /** Package install root (dist/cli.js); defaults via resolveGuardianInstallRoot() */
+  projectRoot?: string;
+  /** Directory for guardian-configs/ (default: process.cwd()) */
+  workspaceRoot?: string;
   apply: boolean;
   skipNames: string[];
   startProxy: boolean;
 }
 
 export function runOnboard(opts: OnboardOptions): OnboardArtifact {
-  const projectRoot = resolve(opts.projectRoot);
-  const distCli = join(projectRoot, 'dist', 'cli.js');
+  const installRoot = resolve(opts.projectRoot ?? resolveGuardianInstallRoot());
+  const workspaceRoot = resolve(opts.workspaceRoot ?? process.cwd());
+  const distCli = join(installRoot, 'dist', 'cli.js');
   if (!existsSync(distCli)) {
-    throw new Error(`Build required: run "pnpm build" in ${projectRoot} first.`);
+    throw new Error(
+      `MCP Guardian install incomplete: dist/cli.js missing under ${installRoot}. ` +
+        `Reinstall with: npm install -g @mcp-guardian/server@latest`,
+    );
   }
 
   const clientPath = resolveClientConfigPath(opts.client, opts.configPath);
@@ -67,7 +75,8 @@ export function runOnboard(opts: OnboardOptions): OnboardArtifact {
   const wrap = runWrap({
     client: opts.client,
     configPath: opts.configPath,
-    projectRoot,
+    projectRoot: installRoot,
+    workspaceRoot,
     policyPath: opts.policyPath,
     apply: opts.apply,
     skipNames: opts.skipNames,
@@ -99,7 +108,7 @@ export function runOnboard(opts: OnboardOptions): OnboardArtifact {
     console.log(chalk.green('  Reload MCP servers in your IDE (restart Cursor or reconnect MCP).'));
   }
   console.log(chalk.cyan('\n  Observe traffic:'));
-  console.log(chalk.dim('    pnpm dashboard:build && pnpm dashboard:proxy'));
+  console.log(chalk.dim('    mcp-guardian proxy --config <guardian-configs/…>  (or pnpm dashboard:proxy from git clone)'));
   console.log(chalk.dim('    Open http://localhost:4000 → Setup tab'));
   if (opts.startProxy && wrap.wrapped.length > 0) {
     const first = wrap.wrapped[0];

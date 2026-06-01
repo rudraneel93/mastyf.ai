@@ -18,7 +18,10 @@ export type WrapClient = 'cline' | 'cursor' | 'claude-desktop' | 'windsurf' | 'a
 export interface WrapOptions {
   client: WrapClient;
   configPath?: string;
+  /** Package root with dist/cli.js and proxy wrapper scripts */
   projectRoot: string;
+  /** Where guardian-configs/ and examples/ are written (default: projectRoot) */
+  workspaceRoot?: string;
   policyPath: string;
   apply: boolean;
   skipNames?: string[];
@@ -111,15 +114,27 @@ export function runWrap(opts: WrapOptions): WrapResult {
     );
   }
 
-  const projectRoot = path.resolve(opts.projectRoot);
-  const configsDir = path.join(projectRoot, 'guardian-configs');
-  const wrapperScript = resolveGuardianProxyWrapper(projectRoot);
-  const policyPath = path.isAbsolute(opts.policyPath)
-    ? opts.policyPath
-    : path.join(projectRoot, opts.policyPath);
+  const installRoot = path.resolve(opts.projectRoot);
+  const workspaceRoot = path.resolve(opts.workspaceRoot ?? opts.projectRoot);
+  const configsDir = path.join(workspaceRoot, 'guardian-configs');
+  const wrapperScript = resolveGuardianProxyWrapper(installRoot);
+  const policyCandidates = path.isAbsolute(opts.policyPath)
+    ? [opts.policyPath]
+    : [
+        path.join(installRoot, opts.policyPath),
+        path.join(installRoot, 'default-policy.yaml'),
+      ];
+  const policyPath = policyCandidates.find((p) => fs.existsSync(p));
+  if (!policyPath) {
+    throw new Error(
+      `Policy file not found: tried ${policyCandidates.join(', ')}`,
+    );
+  }
 
-  if (!fs.existsSync(path.join(projectRoot, 'dist/cli.js'))) {
-    throw new Error(`Build required: dist/cli.js not found under ${projectRoot}. Run npm run build.`);
+  if (!fs.existsSync(path.join(installRoot, 'dist/cli.js'))) {
+    throw new Error(
+      `Build required: dist/cli.js not found under ${installRoot}. Reinstall @mcp-guardian/server or run pnpm build in the repo.`,
+    );
   }
   if (!fs.existsSync(wrapperScript)) {
     throw new Error(`Wrapper script missing: ${wrapperScript}`);
@@ -183,7 +198,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
     );
 
     serverMap[server.name] = buildWrappedMcpServerEntry(
-      projectRoot,
+      installRoot,
       singleConfigPath,
       policyPath,
       remoteEnv,
@@ -200,7 +215,11 @@ export function runWrap(opts: WrapOptions): WrapResult {
     fs.writeFileSync(clientPath, JSON.stringify(raw, null, 2) + '\n', 'utf-8');
   }
 
-  const examplePath = path.join(projectRoot, 'examples', `${path.basename(clientPath, '.json')}.wrapped.json`);
+  const examplePath = path.join(
+    workspaceRoot,
+    'examples',
+    `${path.basename(clientPath, '.json')}.wrapped.json`,
+  );
   fs.mkdirSync(path.dirname(examplePath), { recursive: true });
   const exampleRaw = readClientJson(clientPath);
   const exampleMap = extractServers(exampleRaw);
@@ -208,7 +227,7 @@ export function runWrap(opts: WrapOptions): WrapResult {
     const safeName = sanitizeFileName(name);
     const singleConfigPath = path.join(configsDir, `${safeName}.json`);
     exampleMap[name] = buildWrappedMcpServerEntry(
-      projectRoot,
+      installRoot,
       singleConfigPath,
       policyPath,
       remoteEnv,

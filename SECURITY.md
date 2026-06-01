@@ -60,10 +60,10 @@ MCP Guardian's security posture is modeled against the STRIDE framework for each
 
 Third-party scanners (Socket, npm audit UI, Snyk) may flag `@mcp-guardian/server` as follows. This is expected for a **network security proxy**:
 
-| Alert | Why it appears | Mitigation in 4.1.1+ |
+| Alert | Why it appears | Mitigation in 4.1.2+ |
 |---|---|---|
 | **Install scripts** | Older tarballs shipped `postinstall` / `prepack` in `package.json` | Lifecycle scripts stripped at `prepack`; no code runs on `npm install` |
-| **Manifest confusion** | 4.1.0 was published with unresolved `workspace:` deps and without `@mcp-guardian/core@4.1.x` | Publish full chain via `./scripts/publish-npm-all.sh`; deps rewritten to `^4.1.1` |
+| **Manifest confusion / InstallError** | 4.1.0–4.1.2 registry manifest had `workspace:` deps (`EUNSUPPORTEDPROTOCOL`; BundlePhobia fails too) | Use **@4.1.3+**; publish from tarball via `./scripts/publish-npm-all.sh` |
 | **Network access** | Proxy, CVE lookups (OSV/NVD), optional cloud observatory | Required by design — see threat model above |
 | **Shell access** | Policy engine detects shell injection; optional subprocess for MCP stdio servers | Required by design — does not execute on install |
 | **Dependency CVEs** | Transitive deps (e.g. `qs`, `turbo` in dev/build) | `pnpm.overrides` pin patched versions; run `pnpm audit` before release |
@@ -71,14 +71,14 @@ Third-party scanners (Socket, npm audit UI, Snyk) may flag `@mcp-guardian/server
 Install only from npm:
 
 ```bash
-npm install @mcp-guardian/server@latest
+npm install @mcp-guardian/server@4.1.3
 ```
 
 Verify tarball before publish (maintainers):
 
 ```bash
-npm pack --dry-run && tar -xOf mcp-guardian-server-*.tgz package/package.json | jq '.scripts,.dependencies["@mcp-guardian/core"]'
-# Expect: scripts absent or empty; core dep "^4.1.1" not "workspace:..."
+node scripts/validate-npm-pack.mjs
+# Expect: OK @mcp-guardian/server@x.y.z; core dep "^x.y.z" not "workspace:..."
 ```
 
 ## Supported Versions

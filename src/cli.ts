@@ -27,6 +27,7 @@ import { broadcastDashboardEvent } from './utils/dashboard-events.js';
 import { triggerLearningCycleIfEnabled } from './ai/suggestion-engine.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { resolveGuardianInstallRoot } from './utils/guardian-package-root.js';
 
 const __cliDir = dirname(fileURLToPath(import.meta.url));
 function cliVersion(): string {
@@ -422,7 +423,12 @@ program
   .option('-c, --config <path>', 'Explicit MCP client config path')
   .option('--policy <path>', 'Policy YAML for wrapped proxies', 'policy-audit.yaml')
   .option('--apply', 'Patch live client MCP JSON', false)
-  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .option(
+    '--project-root <path>',
+    'MCP Guardian package root (dist/cli.js)',
+    resolveGuardianInstallRoot(),
+  )
+  .option('--workspace-root <path>', 'Directory for guardian-configs output', process.cwd())
   .option('--skip <names>', 'Comma-separated server names to skip', 'mcp-guardian,guardian')
   .option('--start-proxy', 'Print command to start proxy for first wrapped server', false)
   .action(async (opts: {
@@ -431,6 +437,7 @@ program
     policy: string;
     apply: boolean;
     projectRoot: string;
+    workspaceRoot: string;
     skip: string;
     startProxy: boolean;
   }) => {
@@ -448,6 +455,7 @@ program
         configPath: opts.config,
         policyPath: opts.policy,
         projectRoot: opts.projectRoot,
+        workspaceRoot: opts.workspaceRoot,
         apply: opts.apply,
         skipNames: opts.skip.split(',').map((s) => s.trim()).filter(Boolean),
         startProxy: opts.startProxy,
@@ -465,7 +473,12 @@ program
   .option('-c, --config <path>', 'Explicit MCP client config path (overrides --client)')
   .option('--policy <path>', 'Policy YAML for wrapped proxies', 'policy-audit.yaml')
   .option('--apply', 'Patch live client MCP JSON (creates timestamped .bak backup)', false)
-  .option('--project-root <path>', 'MCP Guardian repo root', process.cwd())
+  .option(
+    '--project-root <path>',
+    'MCP Guardian package root (dist/cli.js)',
+    resolveGuardianInstallRoot(),
+  )
+  .option('--workspace-root <path>', 'Directory for guardian-configs output', process.cwd())
   .option('--skip <names>', 'Comma-separated server names to skip (default: mcp-guardian,guardian)', 'mcp-guardian,guardian')
   .action(async (opts: {
     client: string;
@@ -473,6 +486,7 @@ program
     policy: string;
     apply: boolean;
     projectRoot: string;
+    workspaceRoot: string;
     skip: string;
   }) => {
     const { runWrap } = await import('./wrap/client-wrap.js');
@@ -488,6 +502,7 @@ program
         client,
         configPath: opts.config,
         projectRoot: opts.projectRoot,
+        workspaceRoot: opts.workspaceRoot,
         policyPath: opts.policy,
         apply: opts.apply,
         skipNames: opts.skip.split(',').map((s) => s.trim()).filter(Boolean),

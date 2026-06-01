@@ -1,6 +1,6 @@
 {
   "name": "@mcp-guardian/core",
-  "version": "4.1.1",
+  "version": "4.1.4",
   "description": "Detection engine: regex + schema + semantic analysis for MCP tool definitions",
   "type": "module",
   "main": "./dist/index.js",

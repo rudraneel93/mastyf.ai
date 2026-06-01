@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 # Publish all @mcp-guardian packages in dependency order.
-# ALWAYS publish the full chain — publishing @mcp-guardian/server alone leaves
-# workspace: deps on npm and breaks installs (manifest confusion / supply-chain alerts).
-# Requires: npm login (npm whoami) and OTP if 2FA enabled:
-#   NPM_OTP=123456 ./scripts/publish-npm-all.sh
+# Server/CLI publish from .tgz so npm registry manifest matches tarball (postpack
+# must not restore workspace: specs before metadata is indexed).
+# Requires: npm login (npm whoami). Auth options:
+#   NPM_AUTH_TYPE=web ./scripts/publish-npm-all.sh   # browser SSO (recommended)
+#   NPM_OTP=123456 ./scripts/publish-npm-all.sh      # 2FA one-time password
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-OTP_ARGS=()
-if [[ -n "${NPM_OTP:-}" ]]; then
-  OTP_ARGS=(--otp="$NPM_OTP")
+PUBLISH_ARGS=(--access public)
+if [[ -n "${NPM_AUTH_TYPE:-}" ]]; then
+  PUBLISH_ARGS+=(--auth-type="$NPM_AUTH_TYPE")
+elif [[ -n "${NPM_OTP:-}" ]]; then
+  PUBLISH_ARGS+=(--otp="$NPM_OTP")
+else
+  PUBLISH_ARGS+=(--auth-type=web)
 fi
+
 
 echo "npm user: $(npm whoami)"
 echo "Building..."
@@ -21,18 +27,50 @@ pnpm run build
 
 publish_pkg() {
   local dir="$1"
+  local name version
+  name=$(node -p "require('./${dir}/package.json').name")
+  version=$(node -p "require('./${dir}/package.json').version")
+  if npm view "${name}@${version}" version &>/dev/null; then
+    echo ""
+    echo "=== Skip ${name}@${version} (already on npm) ==="
+    return 0
+  fi
   echo ""
-  echo "=== Publishing $(node -p "require('./${dir}/package.json').name")@$(node -p "require('./${dir}/package.json').version") ==="
-  (cd "$dir" && npm publish --access public "${OTP_ARGS[@]}")
+  echo "=== Publishing ${name}@${version} ==="
+  (cd "$dir" && npm publish "${PUBLISH_ARGS[@]}")
 }
 
 publish_pkg packages/plugin-sdk
 publish_pkg packages/core
-npm publish --access public "${OTP_ARGS[@]}"
-publish_pkg packages/cli
+
+SERVER_VERSION=$(node -p "require('./package.json').version")
+if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null; then
+  echo ""
+  echo "=== Skip @mcp-guardian/server@${SERVER_VERSION} (already on npm) ==="
+else
+  echo ""
+  echo "=== Publishing @mcp-guardian/server@${SERVER_VERSION} from tarball ==="
+  node scripts/validate-npm-pack.mjs
+  SERVER_TGZ=$(npm pack --silent 2>/dev/null | grep '\.tgz$' | tail -1)
+  npm publish "$SERVER_TGZ" "${PUBLISH_ARGS[@]}"
+  rm -f "$SERVER_TGZ"
+fi
+
+CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
+if npm view "@mcp-guardian/cli@${CLI_VERSION}" version &>/dev/null; then
+  echo ""
+  echo "=== Skip @mcp-guardian/cli@${CLI_VERSION} (already on npm) ==="
+else
+  echo ""
+  echo "=== Publishing @mcp-guardian/cli@${CLI_VERSION} from tarball ==="
+  (cd packages/cli && node ../../scripts/validate-npm-pack.mjs)
+  CLI_TGZ=$(cd packages/cli && npm pack --silent 2>/dev/null | grep '\.tgz$' | tail -1)
+  (cd packages/cli && npm publish "$CLI_TGZ" "${PUBLISH_ARGS[@]}")
+  rm -f "packages/cli/$CLI_TGZ"
+fi
 
 echo ""
-echo "Done. Verify:"
-echo "  npm view @mcp-guardian/server version"
+echo "Done. Verify registry manifest (must NOT contain workspace:):"
+echo "  npm view @mcp-guardian/server@$(node -p "require('./package.json').version") dependencies"
 echo "  npm view @mcp-guardian/core version"
 echo "  npm view @mcp-guardian/plugin-sdk version"

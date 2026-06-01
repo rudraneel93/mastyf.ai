@@ -9,5 +9,5 @@ const backupPath = pkgPath + '.prepack-backup';
 if (existsSync(backupPath)) {
   writeFileSync(pkgPath, readFileSync(backupPath, 'utf8'));
   unlinkSync(backupPath);
-  console.log(`[postpack] restored ${pkgPath}`);
+  console.error(`[postpack] restored ${pkgPath}`);
 }

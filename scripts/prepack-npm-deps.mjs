@@ -54,7 +54,7 @@ for (const section of ['dependencies', 'devDependencies', 'optionalDependencies'
     if (typeof spec === 'string' && spec.startsWith('workspace:') && VERSION_MAP[name]) {
       deps[name] = VERSION_MAP[name];
       changed = true;
-      console.log(`[prepack] ${name} → ${VERSION_MAP[name]}`);
+      console.error(`[prepack] ${name} → ${VERSION_MAP[name]}`);
     }
   }
 }
@@ -64,7 +64,7 @@ if (pkg.scripts && typeof pkg.scripts === 'object') {
   for (const [key, val] of Object.entries(pkg.scripts)) {
     if (STRIP_SCRIPT_KEYS.has(key)) {
       changed = true;
-      console.log(`[prepack] stripped lifecycle script "${key}"`);
+      console.error(`[prepack] stripped lifecycle script "${key}"`);
       continue;
     }
     // Consumer tarballs must not ship maintainer/dev scripts (supply-chain scanners).

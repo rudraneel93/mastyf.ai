@@ -2,6 +2,30 @@
 
 All notable changes to MCP Guardian will be documented in this file.
 
+## [4.1.4] - 2026-06-01
+
+### Global CLI onboard fix
+
+- `mcp-guardian onboard` resolves the npm package install root instead of `process.cwd()` (fixes "Build required: pnpm build" on Desktop)
+- `guardian-configs/` written under `--workspace-root` (default: current directory)
+- npm tarball includes `scripts/guardian-proxy.sh`, `guardian-proxy.ps1`, and `policy-audit.yaml`
+
+## [4.1.3] - 2026-05-31
+
+### npm install fix (registry manifest)
+
+- **Root cause** — `postpack` restored `workspace:` specs before npm indexed registry metadata; tarball was correct but `npm install` / BundlePhobia read broken manifest (`EUNSUPPORTEDPROTOCOL`).
+- **Fix** — publishable packages use semver deps (`^4.1.3`); server/CLI publish from `.tgz` so manifest matches tarball.
+- **Deprecate** — `@mcp-guardian/server@4.1.1` and `@4.1.2` (broken install).
+
+## [4.1.2] - 2026-05-31
+
+### npm install fix
+
+- **Broken `@mcp-guardian/server@4.1.1`** — that release shipped literal `workspace:` dependencies (`EUNSUPPORTEDPROTOCOL` on install). Use **4.1.2+**.
+- **`validate-npm-pack.mjs`** — blocks publish if a tarball still contains `workspace:` specs or install lifecycle scripts.
+- **Publish script** — validates server and CLI tarballs before `npm publish`.
+
 ## [4.1.1] - 2026-05-31
 
 ### npm supply-chain / install hygiene
