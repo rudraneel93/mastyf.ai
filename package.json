@@ -8,6 +8,7 @@
     "assets",
     "deploy/dashboard.html",
     "deploy/dashboard-spa",
+    "deploy/dashboard-spa/out",
     "policy-templates",
     "README.md",
     "LICENSE",
@@ -161,7 +162,7 @@
     "lint": "tsc --noEmit",
     "version:check": "node scripts/verify-version-alignment.cjs",
     "prepack": "node scripts/prepack-npm-deps.mjs",
-    "prepublishOnly": "npm run build && node scripts/validate-npm-pack.mjs && npm test"
+    "prepublishOnly": "npm run build && npm run dashboard:build && node scripts/validate-npm-pack.mjs && npm test"
   },
   "dependencies": {
     "@mcp-guardian/core": "workspace:^4.1.5",

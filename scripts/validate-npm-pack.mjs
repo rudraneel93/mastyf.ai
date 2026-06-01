@@ -55,7 +55,7 @@ try {
       );
     } catch {
       errors.push(
-        'deploy/dashboard-spa/out/index.html missing (run scripts/build-dashboard-spa.sh before npm pack)',
+        'deploy/dashboard-spa/out/index.html missing from tarball (run: npm run dashboard:build; ensure deploy/dashboard-spa/.npmignore un-ignores out/ for npm pack)',
       );
     }
   }
