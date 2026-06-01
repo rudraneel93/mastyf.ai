@@ -33,17 +33,24 @@ publish_from_tgz() {
 }
 
 echo "npm user: $(npm whoami)"
-echo "Building workspace packages for publish (no root install — avoids fetching unpublished @mcp-guardian/* from npm)..."
-(
-  cd packages/plugin-sdk
-  pnpm install
-  pnpm run build
-)
-(
-  cd packages/core
-  pnpm install
-  pnpm run build
-)
+echo "Building workspace packages for publish..."
+
+build_with_tsc() {
+  local tsc="$ROOT/node_modules/.bin/tsc"
+  if [[ ! -x "$tsc" ]]; then
+    echo "ERROR: $tsc not found. Run 'pnpm install' once in the repo when workspace packages are linkable," >&2
+    echo "       or ensure packages/*/dist exists before publishing." >&2
+    exit 1
+  fi
+  "$tsc" --project "$ROOT/packages/plugin-sdk/tsconfig.json"
+  "$tsc" --project "$ROOT/packages/core/tsconfig.json"
+}
+
+if [[ -f packages/plugin-sdk/dist/index.js && -f packages/core/dist/index.js ]]; then
+  echo "[publish] Using existing packages/*/dist (delete dist to force rebuild)"
+else
+  build_with_tsc
+fi
 
 SERVER_VERSION=$(node -p "require('./package.json').version")
 if ! npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null; then
