@@ -165,8 +165,8 @@
     "prepublishOnly": "npm run build && npm run dashboard:build && node scripts/validate-npm-pack.mjs && npm test"
   },
   "dependencies": {
-    "@mcp-guardian/core": "workspace:^4.1.5",
-    "@mcp-guardian/plugin-sdk": "workspace:^4.1.5",
+    "@mcp-guardian/core": "workspace:^4.1.6",
+    "@mcp-guardian/plugin-sdk": "workspace:^4.1.6",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.75.0",
