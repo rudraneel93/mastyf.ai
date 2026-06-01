@@ -40,5 +40,9 @@
     "prompt-injection",
     "detection"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

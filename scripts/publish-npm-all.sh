@@ -77,13 +77,16 @@ publish_pkg() {
 publish_pkg packages/plugin-sdk
 publish_pkg packages/core
 
-# After publishing deps, confirm chain is complete before we tell users to npm install
+# After publishing deps, wait for registry replication then confirm chain
 for dep in core plugin-sdk; do
+  if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null; then
+    node "$ROOT/scripts/wait-npm-registry.mjs" "@mcp-guardian/${dep}" "$SERVER_VERSION" || true
+  fi
   if npm view "@mcp-guardian/server@${SERVER_VERSION}" version &>/dev/null \
     && ! npm view "@mcp-guardian/${dep}@${SERVER_VERSION}" version &>/dev/null; then
     echo ""
-    echo "ERROR: @mcp-guardian/server@${SERVER_VERSION} is on npm but @mcp-guardian/${dep}@${SERVER_VERSION} is still missing after publish." >&2
-    exit 1
+    echo "WARN: @mcp-guardian/${dep}@${SERVER_VERSION} not visible yet — npm replication can take ~1 min." >&2
+    echo "      Check: npm view @mcp-guardian/${dep}@${SERVER_VERSION} version" >&2
   fi
 done
 
