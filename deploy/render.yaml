@@ -4,7 +4,7 @@ services:
     runtime: node
     repo: https://github.com/mastyff-ai/mastyff-ai
     buildCommand: npm install -g pnpm && pnpm install --no-frozen-lockfile && pnpm run build
-    startCommand: node render-start.js
+    startCommand: node deploy/render-start.js
     buildFilter:
       paths:
         - src/**/*.ts
