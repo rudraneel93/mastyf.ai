@@ -61,9 +61,9 @@ function toSecretFinding(f: DetectorFinding, ctx: DetectorScanContext): SecretFi
   };
 }
 
-/** Plugins on by default in v2.7; set MASTYFF_AI_PLUGINS_ENABLED=false to disable. */
+/** Plugins on by default in v2.7; set MASTYF_AI_PLUGINS_ENABLED=false to disable. */
 export function areDetectorPluginsEnabled(): boolean {
-  return process.env['MASTYFF_AI_PLUGINS_ENABLED'] !== 'false';
+  return process.env['MASTYF_AI_PLUGINS_ENABLED'] !== 'false';
 }
 
 /** Run registered plugins when enabled. */
@@ -89,9 +89,9 @@ export function runDetectorPlugins(text: string, ctx: DetectorScanContext): Secr
   return findings;
 }
 
-/** Load *.js plugins from MASTYFF_AI_PLUGIN_PATH (optional). */
+/** Load *.js plugins from MASTYF_AI_PLUGIN_PATH (optional). */
 export async function loadDetectorPluginsFromPath(): Promise<void> {
-  const dir = process.env['MASTYFF_AI_PLUGIN_PATH'];
+  const dir = process.env['MASTYF_AI_PLUGIN_PATH'];
   if (!dir || !areDetectorPluginsEnabled()) return;
 
   let entries: string[];
@@ -99,7 +99,7 @@ export async function loadDetectorPluginsFromPath(): Promise<void> {
     entries = readdirSync(dir).filter((f) => extname(f) === '.js' && !f.startsWith('_'));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    Logger.warn(`[plugins] cannot read MASTYFF_AI_PLUGIN_PATH=${dir}: ${message}`);
+    Logger.warn(`[plugins] cannot read MASTYF_AI_PLUGIN_PATH=${dir}: ${message}`);
     return;
   }
 

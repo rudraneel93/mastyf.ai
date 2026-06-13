@@ -6,7 +6,7 @@ describe('OAuthValidator JWT', () => {
   let publicJwk: Record<string, unknown>;
   let privateKey: CryptoKey;
   const issuer = 'https://test-issuer.example';
-  const audience = 'mastyff-ai-test';
+  const audience = 'mastyf-ai-test';
 
   beforeAll(async () => {
     const { publicKey, privateKey: priv } = await generateKeyPair('RS256');

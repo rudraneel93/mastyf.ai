@@ -31,7 +31,7 @@ export interface AnomalySuggestion {
 }
 
 function minBaselineSamples(): number {
-  const n = parseInt(process.env.MASTYFF_AI_AI_MIN_BASELINE_SAMPLES || '3', 10);
+  const n = parseInt(process.env.MASTYF_AI_AI_MIN_BASELINE_SAMPLES || '3', 10);
   return Number.isFinite(n) && n >= 1 ? n : 3;
 }
 

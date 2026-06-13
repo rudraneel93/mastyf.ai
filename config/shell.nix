@@ -2,7 +2,7 @@
 { pkgs ? import <nixpkgs> {} }:
 
 pkgs.mkShell {
-  name = "mastyff-ai";
+  name = "mastyf-ai";
 
   buildInputs = with pkgs; [
     nodejs_20
@@ -30,7 +30,7 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
-    echo "MCP Mastyff AI Dev Environment"
+    echo "MCP Mastyf AI Dev Environment"
     echo "─────────────────────────────────────"
     echo "  Node.js: $(node --version)"
     echo "  pnpm:    $(pnpm --version)"

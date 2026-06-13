@@ -28,7 +28,7 @@ let spiffeLoaded = false;
 
 /** Active SPIFFE ID from env or client cert subject (spiffe://…). */
 export function getActiveSpiffeId(): string | undefined {
-  const fromEnv = process.env['MASTYFF_AI_SPIFFE_ID']?.trim();
+  const fromEnv = process.env['MASTYF_AI_SPIFFE_ID']?.trim();
   if (fromEnv?.startsWith('spiffe://')) return fromEnv;
   const certPath = process.env['MCP_TLS_CERT'];
   if (!certPath) return undefined;
@@ -53,7 +53,7 @@ export function resetSpiffeSvidCacheForTests(): void {
  * Sets MCP_TLS_CA, MCP_TLS_CERT, MCP_TLS_KEY when successful.
  */
 export async function fetchSpiffeSvidFromWorkloadApi(): Promise<boolean> {
-  const socketPath = process.env['MASTYFF_AI_SPIFFE_SOCKET_PATH']?.trim();
+  const socketPath = process.env['MASTYF_AI_SPIFFE_SOCKET_PATH']?.trim();
   if (!socketPath || spiffeLoaded) return spiffeLoaded;
 
   return new Promise((resolve) => {
@@ -106,7 +106,7 @@ export async function fetchSpiffeSvidFromWorkloadApi(): Promise<boolean> {
 }
 
 function writeTempPem(kind: string, pemBody: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `mastyff-ai-spiffe-${kind}-`));
+  const dir = mkdtempSync(join(tmpdir(), `mastyf-ai-spiffe-${kind}-`));
   const filePath = join(dir, `${kind}.pem`);
   let normalized = pemBody;
   if (!pemBody.includes('BEGIN')) {
@@ -133,8 +133,8 @@ export interface MtlsConfig {
  */
 export function loadMtlsConfig(): MtlsConfig {
   resolveMtlsEnvFromMounts();
-  if (process.env['MASTYFF_AI_SPIFFE_SOCKET_PATH'] && !spiffeLoaded) {
-    Logger.info('[spiffe] MASTYFF_AI_SPIFFE_SOCKET_PATH set — call fetchSpiffeSvidFromWorkloadApi() before loadMtlsConfig in async bootstrap');
+  if (process.env['MASTYF_AI_SPIFFE_SOCKET_PATH'] && !spiffeLoaded) {
+    Logger.info('[spiffe] MASTYF_AI_SPIFFE_SOCKET_PATH set — call fetchSpiffeSvidFromWorkloadApi() before loadMtlsConfig in async bootstrap');
   }
   const enabled = process.env['MCP_TLS_ENABLED'] === 'true';
 
@@ -180,7 +180,7 @@ export function loadMtlsConfig(): MtlsConfig {
  */
 export function createMtlsAgent(config: MtlsConfig): HttpsAgent | undefined {
   if (!config.enabled) {
-    const pinOnly = process.env['MASTYFF_AI_UPSTREAM_CERT_PIN_SHA256']?.trim();
+    const pinOnly = process.env['MASTYF_AI_UPSTREAM_CERT_PIN_SHA256']?.trim();
     if (!pinOnly) return undefined;
     const opts = applyCertPinToAgentOptions({
       rejectUnauthorized: true,
@@ -206,9 +206,9 @@ export function createMtlsAgent(config: MtlsConfig): HttpsAgent | undefined {
  */
 /** Default mount paths when using Helm mtls.existingSecret volume. */
 export const MTLS_HELM_MOUNT_PATHS = {
-  ca: '/etc/mastyff-ai/tls/ca.pem',
-  cert: '/etc/mastyff-ai/tls/tls.crt',
-  key: '/etc/mastyff-ai/tls/tls.key',
+  ca: '/etc/mastyf-ai/tls/ca.pem',
+  cert: '/etc/mastyf-ai/tls/tls.crt',
+  key: '/etc/mastyf-ai/tls/tls.key',
 } as const;
 
 /**

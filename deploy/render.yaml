@@ -1,8 +1,8 @@
 services:
   - type: web
-    name: mastyff-ai
+    name: mastyf-ai
     runtime: node
-    repo: https://github.com/mastyff-ai/mastyff-ai
+    repo: https://github.com/mastyf-ai/mastyf-ai
     buildCommand: npm install -g pnpm && pnpm install --no-frozen-lockfile && pnpm run build
     startCommand: node deploy/render-start.js
     buildFilter:
@@ -14,5 +14,5 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: MASTYFF_AI_DB_PATH
-        value: /tmp/mastyff-ai.db
+      - key: MASTYF_AI_DB_PATH
+        value: /tmp/mastyf-ai.db

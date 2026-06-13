@@ -9,9 +9,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { fetchDashboardRegions } from '@/lib/mastyff-ai-api';
+import { fetchDashboardRegions } from '@/lib/mastyf-ai-api';
 
-const STORAGE_KEY = 'mastyff-ai-dashboard-region';
+const STORAGE_KEY = 'mastyf-ai-dashboard-region';
 
 type ContextValue = {
   region: string;

@@ -293,11 +293,11 @@ describe('Feature #10: Agent-to-Agent Trust Protocol', () => {
   const protocol = new TrustNegotiationProtocol();
 
   it('negotiates trust with a registered agent', () => {
-    protocol.registerAgent({ agentId: 'agent-b', mastyffAiInstance: 'instance-b', capabilities: ['read', 'write', 'query'] });
+    protocol.registerAgent({ agentId: 'agent-b', mastyfAiInstance: 'instance-b', capabilities: ['read', 'write', 'query'] });
 
     const result = protocol.negotiate(
-      { agentId: 'agent-a', mastyffAiInstance: 'instance-a', capabilities: ['scan', 'audit'] },
-      { agentId: 'agent-b', mastyffAiInstance: 'instance-b', capabilities: ['read', 'write'] },
+      { agentId: 'agent-a', mastyfAiInstance: 'instance-a', capabilities: ['scan', 'audit'] },
+      { agentId: 'agent-b', mastyfAiInstance: 'instance-b', capabilities: ['read', 'write'] },
       { requestedTools: ['read'], scope: {}, maxSessionMinutes: 30 },
     );
 
@@ -308,8 +308,8 @@ describe('Feature #10: Agent-to-Agent Trust Protocol', () => {
 
   it('rejects unknown agents without attestation', () => {
     const result = protocol.negotiate(
-      { agentId: 'agent-a', mastyffAiInstance: 'instance-a', capabilities: [] },
-      { agentId: 'unknown-agent', mastyffAiInstance: 'unknown', capabilities: ['hack'] },
+      { agentId: 'agent-a', mastyfAiInstance: 'instance-a', capabilities: [] },
+      { agentId: 'unknown-agent', mastyfAiInstance: 'unknown', capabilities: ['hack'] },
       { requestedTools: ['hack'], scope: {}, maxSessionMinutes: 5 },
     );
 
@@ -317,10 +317,10 @@ describe('Feature #10: Agent-to-Agent Trust Protocol', () => {
   });
 
   it('checks access within a session', () => {
-    protocol.registerAgent({ agentId: 'agent-c', mastyffAiInstance: 'instance-c', capabilities: ['search'] });
+    protocol.registerAgent({ agentId: 'agent-c', mastyfAiInstance: 'instance-c', capabilities: ['search'] });
     const result = protocol.negotiate(
-      { agentId: 'agent-a', mastyffAiInstance: 'instance-a', capabilities: [] },
-      { agentId: 'agent-c', mastyffAiInstance: 'instance-c', capabilities: ['search'] },
+      { agentId: 'agent-a', mastyfAiInstance: 'instance-a', capabilities: [] },
+      { agentId: 'agent-c', mastyfAiInstance: 'instance-c', capabilities: ['search'] },
       { requestedTools: ['search'], scope: {}, maxSessionMinutes: 30 },
     );
 

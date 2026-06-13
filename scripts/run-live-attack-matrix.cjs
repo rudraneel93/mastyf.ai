@@ -74,7 +74,7 @@ function classifyPolicy(decision) {
 
 function runPolicyEngine(case_, env = {}) {
   const prev = {};
-  for (const k of ['MASTYFF_AI_WORKSPACE', 'MASTYFF_AI_ALLOWED_PATH_PREFIXES', 'MASTYFF_AI_BLOCK_ON_CVE']) {
+  for (const k of ['MASTYF_AI_WORKSPACE', 'MASTYF_AI_ALLOWED_PATH_PREFIXES', 'MASTYF_AI_BLOCK_ON_CVE']) {
     prev[k] = process.env[k];
     if (env[k] !== undefined) process.env[k] = env[k];
     else delete process.env[k];
@@ -142,35 +142,35 @@ async function runAttackLearningCycle(dbDir, proxyRows) {
     return { ok: false, blockedRules: [] };
   }
 
-  const aiDir = mkdtempSync(join(tmpdir(), 'mastyff-ai-attack-ai-'));
+  const aiDir = mkdtempSync(join(tmpdir(), 'mastyf-ai-attack-ai-'));
   const prev = {
-    MASTYFF_AI_AI_ENABLED: process.env.MASTYFF_AI_AI_ENABLED,
-    MASTYFF_AI_AI_USE_DB_SNAPSHOTS: process.env.MASTYFF_AI_AI_USE_DB_SNAPSHOTS,
-    MASTYFF_AI_AI_SUGGESTIONS_PATH: process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH,
-    MASTYFF_AI_AI_STATE_PATH: process.env.MASTYFF_AI_AI_STATE_PATH,
-    MASTYFF_AI_AI_BASELINES_PATH: process.env.MASTYFF_AI_AI_BASELINES_PATH,
-    MASTYFF_AI_AI_SKIP_INITIAL_CYCLE: process.env.MASTYFF_AI_AI_SKIP_INITIAL_CYCLE,
-    MASTYFF_AI_AI_DISABLE_PERIODIC: process.env.MASTYFF_AI_AI_DISABLE_PERIODIC,
-    MASTYFF_AI_DB_PATH: process.env.MASTYFF_AI_DB_PATH,
+    MASTYF_AI_AI_ENABLED: process.env.MASTYF_AI_AI_ENABLED,
+    MASTYF_AI_AI_USE_DB_SNAPSHOTS: process.env.MASTYF_AI_AI_USE_DB_SNAPSHOTS,
+    MASTYF_AI_AI_SUGGESTIONS_PATH: process.env.MASTYF_AI_AI_SUGGESTIONS_PATH,
+    MASTYF_AI_AI_STATE_PATH: process.env.MASTYF_AI_AI_STATE_PATH,
+    MASTYF_AI_AI_BASELINES_PATH: process.env.MASTYF_AI_AI_BASELINES_PATH,
+    MASTYF_AI_AI_SKIP_INITIAL_CYCLE: process.env.MASTYF_AI_AI_SKIP_INITIAL_CYCLE,
+    MASTYF_AI_AI_DISABLE_PERIODIC: process.env.MASTYF_AI_AI_DISABLE_PERIODIC,
+    MASTYF_AI_DB_PATH: process.env.MASTYF_AI_DB_PATH,
   };
 
-  process.env.MASTYFF_AI_AI_ENABLED = 'true';
-  process.env.MASTYFF_AI_AI_USE_DB_SNAPSHOTS = 'true';
-  process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH = join(aiDir, '.ai-pending-suggestions.json');
-  process.env.MASTYFF_AI_AI_STATE_PATH = join(aiDir, '.ai-learning.json');
-  process.env.MASTYFF_AI_AI_BASELINES_PATH = join(aiDir, '.ai-baselines.json');
-  process.env.MASTYFF_AI_AI_SKIP_INITIAL_CYCLE = 'true';
-  process.env.MASTYFF_AI_AI_DISABLE_PERIODIC = 'true';
-  process.env.MASTYFF_AI_DB_PATH = join(dbDir, 'history.db');
+  process.env.MASTYF_AI_AI_ENABLED = 'true';
+  process.env.MASTYF_AI_AI_USE_DB_SNAPSHOTS = 'true';
+  process.env.MASTYF_AI_AI_SUGGESTIONS_PATH = join(aiDir, '.ai-pending-suggestions.json');
+  process.env.MASTYF_AI_AI_STATE_PATH = join(aiDir, '.ai-learning.json');
+  process.env.MASTYF_AI_AI_BASELINES_PATH = join(aiDir, '.ai-baselines.json');
+  process.env.MASTYF_AI_AI_SKIP_INITIAL_CYCLE = 'true';
+  process.env.MASTYF_AI_AI_DISABLE_PERIODIC = 'true';
+  process.env.MASTYF_AI_DB_PATH = join(dbDir, 'history.db');
 
   try {
     const { HistoryDatabase } = require(join(ROOT, 'dist', 'database', 'history-db.js'));
     const { runLearningCycleForDb } = require(join(ROOT, 'dist', 'ai', 'suggestion-engine.js'));
-    const db = new HistoryDatabase(process.env.MASTYFF_AI_DB_PATH);
+    const db = new HistoryDatabase(process.env.MASTYF_AI_DB_PATH);
     const cycle = await runLearningCycleForDb(db, [{ name: 'filesystem', transport: 'stdio' }]);
     const suggestions = cycle?.suggestions || [];
-    const pending = require('fs').existsSync(process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH)
-      ? JSON.parse(readFileSync(process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH, 'utf-8'))
+    const pending = require('fs').existsSync(process.env.MASTYF_AI_AI_SUGGESTIONS_PATH)
+      ? JSON.parse(readFileSync(process.env.MASTYF_AI_AI_SUGGESTIONS_PATH, 'utf-8'))
       : { suggestions: [] };
     const text = JSON.stringify({ suggestions, pending }).toLowerCase();
     const matched = blockedRules.filter((rule) => text.includes(String(rule).toLowerCase()));
@@ -188,7 +188,7 @@ async function runAttackLearningCycle(dbDir, proxyRows) {
 }
 
 async function runProxyMatrix(cases, baseEnv) {
-  const configPath = join(mkdtempSync(join(tmpdir(), 'mastyff-ai-attack-')), 'mcp.json');
+  const configPath = join(mkdtempSync(join(tmpdir(), 'mastyf-ai-attack-')), 'mcp.json');
   writeFileSync(configPath, JSON.stringify({
     mcpServers: {
       filesystem: {
@@ -200,17 +200,17 @@ async function runProxyMatrix(cases, baseEnv) {
     },
   }));
 
-  const dbDir = mkdtempSync(join(tmpdir(), 'mastyff-ai-attack-db-'));
+  const dbDir = mkdtempSync(join(tmpdir(), 'mastyf-ai-attack-db-'));
   const proxyEnv = {
     ...process.env,
     ...baseEnv,
-    MASTYFF_AI_DB_PATH: join(dbDir, 'history.db'),
+    MASTYF_AI_DB_PATH: join(dbDir, 'history.db'),
     DASHBOARD_ENABLED: 'false',
-    MASTYFF_AI_WS_ENABLED: 'false',
-    MASTYFF_AI_SKIP_PREFLIGHT_SCAN: 'true',
+    MASTYF_AI_WS_ENABLED: 'false',
+    MASTYF_AI_SKIP_PREFLIGHT_SCAN: 'true',
     METRICS_ENABLED: 'false',
-    MASTYFF_AI_ALLOW_MODE_OVERRIDE: 'true',
-    MASTYFF_AI_BLOCK_ON_CVE: 'false',
+    MASTYF_AI_ALLOW_MODE_OVERRIDE: 'true',
+    MASTYF_AI_BLOCK_ON_CVE: 'false',
   };
 
   const proc = spawn('node', [
@@ -225,7 +225,7 @@ async function runProxyMatrix(cases, baseEnv) {
   const ready = await new Promise((resolve, reject) => {
     const t0 = Date.now();
     const iv = setInterval(() => {
-      if (/Proxy started for|MCP Mastyff AI proxy running/i.test(stderr)) {
+      if (/Proxy started for|MCP Mastyf AI proxy running/i.test(stderr)) {
         clearInterval(iv);
         resolve(true);
       } else if (Date.now() - t0 > 8000) {
@@ -249,7 +249,7 @@ async function runProxyMatrix(cases, baseEnv) {
   const results = [];
   for (const case_ of cases) {
     const env = { ...baseEnv };
-    if (case_.workspace) env.MASTYFF_AI_WORKSPACE = case_.workspace;
+    if (case_.workspace) env.MASTYF_AI_WORKSPACE = case_.workspace;
 
     const before = parseRpcLines(stdout).length;
     const rpcId = `proxy-${case_.id}`;
@@ -294,19 +294,19 @@ async function main() {
   const proxyOnly = args.includes('--proxy-only');
 
   const baseEnv = {
-    MASTYFF_AI_BLOCK_ON_CVE: 'false',
+    MASTYF_AI_BLOCK_ON_CVE: 'false',
   };
 
-  console.log('# MCP Mastyff AI v2.5.5 — Live Attack Matrix\n');
+  console.log('# MCP Mastyf AI v2.5.5 — Live Attack Matrix\n');
   console.log(`Policy: ${POLICY_PATH}`);
-  console.log(`Env: MASTYFF_AI_BLOCK_ON_CVE=false\n`);
+  console.log(`Env: MASTYF_AI_BLOCK_ON_CVE=false\n`);
 
   const policyRows = [];
   if (!proxyOnly) {
     console.log('## PolicyEngine (direct)\n');
     for (const case_ of ATTACKS) {
       const env = { ...baseEnv };
-      if (case_.workspace) env.MASTYFF_AI_WORKSPACE = case_.workspace;
+      if (case_.workspace) env.MASTYF_AI_WORKSPACE = case_.workspace;
       const { actual, rule } = runPolicyEngine(case_, env);
       policyRows.push({
         ...case_,

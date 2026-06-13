@@ -1,6 +1,6 @@
 'use client';
 
-import type { PlainEnglishReport } from '@/lib/mastyff-ai-api';
+import type { PlainEnglishReport } from '@/lib/mastyf-ai-api';
 import { MarkdownBlock } from './MarkdownBlock';
 
 type Section = NonNullable<PlainEnglishReport['sections']>[number];

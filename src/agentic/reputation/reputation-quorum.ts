@@ -16,8 +16,8 @@ export interface RaterVote {
 
 export function reputationQuorumConfig(): ReputationQuorumConfig {
   return {
-    minDistinctRaters: Number(process.env.MASTYFF_AI_REPUTATION_MIN_RATERS ?? 2),
-    minWeightedVotes: Number(process.env.MASTYFF_AI_REPUTATION_MIN_WEIGHT ?? 3),
+    minDistinctRaters: Number(process.env.MASTYF_AI_REPUTATION_MIN_RATERS ?? 2),
+    minWeightedVotes: Number(process.env.MASTYF_AI_REPUTATION_MIN_WEIGHT ?? 3),
   };
 }
 
@@ -29,7 +29,7 @@ const DIMENSION_KEYS: Array<keyof ReputationDimensions> = [
   'policy_compliance',
   'uptime',
   'community_rating',
-  'mastyff_ai_protected',
+  'mastyf_ai_protected',
 ];
 
 function median(values: number[]): number {

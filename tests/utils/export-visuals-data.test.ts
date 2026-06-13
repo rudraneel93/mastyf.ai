@@ -14,7 +14,7 @@ function mockDb(records: ProxyCallRecord[]): IDatabase {
 }
 
 describe('buildVisualsData', () => {
-  const envKeys = ['MASTYFF_AI_AI_ATTACK_STATE_PATH'] as const;
+  const envKeys = ['MASTYF_AI_AI_ATTACK_STATE_PATH'] as const;
   const savedEnv: Partial<Record<(typeof envKeys)[number], string | undefined>> = {};
 
   afterEach(() => {
@@ -66,8 +66,8 @@ describe('buildVisualsData', () => {
         recentBlocks: [],
       }),
     );
-    savedEnv.MASTYFF_AI_AI_ATTACK_STATE_PATH = process.env.MASTYFF_AI_AI_ATTACK_STATE_PATH;
-    process.env.MASTYFF_AI_AI_ATTACK_STATE_PATH = attackPath;
+    savedEnv.MASTYF_AI_AI_ATTACK_STATE_PATH = process.env.MASTYF_AI_AI_ATTACK_STATE_PATH;
+    process.env.MASTYF_AI_AI_ATTACK_STATE_PATH = attackPath;
 
     const now = Date.now();
     const ts = new Date(now - 20 * 60_000).toISOString().slice(0, 19).replace('T', ' ');

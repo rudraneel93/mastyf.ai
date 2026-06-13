@@ -1,6 +1,6 @@
 # Real-life scenario
 
-Exercises MCP Mastyff AI against mixed configs (scan/report) and **live proxy** sessions including the official `@modelcontextprotocol/server-filesystem` upstream MCP.
+Exercises MCP Mastyf AI against mixed configs (scan/report) and **live proxy** sessions including the official `@modelcontextprotocol/server-filesystem` upstream MCP.
 
 ## Required environment
 
@@ -8,7 +8,7 @@ Exercises MCP Mastyff AI against mixed configs (scan/report) and **live proxy** 
 |----------|---------|
 | `MCP_FS_ROOT` | Writable sandbox for official filesystem MCP (default: temp dir) |
 | `NVD_API_KEY` | Optional — higher NVD rate limits for CVE scans |
-| `MASTYFF_AI_MODEL` / server `env` | Model id for cost pricing when proxy records calls |
+| `MASTYF_AI_MODEL` / server `env` | Model id for cost pricing when proxy records calls |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / Ollama | Optional — async semantic audit in hybrid live session |
 | `DATABASE_URL` | Optional — PostgreSQL semantic audit persistence |
 
@@ -33,12 +33,12 @@ Orchestrator flags: `--skip-live`, `--skip-swarm`, `--full` (extended live burst
 
 ## Continuous live attack stream
 
-Pumps **corpus attacks + adversarial fixtures** through a live Mastyff AI proxy and official filesystem MCP for an extended window (default 60 min):
+Pumps **corpus attacks + adversarial fixtures** through a live Mastyf AI proxy and official filesystem MCP for an extended window (default 60 min):
 
 ```bash
 pnpm build
-export MASTYFF_AI_LLM_PROVIDER=ollama
-export MASTYFF_AI_LLM_MODEL=qwen3:8b
+export MASTYF_AI_LLM_PROVIDER=ollama
+export MASTYF_AI_LLM_MODEL=qwen3:8b
 export OLLAMA_BASE_URL=http://localhost:11434
 export REAL_LIFE_METRICS_ENABLED=false
 
@@ -83,15 +83,15 @@ node dist/cli.js audit -c scenarios/real-life/proxy-test-config.json
 
 During `run-official-filesystem-scenario.mjs`:
 
-- `MASTYFF_AI_AI_INSTANT_LEARNING=true`
-- `MASTYFF_AI_SEMANTIC_ASYNC=true`
-- `MASTYFF_AI_DISABLE_SEMANTIC=false`
+- `MASTYF_AI_AI_INSTANT_LEARNING=true`
+- `MASTYF_AI_SEMANTIC_ASYNC=true`
+- `MASTYF_AI_DISABLE_SEMANTIC=false`
 
 Repeat-block burst (`REAL_LIFE_BURST_REPEATS`, default 6) drives instant attack-pattern learning after blocked scenarios.
 
 ## CI strict mode
 
-`MASTYFF_AI_SCAN_STRICT=true` fails scan/report when:
+`MASTYF_AI_SCAN_STRICT=true` fails scan/report when:
 
 - CVE lookup is `degraded` or `unavailable`
 - Any server lacks authentication
@@ -111,4 +111,4 @@ Use in CI after `NVD_API_KEY` is configured for reliable CVE feeds.
 
 ## Cost audit (`05-proxy-live`)
 
-After `run-live-proxy-test.mjs`, `mastyff-ai audit` should show **actual** costs from `call_records`. If empty, the note distinguishes “no DB rows” vs “wrong server name”.
+After `run-live-proxy-test.mjs`, `mastyf-ai audit` should show **actual** costs from `call_records`. If empty, the note distinguishes “no DB rows” vs “wrong server name”.

@@ -147,7 +147,7 @@ export class ProxyManager {
           policy: this.policyEngine,
           db: this.db,
           authHeader,
-          listenPort: parseInt(config.env?.['MASTYFF_AI_SSE_PROXY_PORT'] || '0', 10) || 0,
+          listenPort: parseInt(config.env?.['MASTYF_AI_SSE_PROXY_PORT'] || '0', 10) || 0,
         });
         sseProxy.on('blocked', ({ reason }) => {
           Logger.warn(`[proxy][${config.name}] BLOCKED: ${reason}`);
@@ -178,7 +178,7 @@ export class ProxyManager {
           continue;
         }
         const listenPort = parseInt(
-          config.env?.['MASTYFF_AI_WS_PROXY_PORT'] || config.env?.['MASTYFF_AI_SSE_PROXY_PORT'] || '0',
+          config.env?.['MASTYF_AI_WS_PROXY_PORT'] || config.env?.['MASTYF_AI_SSE_PROXY_PORT'] || '0',
           10,
         ) || 0;
         const wsProxy = new WebSocketProxyServer({
@@ -219,7 +219,7 @@ export class ProxyManager {
 
     Logger.info(
       `╔══════════════════════════════════════════╗\n` +
-      `║  MCP Mastyff AI Proxy — Protection Active  ║\n` +
+      `║  MCP Mastyf AI Proxy — Protection Active  ║\n` +
       `╠══════════════════════════════════════════╣\n` +
       `║  Stdio: ${String(stdioStarted).padStart(4)} servers              ║\n` +
       `║  SSE:   ${String(sseStarted).padStart(4)} servers              ║\n` +

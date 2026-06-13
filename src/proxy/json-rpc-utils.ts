@@ -3,7 +3,7 @@
  */
 
 /**
- * Named constants for MCP Mastyff AI JSON-RPC error codes.
+ * Named constants for MCP Mastyf AI JSON-RPC error codes.
  * Prevents magic number proliferation across transport implementations.
  */
 export const JSON_RPC_ERROR_CODES = {

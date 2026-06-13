@@ -40,7 +40,7 @@ export type CounterfactualReport = {
 };
 
 function defaultPolicyPath(): string {
-  return process.env.MASTYFF_AI_POLICY_PATH || process.env.MASTYFF_AI_POLICY_PATH || 'default-policy.yaml';
+  return process.env.MASTYF_AI_POLICY_PATH || process.env.MASTYF_AI_POLICY_PATH || 'default-policy.yaml';
 }
 
 function loadPolicyConfig(path?: string): PolicyConfig | null {

@@ -1,3 +1,3 @@
-module github.com/mastyff-ai/mastyff-ai/proxy-core
+module github.com/mastyf-ai/mastyf-ai/proxy-core
 
 go 1.22

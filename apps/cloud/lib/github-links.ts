@@ -1,5 +1,5 @@
-/** Public MCP Mastyff AI repository — free tier destination after sign-in. */
-export const GITHUB_REPO_URL = 'https://github.com/mastyff-ai/mastyff-ai';
+/** Public MCP Mastyf AI repository — free tier destination after sign-in. */
+export const GITHUB_REPO_URL = 'https://github.com/mastyf-ai/mastyf-ai';
 
 export const GITHUB_README_URL = `${GITHUB_REPO_URL}/blob/master/README.md`;
 

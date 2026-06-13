@@ -36,7 +36,7 @@ export type BenchmarkScoreRow = {
   falsePositiveRate: number;
   p95LatencyMs: number | null;
   scorecard: Record<string, unknown>;
-  mastyffAiVersion: string | null;
+  mastyfAiVersion: string | null;
   submittedAt: string;
 };
 
@@ -229,7 +229,7 @@ export async function submitPublicBenchmark(
     falsePositiveRate: number;
     p95LatencyMs?: number;
     scorecard?: Record<string, unknown>;
-    mastyffAiVersion?: string;
+    mastyfAiVersion?: string;
   },
 ): Promise<{ id: string }> {
   const id = randomUUID();
@@ -237,7 +237,7 @@ export async function submitPublicBenchmark(
   await db.execute(sql`
     INSERT INTO public_benchmark_scores (
       id, org_id, profile, package_name, block_rate, false_positive_rate,
-      p95_latency_ms, scorecard, "mastyff-ai_version"
+      p95_latency_ms, scorecard, "mastyf-ai_version"
     ) VALUES (
       ${id},
       ${orgId},
@@ -247,7 +247,7 @@ export async function submitPublicBenchmark(
       ${body.falsePositiveRate},
       ${body.p95LatencyMs ?? null},
       ${JSON.stringify(body.scorecard ?? {})}::jsonb,
-      ${body.mastyffAiVersion ?? null}
+      ${body.mastyfAiVersion ?? null}
     )
   `);
   return { id };
@@ -262,7 +262,7 @@ export async function listBenchmarkLeaderboard(opts?: {
   const result = opts?.profile
     ? await db.execute(sql`
         SELECT id, org_id, profile, package_name, block_rate, false_positive_rate,
-               p95_latency_ms, scorecard, "mastyff-ai_version", submitted_at
+               p95_latency_ms, scorecard, "mastyf-ai_version", submitted_at
         FROM public_benchmark_scores
         WHERE profile = ${opts.profile}
         ORDER BY block_rate DESC, false_positive_rate ASC
@@ -270,7 +270,7 @@ export async function listBenchmarkLeaderboard(opts?: {
       `)
     : await db.execute(sql`
         SELECT id, org_id, profile, package_name, block_rate, false_positive_rate,
-               p95_latency_ms, scorecard, "mastyff-ai_version", submitted_at
+               p95_latency_ms, scorecard, "mastyf-ai_version", submitted_at
         FROM public_benchmark_scores
         ORDER BY block_rate DESC, false_positive_rate ASC
         LIMIT ${limit}
@@ -317,7 +317,7 @@ function mapBenchRows(result: unknown): BenchmarkScoreRow[] {
     false_positive_rate: number;
     p95_latency_ms: number | null;
     scorecard: Record<string, unknown>;
-    'mastyff-ai_version': string | null;
+    'mastyf-ai_version': string | null;
     submitted_at: string;
   }>;
   return rows.map((r) => ({
@@ -329,7 +329,7 @@ function mapBenchRows(result: unknown): BenchmarkScoreRow[] {
     falsePositiveRate: Number(r.false_positive_rate),
     p95LatencyMs: r.p95_latency_ms != null ? Number(r.p95_latency_ms) : null,
     scorecard: (r.scorecard as Record<string, unknown>) || {},
-    mastyffAiVersion: r['mastyff-ai_version'],
+    mastyfAiVersion: r['mastyf-ai_version'],
     submittedAt: String(r.submitted_at),
   }));
 }

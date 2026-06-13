@@ -59,13 +59,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: mastyff-ai
-          POSTGRES_PASSWORD: mastyff-ai
-          POSTGRES_DB: mastyff-ai
+          POSTGRES_USER: mastyf-ai
+          POSTGRES_PASSWORD: mastyf-ai
+          POSTGRES_DB: mastyf-ai
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U mastyff-ai"
+          --health-cmd "pg_isready -U mastyf-ai"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -88,8 +88,8 @@ jobs:
         run: pnpm enterprise:preflight
         env:
           REDIS_URL: redis://localhost:6379
-          DATABASE_URL: postgresql://mastyff-ai:mastyff-ai@localhost:5432/mastyff-ai
-          MASTYFF_AI_STRICT_MODE: 'true'
+          DATABASE_URL: postgresql://mastyf-ai:mastyf-ai@localhost:5432/mastyf-ai
+          MASTYF_AI_STRICT_MODE: 'true'
 
       - name: Integration tests
         run: pnpm test:integration
@@ -97,7 +97,7 @@ jobs:
       - name: Postgres scale pilot (50 concurrent)
         run: pnpm test:scale-postgres
         env:
-          DATABASE_URL: postgresql://mastyff-ai:mastyff-ai@localhost:5432/mastyff-ai
+          DATABASE_URL: postgresql://mastyf-ai:mastyf-ai@localhost:5432/mastyf-ai
           SCALE_TEST_CONCURRENCY: '50'
 
       - name: Proxy scale pilot (50 replicas)
@@ -116,7 +116,7 @@ jobs:
       - name: Adversarial proxy (community vs enterprise profiles)
         run: pnpm harness:premortem-profiles
         env:
-          MASTYFF_AI_CI_BYPASS_LICENSE: 'true'
+          MASTYF_AI_CI_BYPASS_LICENSE: 'true'
           SKIP_E2E: 'false'
 
   dogfood:
@@ -141,8 +141,8 @@ jobs:
       - name: Run sandboxed dogfood scenario
         run: pnpm run dogfood
         env:
-          MASTYFF_AI_BLOCK_ON_CVE: 'false'
-          MASTYFF_AI_SKIP_PREFLIGHT_SCAN: 'true'
+          MASTYF_AI_BLOCK_ON_CVE: 'false'
+          MASTYF_AI_SKIP_PREFLIGHT_SCAN: 'true'
 
   corpus-eval:
     name: Corpus Precision/Recall
@@ -226,11 +226,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t mastyff-ai:ci .
+        run: docker build -t mastyf-ai:ci .
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: mastyff-ai:ci
+          image-ref: mastyf-ai:ci
           severity: 'CRITICAL'
           exit-code: 1
           format: 'table'
@@ -244,8 +244,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - name: Helm dependency update
-        run: helm dependency update deploy/helm/mastyff-ai
+        run: helm dependency update deploy/helm/mastyf-ai
       - name: Helm lint
-        run: helm lint deploy/helm/mastyff-ai
+        run: helm lint deploy/helm/mastyf-ai
       - name: Helm template smoke
-        run: helm template mastyff-ai deploy/helm/mastyff-ai --set redis.enabled=false > /dev/null
+        run: helm template mastyf-ai deploy/helm/mastyf-ai --set redis.enabled=false > /dev/null

@@ -38,14 +38,14 @@ describe('Adversarial scenarios (default-policy.yaml)', () => {
   let engine: PolicyEngine;
 
   beforeEach(() => {
-    delete process.env.MASTYFF_AI_WORKSPACE;
-    delete process.env.MASTYFF_AI_ALLOWED_PATH_PREFIXES;
+    delete process.env.MASTYF_AI_WORKSPACE;
+    delete process.env.MASTYF_AI_ALLOWED_PATH_PREFIXES;
     engine = new PolicyEngine(defaultPolicy);
   });
 
   afterEach(() => {
-    delete process.env.MASTYFF_AI_WORKSPACE;
-    delete process.env.MASTYFF_AI_ALLOWED_PATH_PREFIXES;
+    delete process.env.MASTYF_AI_WORKSPACE;
+    delete process.env.MASTYF_AI_ALLOWED_PATH_PREFIXES;
   });
 
   // V-01 Puppeteer / URL validation

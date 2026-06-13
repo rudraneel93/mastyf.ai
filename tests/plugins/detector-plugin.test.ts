@@ -7,7 +7,7 @@ import {
 import { scanForSecrets } from '../../src/scanners/secret-scanner.js';
 
 describe('DetectorPlugin registry', () => {
-  const prevEnabled = process.env['MASTYFF_AI_PLUGINS_ENABLED'];
+  const prevEnabled = process.env['MASTYF_AI_PLUGINS_ENABLED'];
 
   beforeEach(() => {
     clearDetectorPluginsForTests();
@@ -15,12 +15,12 @@ describe('DetectorPlugin registry', () => {
 
   afterEach(() => {
     clearDetectorPluginsForTests();
-    if (prevEnabled === undefined) delete process.env['MASTYFF_AI_PLUGINS_ENABLED'];
-    else process.env['MASTYFF_AI_PLUGINS_ENABLED'] = prevEnabled;
+    if (prevEnabled === undefined) delete process.env['MASTYF_AI_PLUGINS_ENABLED'];
+    else process.env['MASTYF_AI_PLUGINS_ENABLED'] = prevEnabled;
   });
 
-  it('does not run plugins when MASTYFF_AI_PLUGINS_ENABLED is false', () => {
-    process.env['MASTYFF_AI_PLUGINS_ENABLED'] = 'false';
+  it('does not run plugins when MASTYF_AI_PLUGINS_ENABLED is false', () => {
+    process.env['MASTYF_AI_PLUGINS_ENABLED'] = 'false';
     registerDetectorPlugin({
       name: 'test-plugin',
       scanArguments: () => [{ type: 'x', location: 'l', severity: 'HIGH' }],
@@ -29,7 +29,7 @@ describe('DetectorPlugin registry', () => {
   });
 
   it('runs registered plugin after built-in scan when enabled', () => {
-    process.env['MASTYFF_AI_PLUGINS_ENABLED'] = 'true';
+    process.env['MASTYF_AI_PLUGINS_ENABLED'] = 'true';
     registerDetectorPlugin({
       name: 'custom-pattern',
       scanArguments(text) {

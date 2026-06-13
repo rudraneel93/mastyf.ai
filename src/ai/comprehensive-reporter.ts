@@ -196,7 +196,7 @@ export class ComprehensiveReporter {
 
   toMarkdown(report: ComprehensiveReport): string {
     const lines: string[] = [];
-    lines.push(`# MCP Mastyff AI — AI-Driven Comprehensive Report`);
+    lines.push(`# MCP Mastyf AI — AI-Driven Comprehensive Report`);
     lines.push(`**${report.timestamp}** | Score: ${report.executiveSummary.overallScore}/100 | Cost: $${report.executiveSummary.totalCost.toFixed(4)}`);
     lines.push('');
     lines.push('## Executive Summary');
@@ -245,7 +245,7 @@ export class ComprehensiveReporter {
   /** Plain-text report for TUI and logs (no markdown). */
   toPlainText(report: ComprehensiveReport): string {
     const lines: string[] = [];
-    lines.push('MCP Mastyff AI — Comprehensive Analysis');
+    lines.push('MCP Mastyf AI — Comprehensive Analysis');
     lines.push(`Generated: ${report.timestamp}`);
     lines.push('');
     lines.push('EXECUTIVE SUMMARY');

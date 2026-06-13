@@ -9,11 +9,11 @@ import { getDailyBudgetCapUsd } from '../../src/services/cost-auditor.js';
 describe('CostAuditor audit-mode (no fabricated usage)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.MASTYFF_AI_COST_ALLOW_ESTIMATES;
+    delete process.env.MASTYF_AI_COST_ALLOW_ESTIMATES;
   });
 
   it('disallows cost estimates by default', () => {
-    delete process.env.MASTYFF_AI_COST_ALLOW_ESTIMATES;
+    delete process.env.MASTYF_AI_COST_ALLOW_ESTIMATES;
     expect(allowsCostEstimates()).toBe(false);
   });
 
@@ -45,7 +45,7 @@ describe('CostAuditor audit-mode (no fabricated usage)', () => {
       transport: 'stdio',
       command: 'echo',
       args: ['ok'],
-      env: { MASTYFF_AI_MODEL: 'gpt-4o-mini' },
+      env: { MASTYF_AI_MODEL: 'gpt-4o-mini' },
     });
 
     expect(report.costSource).toBe('model-only');
@@ -55,13 +55,13 @@ describe('CostAuditor audit-mode (no fabricated usage)', () => {
     expect(report.modelId).toBe('gpt-4o-mini');
     expect(report.provider).toBe('openai');
     expect(report.note).toContain('no proxy traffic');
-    expect(report.note).toContain('mastyff-ai proxy');
+    expect(report.note).toContain('mastyf-ai proxy');
     auditor.dispose();
     db.close();
   });
 
-  it('uses legacy simulation only when MASTYFF_AI_COST_ALLOW_ESTIMATES=true', async () => {
-    process.env.MASTYFF_AI_COST_ALLOW_ESTIMATES = 'true';
+  it('uses legacy simulation only when MASTYF_AI_COST_ALLOW_ESTIMATES=true', async () => {
+    process.env.MASTYF_AI_COST_ALLOW_ESTIMATES = 'true';
     expect(allowsCostEstimates()).toBe(true);
 
     vi.spyOn(McpClient, 'probe').mockResolvedValue({
@@ -78,7 +78,7 @@ describe('CostAuditor audit-mode (no fabricated usage)', () => {
       name: 'fixture',
       transport: 'stdio',
       command: 'echo',
-      env: { MASTYFF_AI_MODEL: 'gpt-4o-mini' },
+      env: { MASTYF_AI_MODEL: 'gpt-4o-mini' },
     });
 
     expect(report.costSource).toBe('estimated');
@@ -132,16 +132,16 @@ describe('CostAuditor audit-mode (no fabricated usage)', () => {
   });
 });
 
-describe('MASTYFF_AI_DAILY_BUDGET_USD with audit estimates', () => {
-  const prev = process.env.MASTYFF_AI_DAILY_BUDGET_USD;
+describe('MASTYF_AI_DAILY_BUDGET_USD with audit estimates', () => {
+  const prev = process.env.MASTYF_AI_DAILY_BUDGET_USD;
 
   afterEach(() => {
-    if (prev === undefined) delete process.env.MASTYFF_AI_DAILY_BUDGET_USD;
-    else process.env.MASTYFF_AI_DAILY_BUDGET_USD = prev;
+    if (prev === undefined) delete process.env.MASTYF_AI_DAILY_BUDGET_USD;
+    else process.env.MASTYF_AI_DAILY_BUDGET_USD = prev;
   });
 
   it('still reads daily cap from env', () => {
-    process.env.MASTYFF_AI_DAILY_BUDGET_USD = '10';
+    process.env.MASTYF_AI_DAILY_BUDGET_USD = '10';
     expect(getDailyBudgetCapUsd()).toBe(10);
   });
 });

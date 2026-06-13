@@ -15,15 +15,15 @@ describe('buildAutopilotStatus', () => {
   beforeEach(() => {
     resetThreatResearchQueueForTests();
     mkdirSync(TEST_DIR, { recursive: true });
-    process.env.MASTYFF_AI_AUTOPILOT_CONFIG_PATH = join(TEST_DIR, 'autopilot.json');
+    process.env.MASTYF_AI_AUTOPILOT_CONFIG_PATH = join(TEST_DIR, 'autopilot.json');
     writeAutopilotConfig(defaultAutopilotConfig('default'));
-    process.env.MASTYFF_AI_AUTOPILOT = 'true';
-    process.env.MASTYFF_AI_AI_AUTO_APPLY = 'false';
+    process.env.MASTYF_AI_AUTOPILOT = 'true';
+    process.env.MASTYF_AI_AI_AUTO_APPLY = 'false';
   });
 
   afterEach(() => {
-    delete process.env.MASTYFF_AI_AUTOPILOT;
-    delete process.env.MASTYFF_AI_AUTOPILOT_CONFIG_PATH;
+    delete process.env.MASTYF_AI_AUTOPILOT;
+    delete process.env.MASTYF_AI_AUTOPILOT_CONFIG_PATH;
     const p = autopilotConfigPath();
     if (existsSync(p)) rmSync(p, { force: true });
     if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true });
@@ -40,13 +40,13 @@ describe('buildAutopilotStatus', () => {
     const dir = join(TEST_DIR, 'data');
     mkdirSync(dir, { recursive: true });
     const sugPath = join(dir, '.ai-pending-suggestions.json');
-    process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH = sugPath;
+    process.env.MASTYF_AI_AI_SUGGESTIONS_PATH = sugPath;
     writeFileSync(
       sugPath,
       JSON.stringify({ suggestions: [{ id: '1' }, { id: '2' }] }),
     );
     const status = await buildAutopilotStatus('default', true);
     expect(status.learning.pendingSuggestions).toBe(2);
-    delete process.env.MASTYFF_AI_AI_SUGGESTIONS_PATH;
+    delete process.env.MASTYF_AI_AI_SUGGESTIONS_PATH;
   });
 });

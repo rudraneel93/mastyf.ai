@@ -10,7 +10,7 @@ import { CallContext } from '../policy/policy-types.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { OAuthValidator } from '../auth/oauth.js';
 import { AuthValidationResult, AgentIdentity } from '../auth/auth-types.js';
-import { createSessionCache, validateSessionToken, type MastyffAiSessionCache } from '../auth/session-factory.js';
+import { createSessionCache, validateSessionToken, type MastyfAiSessionCache } from '../auth/session-factory.js';
 import { getCircuitBreaker } from '../utils/circuit-breaker-registry.js';
 import type { MtlsConfig } from '../utils/mtls-config.js';
 import { getMtlsAgent } from '../utils/mtls-agent-registry.js';
@@ -54,7 +54,7 @@ export class HttpProxyServer {
   private targetUrl: string;
   private policyEngine: PolicyEngine | null;
   private authValidator: OAuthValidator | null;
-  private sessionCache: MastyffAiSessionCache | null;
+  private sessionCache: MastyfAiSessionCache | null;
   private defaultTenantId: string;
   private tokenCounter: TokenCounter;
   private db: HistoryDatabase;
@@ -168,7 +168,7 @@ export class HttpProxyServer {
             result = { valid: true, identity: sessionResult.identity };
             if (sessionResult.rotatedToken) {
               rotatedSessionToken = sessionResult.rotatedToken;
-              res.setHeader('x-mastyff-ai-session-token', sessionResult.rotatedToken);
+              res.setHeader('x-mastyf-ai-session-token', sessionResult.rotatedToken);
             }
           }
         }
@@ -308,7 +308,7 @@ export class HttpProxyServer {
                 error: {
                   code: -32001,
                   message:
-                    'Blocked by MCP Mastyff AI policy: tool definitions changed mid-session (rug-pull)',
+                    'Blocked by MCP Mastyf AI policy: tool definitions changed mid-session (rug-pull)',
                 },
               }),
             );
@@ -329,7 +329,7 @@ export class HttpProxyServer {
                 id: msg.id,
                 error: {
                   code: -32005,
-                  message: `Mastyff AI: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
+                  message: `Mastyf AI: proxy overloaded (${inflight.current}/${inflight.max} in flight)`,
                 },
               }),
             );
@@ -406,7 +406,7 @@ export class HttpProxyServer {
             res.end(JSON.stringify({
               jsonrpc: '2.0',
               id: msg.id,
-              error: { code: -32001, message: `Blocked by MCP Mastyff AI policy: ${decision.reason}` },
+              error: { code: -32001, message: `Blocked by MCP Mastyf AI policy: ${decision.reason}` },
             }));
             return;
           }
@@ -429,7 +429,7 @@ export class HttpProxyServer {
                 id: msg.id,
                 error: {
                   code: -32001,
-                  message: `Blocked by MCP Mastyff AI semantic gate: ${semGate.reason}`,
+                  message: `Blocked by MCP Mastyf AI semantic gate: ${semGate.reason}`,
                 },
               }),
             );
@@ -470,7 +470,7 @@ export class HttpProxyServer {
           if (!res.headersSent) {
             res.writeHead(502, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              error: 'Mastyff AI: Invalid response headers from upstream',
+              error: 'Mastyf AI: Invalid response headers from upstream',
             }));
           }
           upstreamRes.resume();
@@ -677,11 +677,11 @@ export class HttpProxyServer {
                 outbound = JSON.stringify(msg);
               }
               if (rotatedSessionToken) {
-                res.setHeader('x-mastyff-ai-session-token', rotatedSessionToken);
+                res.setHeader('x-mastyf-ai-session-token', rotatedSessionToken);
               }
               const redactionHdr = formatRedactionHeader(redactionReasons);
               if (redactionHdr) {
-                safeHeaders['x-mastyff-ai-redaction-reason'] = redactionHdr;
+                safeHeaders['x-mastyf-ai-redaction-reason'] = redactionHdr;
               }
               delete safeHeaders['content-length'];
               delete safeHeaders['Content-Length'];

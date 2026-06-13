@@ -9,7 +9,7 @@ import {
   fetchFederatedStatus,
   promoteFederatedRollout,
   type FederatedStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 
 type Props = { refreshKey?: number };
 

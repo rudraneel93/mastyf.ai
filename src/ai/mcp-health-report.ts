@@ -59,11 +59,11 @@ export type McpHealthReport = {
 };
 
 function isHealthReportLlmEnabled(useLlm: boolean): boolean {
-  return useLlm && (process.env.MASTYFF_AI_HEALTH_REPORT_LLM === 'true' || process.env.MASTYFF_AI_INSIGHTS_LLM === 'true');
+  return useLlm && (process.env.MASTYF_AI_HEALTH_REPORT_LLM === 'true' || process.env.MASTYF_AI_INSIGHTS_LLM === 'true');
 }
 
 function defaultPolicyPath(): string {
-  return process.env.MASTYFF_AI_POLICY_PATH || process.env.MASTYFF_AI_POLICY_PATH || 'default-policy.yaml';
+  return process.env.MASTYF_AI_POLICY_PATH || process.env.MASTYF_AI_POLICY_PATH || 'default-policy.yaml';
 }
 
 async function loadPolicySnapshot(): Promise<{ mode: string; ruleSummary: string }> {
@@ -188,7 +188,7 @@ function computeVerdict(
 
 function formatMarkdown(report: Omit<McpHealthReport, 'markdown'> & { narrative?: string }): string {
   const lines: string[] = [
-    '# MCP Mastyff AI — Server Health Report',
+    '# MCP Mastyf AI — Server Health Report',
     '',
     `**Generated:** ${report.generatedAt}`,
     `**Window:** ${report.windowDays} day(s)`,
@@ -296,13 +296,13 @@ export async function buildMcpHealthReport(
   const executiveSummary: string[] = [];
   if (summary.totalRequests > 0) {
     executiveSummary.push(
-      `${summary.totalRequests.toLocaleString()} tool calls through Mastyff AI in the last ${windowDays} days.`,
+      `${summary.totalRequests.toLocaleString()} tool calls through Mastyf AI in the last ${windowDays} days.`,
     );
     executiveSummary.push(
       `${summary.blockedRequests.toLocaleString()} were blocked (${summary.passRatePct}% allowed).`,
     );
   } else {
-    executiveSummary.push('No proxy traffic recorded yet — connect an MCP client through Mastyff AI to begin monitoring.');
+    executiveSummary.push('No proxy traffic recorded yet — connect an MCP client through Mastyf AI to begin monitoring.');
   }
   if (atRisk.length) {
     executiveSummary.push(`Servers needing attention: ${atRisk.join(', ')}.`);
@@ -326,7 +326,7 @@ export async function buildMcpHealthReport(
   if (summary.totalRequests === 0) {
     recommendations.push({
       priority: 1,
-      action: 'Run the proxy with DASHBOARD_ENABLED=true and send tool calls through Mastyff AI.',
+      action: 'Run the proxy with DASHBOARD_ENABLED=true and send tool calls through Mastyf AI.',
     });
   }
   if (atRisk.length) {

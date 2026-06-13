@@ -1,0 +1,23 @@
+# Standby region overlay — use with primary values-enterprise.yaml
+#   helm upgrade --install mastyf-ai ./deploy/helm/mastyf-ai \
+#     -f deploy/helm/mastyf-ai/values.yaml \
+#     -f deploy/helm/mastyf-ai/values-enterprise.yaml \
+#     -f deploy/helm/mastyf-ai/values-enterprise-standby.yaml
+
+replicaCount: 2
+
+config:
+  env:
+    MASTYF_AI_REGION: "eu-west-1"
+    MASTYF_AI_MULTI_REGION_MODE: "active-active"
+    # Dashboard-only pods may use read-replica DATABASE_URL (set per cluster)
+    MASTYF_AI_DASHBOARD_DATA_SOURCE: "unified"
+
+gateway:
+  ingress:
+    host: mastyf-ai-standby.example.com
+
+# Point at cross-region shared Redis for DPoP jti + optional global rate cap
+# config.env.MASTYF_AI_DPOP_REDIS_URL: "rediss://global-redis.example.com:6379"
+# config.env.MASTYF_AI_GLOBAL_RATE_LIMIT_REDIS_URL: "rediss://global-redis.example.com:6379"
+# config.env.MASTYF_AI_GLOBAL_RATE_LIMIT_MAX: "10000"

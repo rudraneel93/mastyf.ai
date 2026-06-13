@@ -102,13 +102,13 @@ function isReactDashboardBuilt(deployRoot: string | null): boolean {
 function loadDashboardHtml(): string {
   const dir = deployDir();
   const spaIndex = dir ? join(dashboardSpaDir(dir), 'index.html') : '';
-  const useSpa = process.env['MASTYFF_AI_DASHBOARD_SPA'] !== 'false';
+  const useSpa = process.env['MASTYF_AI_DASHBOARD_SPA'] !== 'false';
   if (useSpa && spaIndex && existsSync(spaIndex)) {
     return readFileSync(spaIndex, 'utf-8');
   }
   const legacy = dir ? join(dir, 'dashboard.html') : '';
   if (legacy && existsSync(legacy)) return readFileSync(legacy, 'utf-8');
-  return '<!DOCTYPE html><html><body><h1>MCP Mastyff AI API</h1><p>See README for REST and WebSocket endpoints.</p></body></html>';
+  return '<!DOCTYPE html><html><body><h1>MCP Mastyf AI API</h1><p>See README for REST and WebSocket endpoints.</p></body></html>';
 }
 
 const SPA_MIME: Record<string, string> = {
@@ -332,7 +332,7 @@ export async function startDashboardServer(
   const licenseRequired = isLicenseEnforcementEnabled() && licenseClient.requiresLicense();
 
   let dashboardEnabled = process.env['DASHBOARD_ENABLED'] === 'true';
-  const wsEnabled = process.env['MASTYFF_AI_WS_ENABLED'] !== 'false';
+  const wsEnabled = process.env['MASTYF_AI_WS_ENABLED'] !== 'false';
 
   if (licenseRequired && !licenseOk) {
     Logger.error('[license] Dashboard and WebSocket disabled — license enforcement failed');
@@ -347,7 +347,7 @@ export async function startDashboardServer(
     && !licenseClient.hasFeature('dashboard')
   ) {
     Logger.error(
-      '[license] DASHBOARD_ENABLED requires MCP Mastyff AI Pro — set MASTYFF_AI_LICENSE_KEY and MASTYFF_AI_CONTROL_PLANE_URL (see docs/PRO_SETUP.md)',
+      '[license] DASHBOARD_ENABLED requires MCP Mastyf AI Pro — set MASTYF_AI_LICENSE_KEY and MASTYF_AI_CONTROL_PLANE_URL (see docs/PRO_SETUP.md)',
     );
     dashboardEnabled = false;
   }
@@ -367,7 +367,7 @@ export async function startDashboardServer(
   }
 
   if (!dashboardEnabled && !wsEnabled) {
-    Logger.debug('[dashboard] Dashboard/WS disabled (DASHBOARD_ENABLED or MASTYFF_AI_WS_ENABLED)');
+    Logger.debug('[dashboard] Dashboard/WS disabled (DASHBOARD_ENABLED or MASTYF_AI_WS_ENABLED)');
     setWsBroadcaster(null);
     return {
       auth: dashboardAuth || new DashboardAuth({ enabled: false }),
@@ -430,7 +430,7 @@ export async function startDashboardServer(
     }
     setCors();
     writeJson(res, 402, {
-      error: 'MCP Mastyff AI Pro license required',
+      error: 'MCP Mastyf AI Pro license required',
       ...licenseStatusPayload(),
     });
     return false;
@@ -519,7 +519,7 @@ export async function startDashboardServer(
     if (prefersHtml(req)) {
       const safe = message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Cloud SSO</title></head><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem"><h1>Cloud sign-in failed</h1><p>${safe}</p><p><a href="/">Back to dashboard</a> · <a href="https://mastyff-ai-cloud.vercel.app/dashboard">Cloud console</a></p></body></html>`);
+      res.end(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Cloud SSO</title></head><body style="font-family:system-ui,sans-serif;max-width:40rem;margin:2rem auto;padding:0 1rem"><h1>Cloud sign-in failed</h1><p>${safe}</p><p><a href="/">Back to dashboard</a> · <a href="https://mastyf-ai-cloud.vercel.app/dashboard">Cloud console</a></p></body></html>`);
       return;
     }
     writeJson(res, status, { error: message });
@@ -536,7 +536,7 @@ export async function startDashboardServer(
 
   function appendThreatIntelActionAudit(action: Record<string, unknown>): void {
     try {
-      const file = join(homedir(), '.mastyff-ai', 'threat-intel-actions.jsonl');
+      const file = join(homedir(), '.mastyf-ai', 'threat-intel-actions.jsonl');
       mkdirSync(dirname(file), { recursive: true });
       appendFileSync(file, `${JSON.stringify(action)}\n`, 'utf-8');
     } catch {
@@ -560,7 +560,7 @@ export async function startDashboardServer(
     if (process.env.DASHBOARD_AUTH_DISABLED === 'true') {
       return 5000;
     }
-    const n = parseInt(process.env.MASTYFF_AI_DASHBOARD_API_RATE_LIMIT || '600', 10);
+    const n = parseInt(process.env.MASTYF_AI_DASHBOARD_API_RATE_LIMIT || '600', 10);
     return Number.isFinite(n) && n > 0 ? n : 600;
   };
 
@@ -666,14 +666,14 @@ export async function startDashboardServer(
       applyCors(req, res);
       res.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-Id, X-Mastyff-Ai-Tenant, X-CSRF-Token',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, X-Tenant-Id, X-Mastyf-Ai-Tenant, X-CSRF-Token',
       });
       res.end(); return;
     }
 
     const setCors = () => applyCors(req, res);
 
-    let requestTenantId = process.env['MASTYFF_AI_TENANT_ID'] || 'default';
+    let requestTenantId = process.env['MASTYF_AI_TENANT_ID'] || 'default';
     try {
       requestTenantId = resolveTenantContext({
         headers: req.headers as Record<string, string | string[] | undefined>,
@@ -726,7 +726,7 @@ export async function startDashboardServer(
             req,
             res,
             503,
-            'Set DASHBOARD_JWT_SECRET or MASTYFF_AI_CLOUD_JWT_SECRET on this Mastyff AI host (same value as cloud AUTH_SECRET). The cloud console at mastyff-ai-cloud.vercel.app does not need this — only self-hosted SSO.',
+            'Set DASHBOARD_JWT_SECRET or MASTYF_AI_CLOUD_JWT_SECRET on this Mastyf AI host (same value as cloud AUTH_SECRET). The cloud console at mastyf-ai-cloud.vercel.app does not need this — only self-hosted SSO.',
           );
           return;
         }
@@ -737,7 +737,7 @@ export async function startDashboardServer(
             req,
             res,
             503,
-            'MASTYFF_AI_CONTROL_PLANE_URL not configured (set to https://mastyff-ai-cloud.vercel.app)',
+            'MASTYF_AI_CONTROL_PLANE_URL not configured (set to https://mastyf-ai-cloud.vercel.app)',
           );
           return;
         }
@@ -753,7 +753,7 @@ export async function startDashboardServer(
             req,
             res,
             401,
-            'Invalid cloud session token — MASTYFF_AI_CLOUD_JWT_SECRET must match cloud AUTH_SECRET',
+            'Invalid cloud session token — MASTYF_AI_CLOUD_JWT_SECRET must match cloud AUTH_SECRET',
           );
           return;
         }
@@ -1044,7 +1044,7 @@ export async function startDashboardServer(
         if (auditor) {
           auditor.record({
             timestamp: new Date().toISOString(),
-            actor: String(req.headers['x-mastyff-ai-policy-approver'] || authResult.identity || 'dashboard'),
+            actor: String(req.headers['x-mastyf-ai-policy-approver'] || authResult.identity || 'dashboard'),
             change: 'policy_rule_toggle_via_dashboard',
             oldValue: auditor.computeHash(yaml),
             newValue: auditor.computeHash(nextYaml),
@@ -1098,7 +1098,7 @@ export async function startDashboardServer(
         if (auditor) {
           auditor.record({
             timestamp: new Date().toISOString(),
-            actor: String(req.headers['x-mastyff-ai-policy-approver'] || authResult.identity || 'dashboard'),
+            actor: String(req.headers['x-mastyf-ai-policy-approver'] || authResult.identity || 'dashboard'),
             change: 'policy_rule_delete_via_dashboard',
             oldValue: auditor.computeHash(yaml),
             newValue: auditor.computeHash(nextYaml),
@@ -1110,10 +1110,10 @@ export async function startDashboardServer(
 
       if (url === '/api/policy' && method === 'PUT') {
         setCors();
-        if (process.env['MASTYFF_AI_POLICY_FOUR_EYES_REQUIRED'] === 'true') {
-          const proposer = String(req.headers['x-mastyff-ai-policy-proposer'] || '').trim();
-          const approver = String(req.headers['x-mastyff-ai-policy-approver'] || '').trim();
-          const approvalExpiry = String(req.headers['x-mastyff-ai-policy-approval-expiry'] || '').trim();
+        if (process.env['MASTYF_AI_POLICY_FOUR_EYES_REQUIRED'] === 'true') {
+          const proposer = String(req.headers['x-mastyf-ai-policy-proposer'] || '').trim();
+          const approver = String(req.headers['x-mastyf-ai-policy-approver'] || '').trim();
+          const approvalExpiry = String(req.headers['x-mastyf-ai-policy-approval-expiry'] || '').trim();
           if (!proposer || !approver) {
             writeJson(res, 400, { error: 'four-eyes required: proposer and approver headers missing' });
             return;
@@ -1152,14 +1152,14 @@ export async function startDashboardServer(
         const sigPath = join(dirname(policyPath), `.${policyPath.split('/').pop()}.sig.json`);
         let envelope: PolicySignatureEnvelope | undefined = body.signature;
         if (!envelope && body.autoSign) {
-          const issuer = process.env['MASTYFF_AI_POLICY_SIGNING_ISSUER'] || 'mastyff-ai-admin';
-          const keyId = process.env['MASTYFF_AI_POLICY_SIGNING_KEY_ID'] || 'default';
+          const issuer = process.env['MASTYF_AI_POLICY_SIGNING_ISSUER'] || 'mastyf-ai-admin';
+          const keyId = process.env['MASTYF_AI_POLICY_SIGNING_KEY_ID'] || 'default';
           const now = new Date().toISOString();
           envelope = signPolicyYaml(yaml, {
             issuer,
             keyId,
             issuedAt: now,
-            expiresAt: process.env['MASTYFF_AI_POLICY_SIGNING_EXPIRES_AT'],
+            expiresAt: process.env['MASTYF_AI_POLICY_SIGNING_EXPIRES_AT'],
           });
         }
         const sigCheck = validateSignedPolicyYaml(yaml, envelope);
@@ -1185,7 +1185,7 @@ export async function startDashboardServer(
         try {
           const { recordConfigProvenance } = await import('../agentic/provenance/config-provenance-chain.js');
           recordConfigProvenance({
-            actor: String(req.headers['x-mastyff-ai-policy-approver'] || authResult.identity || 'dashboard'),
+            actor: String(req.headers['x-mastyf-ai-policy-approver'] || authResult.identity || 'dashboard'),
             eventType: 'policy_apply',
             resourcePath: policyPath,
             diff: { source: 'dashboard_put', mode: parsePolicyConfig(parsed).policy.mode },
@@ -1202,7 +1202,7 @@ export async function startDashboardServer(
         if (auditor) {
           auditor.record({
             timestamp: new Date().toISOString(),
-            actor: String(req.headers['x-mastyff-ai-policy-approver'] || authResult.identity || 'dashboard'),
+            actor: String(req.headers['x-mastyf-ai-policy-approver'] || authResult.identity || 'dashboard'),
             change: 'policy_update_via_dashboard',
             newValue: auditor.computeHash(yaml),
             sourceHash: auditor.computeHash(yaml),
@@ -1233,8 +1233,8 @@ export async function startDashboardServer(
         const body = await readBody(req);
         const { runPolicyTest } = await import('../cli/policy-test.js');
         const policyPath =
-          process.env['MASTYFF_AI_POLICY_PATH'] ||
-          process.env['MASTYFF_AI_POLICY_PATH'] ||
+          process.env['MASTYF_AI_POLICY_PATH'] ||
+          process.env['MASTYF_AI_POLICY_PATH'] ||
           'default-policy.yaml';
         const result = runPolicyTest({
           policy: String(body.policyPath || policyPath),
@@ -1503,9 +1503,9 @@ export async function startDashboardServer(
             });
             return;
           }
-          if (process.env.MASTYFF_AI_DASHBOARD_ALLOW_LORA_TRAIN !== 'true') {
+          if (process.env.MASTYF_AI_DASHBOARD_ALLOW_LORA_TRAIN !== 'true') {
             writeJson(res, 403, {
-              error: 'Dashboard LoRA train disabled — set MASTYFF_AI_DASHBOARD_ALLOW_LORA_TRAIN=true on the host',
+              error: 'Dashboard LoRA train disabled — set MASTYF_AI_DASHBOARD_ALLOW_LORA_TRAIN=true on the host',
               readiness,
             });
             return;
@@ -1537,7 +1537,7 @@ export async function startDashboardServer(
           manifestPath: exported.manifestPath,
           rowsExported: exported.rowsExported,
           fewShotExamples: exported.fewShotExamples,
-          envHint: `MASTYFF_AI_TENANT_SEMANTIC_MODEL=true MASTYFF_AI_SEMANTIC_LOCAL_MODEL=${exported.manifest.modelName}`,
+          envHint: `MASTYF_AI_TENANT_SEMANTIC_MODEL=true MASTYF_AI_SEMANTIC_LOCAL_MODEL=${exported.manifest.modelName}`,
         });
         return;
       }
@@ -1554,7 +1554,7 @@ export async function startDashboardServer(
         const { loadPlaybooksFromPath, DEFAULT_PLAYBOOKS } = await import('../alerting/soar-playbooks.js');
         const playbooks = loadPlaybooksFromPath();
         writeJson(res, 200, {
-          enabled: process.env.MASTYFF_AI_SOAR_PLAYBOOKS === 'true',
+          enabled: process.env.MASTYF_AI_SOAR_PLAYBOOKS === 'true',
           playbooks: playbooks.length ? playbooks : DEFAULT_PLAYBOOKS,
         });
         return;
@@ -1580,7 +1580,7 @@ export async function startDashboardServer(
           tenantId: tenantCtx.tenantId,
           tenantSource: tenantCtx.source,
           multiTenantMode: isMultiTenantModeEnabled(),
-          policyPath: process.env['MASTYFF_AI_POLICY_PATH'] || process.env['MASTYFF_AI_POLICY_PATH'] || 'default-policy.yaml',
+          policyPath: process.env['MASTYF_AI_POLICY_PATH'] || process.env['MASTYF_AI_POLICY_PATH'] || 'default-policy.yaml',
         });
         return;
       }
@@ -1703,13 +1703,13 @@ export async function startDashboardServer(
         writeJson(res, 200, { status: 'ok' }); return;
       }
 
-      // ── AI APIs (set MASTYFF_AI_AI_ENABLED=false to disable) ──
+      // ── AI APIs (set MASTYF_AI_AI_ENABLED=false to disable) ──
       if (url.startsWith('/api/ai/')) {
         if (!assertFeature(url, 'ai', res, setCors)) return;
         const { isAiLearningEnabled } = await import('./ai-enabled.js');
         if (!isAiLearningEnabled()) {
           setCors();
-          writeJson(res, 503, { error: 'AI learning disabled. Set MASTYFF_AI_AI_ENABLED=false to disable.' });
+          writeJson(res, 503, { error: 'AI learning disabled. Set MASTYF_AI_AI_ENABLED=false to disable.' });
           return;
         }
       }
@@ -1725,7 +1725,7 @@ export async function startDashboardServer(
             return;
           }
         } catch { /* fall through */ }
-        writeJson(res, 200, unavailable({ suggestions: [] }, 'AI engine not initialized — start proxy with MASTYFF_AI_AI_ENABLED')); return;
+        writeJson(res, 200, unavailable({ suggestions: [] }, 'AI engine not initialized — start proxy with MASTYF_AI_AI_ENABLED')); return;
       }
 
       if (url === '/api/ai/simulation-pack' && method === 'GET') {
@@ -1877,7 +1877,7 @@ export async function startDashboardServer(
           updated: null,
           lastPollAt: null,
           pollingActive: false,
-          pollingDisabled: process.env.MASTYFF_AI_AI_DISABLE_THREAT_POLL === 'true',
+          pollingDisabled: process.env.MASTYF_AI_AI_DISABLE_THREAT_POLL === 'true',
         });
         return;
       }
@@ -2038,8 +2038,8 @@ export async function startDashboardServer(
             writeJson(res, 400, { ok: false, error: 'No policy rule generated for threat' });
             return;
           }
-          const policyPath = process.env['MASTYFF_AI_POLICY_PATH']
-            || process.env['MASTYFF_AI_POLICY_PATH']
+          const policyPath = process.env['MASTYF_AI_POLICY_PATH']
+            || process.env['MASTYF_AI_POLICY_PATH']
             || 'default-policy.yaml';
           await recordSuggestionOutcome(`threat-quarantine:${id}`, 'applied', {
             ruleName: suggestion.rule.name,
@@ -2161,7 +2161,7 @@ export async function startDashboardServer(
               totalInstances: 0, activeInstances: 0, totalRequests: 0,
               blockedRequests: 0, passedRequests: 0, totalCost: 0, avgLatencyMs: 0,
               activeServers: 0, passRate: null, burnRatePerHour: null, lastUpdated: null,
-            }, 'No history database — start proxy with MASTYFF_AI_DB_PATH'));
+            }, 'No history database — start proxy with MASTYF_AI_DB_PATH'));
             return;
           }
           const records = await loadAllRecordsInWindow(db, requestTenantId, windowDays);
@@ -2286,7 +2286,7 @@ export async function startDashboardServer(
             const yaml = readFileSync(defaultPolicyPath(), 'utf-8');
             policyMode = parsePolicyConfig(load(yaml)).policy.mode;
           } catch {
-            policyMode = process.env.MASTYFF_AI_POLICY_MODE;
+            policyMode = process.env.MASTYF_AI_POLICY_MODE;
           }
           const payload = await buildSecurityDashboard(fed.db, requestTenantId, windowDays, { policyMode });
           writeJson(res, 200, payload.available ? available(payload) : unavailable(payload, payload.emptyReason || 'No data'));
@@ -2457,8 +2457,8 @@ export async function startDashboardServer(
           const { applyMonitorQuarantineEnforcement } = await import('./monitor-quarantine-enforcement.js');
           const store = getSecurityThreatQuarantine(requestTenantId);
           const operator = authResult.identity || undefined;
-          const policyPath = process.env['MASTYFF_AI_POLICY_PATH']
-            || process.env['MASTYFF_AI_POLICY_PATH']
+          const policyPath = process.env['MASTYF_AI_POLICY_PATH']
+            || process.env['MASTYF_AI_POLICY_PATH']
             || defaultPolicyPath();
 
           if (b.all === true || b.all === 'true') {
@@ -2472,7 +2472,7 @@ export async function startDashboardServer(
               const yaml = readFileSync(defaultPolicyPath(), 'utf-8');
               policyMode = parsePolicyConfig(load(yaml)).policy.mode;
             } catch {
-              policyMode = process.env.MASTYFF_AI_POLICY_MODE;
+              policyMode = process.env.MASTYF_AI_POLICY_MODE;
             }
             const dash = await buildSecurityDashboard(fed.db, requestTenantId, 1, { policyMode });
             const targets = (dash.threats ?? []).filter(
@@ -2832,7 +2832,7 @@ export async function startDashboardServer(
           const { formatInsightsBriefingMarkdown } = await import('./dashboard-insights.js');
           const insights = await buildDashboardInsights(db, requestTenantId, scope, { windowDays });
           const markdown = formatInsightsBriefingMarkdown(insights);
-          const filename = `mastyff-ai-briefing-${scope}-${windowDays}d.md`;
+          const filename = `mastyf-ai-briefing-${scope}-${windowDays}d.md`;
           res.writeHead(200, {
             'Content-Type': 'text/markdown; charset=utf-8',
             'Content-Disposition': `attachment; filename="${filename}"`,
@@ -2857,8 +2857,8 @@ export async function startDashboardServer(
             writeJson(res, 200, unavailable({ analysis: null }, 'No history database connected'));
             return;
           }
-          const { buildMastyffAiFullAnalysis } = await import('../ai/mastyff-ai-full-analysis.js');
-          const analysis = await buildMastyffAiFullAnalysis(db, requestTenantId, {
+          const { buildMastyfAiFullAnalysis } = await import('../ai/mastyf-ai-full-analysis.js');
+          const analysis = await buildMastyfAiFullAnalysis(db, requestTenantId, {
             windowDays,
             useLlm,
             historyDbAttached: true,
@@ -2868,7 +2868,7 @@ export async function startDashboardServer(
             return;
           }
           const date = new Date().toISOString().slice(0, 10);
-          const filename = `mastyff-ai-full-analysis-${date}.md`;
+          const filename = `mastyf-ai-full-analysis-${date}.md`;
           res.writeHead(200, {
             'Content-Type': 'text/markdown; charset=utf-8',
             'Content-Disposition': `attachment; filename="${filename}"`,
@@ -2894,12 +2894,12 @@ export async function startDashboardServer(
           if (!db) {
             writeJson(res, 200, unavailable(
               { analysis: null },
-              'No history database — start the Mastyff AI proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
+              'No history database — start the Mastyf AI proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
             ));
             return;
           }
-          const { buildMastyffAiFullAnalysis } = await import('../ai/mastyff-ai-full-analysis.js');
-          const analysis = await buildMastyffAiFullAnalysis(db, requestTenantId, {
+          const { buildMastyfAiFullAnalysis } = await import('../ai/mastyf-ai-full-analysis.js');
+          const analysis = await buildMastyfAiFullAnalysis(db, requestTenantId, {
             windowDays,
             useLlm,
             historyDbAttached: true,
@@ -2937,7 +2937,7 @@ export async function startDashboardServer(
             return;
           }
           const date = report.generatedAt.slice(0, 10);
-          const filename = `mastyff-ai-mcp-health-${date}.md`;
+          const filename = `mastyf-ai-mcp-health-${date}.md`;
           res.writeHead(200, {
             'Content-Type': 'text/markdown; charset=utf-8',
             'Content-Disposition': `attachment; filename="${filename}"`,
@@ -2963,7 +2963,7 @@ export async function startDashboardServer(
           if (!db) {
             writeJson(res, 200, unavailable(
               { report: null },
-              'No history database — start the Mastyff AI proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
+              'No history database — start the Mastyf AI proxy with DASHBOARD_ENABLED=true and send MCP traffic through it.',
             ));
             return;
           }
@@ -3100,7 +3100,7 @@ export async function startDashboardServer(
         }
         const { buildApprovalPreview } = await import('../ai/autopilot-approval.js');
         const { recordSuggestionOutcome } = await import('../ai/suggestion-engine.js');
-        const policyPath = process.env['MASTYFF_AI_POLICY_PATH'] || process.env['MASTYFF_AI_POLICY_PATH'] || 'default-policy.yaml';
+        const policyPath = process.env['MASTYF_AI_POLICY_PATH'] || process.env['MASTYF_AI_POLICY_PATH'] || 'default-policy.yaml';
         const preview = buildApprovalPreview({
           suggestionId: String(b.suggestionId || ''),
           source: (b.source as 'baseline' | 'cost' | 'threat' | 'assist' | 'pattern' | 'attack') || 'baseline',
@@ -3118,7 +3118,7 @@ export async function startDashboardServer(
             simulationPassed: b.simulationPassed !== false,
           },
         });
-        if (process.env.MASTYFF_AI_AUTOPILOT_ENFORCE_SAFETY !== 'false' && !preview.safety.allowed) {
+        if (process.env.MASTYF_AI_AUTOPILOT_ENFORCE_SAFETY !== 'false' && !preview.safety.allowed) {
           writeJson(res, 422, {
             error: 'autopilot_safety_blocked',
             blockers: preview.safety.blockers,
@@ -3187,7 +3187,7 @@ export async function startDashboardServer(
           writeJson(res, 400, { error: 'ruleName is required' });
           return;
         }
-        const policyPath = process.env['MASTYFF_AI_POLICY_PATH'] || process.env['MASTYFF_AI_POLICY_PATH'] || 'default-policy.yaml';
+        const policyPath = process.env['MASTYF_AI_POLICY_PATH'] || process.env['MASTYF_AI_POLICY_PATH'] || 'default-policy.yaml';
         const { removeSuggestionRuleFromPolicy } = await import('../ai/policy-applier.js');
         const { appendRollbackLedger } = await import('../ai/autopilot-approval.js');
         const removed = removeSuggestionRuleFromPolicy(ruleName, policyPath, policyWatcher ?? null);
@@ -3277,8 +3277,8 @@ export async function startDashboardServer(
                 : defaultTenantRecords > 0
                   ? `No records for tenant "${requestTenantId}" — ${defaultTenantRecords} exist under "default". Switch tenant in the dashboard header.`
                   : asyncEnabled
-                    ? 'No semantic audit records yet — route MCP tool calls through the Mastyff AI proxy.'
-                    : 'Enable MASTYFF_AI_LLM_ENABLED=true and MASTYFF_AI_SEMANTIC_ASYNC=true on the proxy, then route MCP traffic through Mastyff AI.',
+                    ? 'No semantic audit records yet — route MCP tool calls through the Mastyf AI proxy.'
+                    : 'Enable MASTYF_AI_LLM_ENABLED=true and MASTYF_AI_SEMANTIC_ASYNC=true on the proxy, then route MCP traffic through Mastyf AI.',
           },
         });
         return;
@@ -3492,7 +3492,7 @@ export async function startDashboardServer(
         if (url.endsWith('/download')) {
           res.setHeader(
             'Content-Disposition',
-            'attachment; filename="mastyff-ai-swarm-analysis.txt"',
+            'attachment; filename="mastyf-ai-swarm-analysis.txt"',
           );
         }
         res.end(report.text);
@@ -3624,7 +3624,7 @@ export async function startDashboardServer(
           return;
         }
         const { applySuggestionToPolicy } = await import('../ai/policy-applier.js');
-        const policyPath = process.env.MASTYFF_AI_POLICY_PATH || join(REPO_ROOT, 'default-policy.yaml');
+        const policyPath = process.env.MASTYF_AI_POLICY_PATH || join(REPO_ROOT, 'default-policy.yaml');
         const result = await applySuggestionToPolicy(
           candidate.policyRule as unknown as import('../policy/policy-types.js').PolicyRule,
           policyPath,
@@ -3710,7 +3710,7 @@ export async function startDashboardServer(
         writeJson(res, 200, candidate);
         return;
       }
-      // ── Threat Discovery Scheduler (in-process, persists to ~/.mastyff-ai) ──
+      // ── Threat Discovery Scheduler (in-process, persists to ~/.mastyf-ai) ──
       if (url === '/api/threat-discovery/scheduler/start' && method === 'POST') {
         setCors();
         try {
@@ -3758,7 +3758,7 @@ export async function startDashboardServer(
           const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
           writeJson(res, 200, await getPromotionStats());
         } catch {
-          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYFF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
+          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
         }
         return;
       }
@@ -3768,7 +3768,7 @@ export async function startDashboardServer(
           const { getPromotionStats } = await import('../ai/auto-corpus-promoter.js');
           writeJson(res, 200, await getPromotionStats());
         } catch {
-          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYFF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
+          writeJson(res, 200, { error: 'Auto-corpus promoter not available', enabled: process.env['MASTYF_AI_AUTO_CORPUS_PROMOTE'] !== 'true' });
         }
         return;
       }
@@ -3781,10 +3781,10 @@ export async function startDashboardServer(
 
       if (url === '/api/internal/rug-pull' && method === 'DELETE') {
         setCors();
-        const expected = process.env['MASTYFF_AI_INTERNAL_ADMIN_TOKEN'];
+        const expected = process.env['MASTYF_AI_INTERNAL_ADMIN_TOKEN'];
         const provided =
-          (typeof req.headers['x-mastyff-ai-internal-token'] === 'string'
-            ? req.headers['x-mastyff-ai-internal-token']
+          (typeof req.headers['x-mastyf-ai-internal-token'] === 'string'
+            ? req.headers['x-mastyf-ai-internal-token']
             : req.headers['authorization']?.replace(/^Bearer\s+/i, '')) || '';
         if (expected && provided !== expected) {
           writeJson(res, 401, { error: 'Unauthorized' });
@@ -3832,7 +3832,7 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url === '/api/setup/mastyff-ai-config' && method === 'POST') {
+      if (url === '/api/setup/mastyf-ai-config' && method === 'POST') {
         setCors();
         try {
           const body = await readBody(req);
@@ -3846,7 +3846,7 @@ export async function startDashboardServer(
           const patch: Record<string, unknown> = { upstreamUrl, listenPort };
           const token = String(body.authToken || '').trim();
           if (token) patch.authToken = token;
-          writeSetupFile(patch as import('./setup-status.js').MastyffAiSetupConfig);
+          writeSetupFile(patch as import('./setup-status.js').MastyfAiSetupConfig);
           writeJson(res, 200, { ok: true });
         } catch (e) {
           writeJson(res, 500, { error: e instanceof Error ? e.message : 'Save failed' });
@@ -4123,10 +4123,10 @@ export async function startDashboardServer(
         return;
       }
 
-      if (url === '/api/certification/mastyff-ai-mcp' && method === 'GET') {
+      if (url === '/api/certification/mastyf-ai-mcp' && method === 'GET') {
         setCors();
-        const { evaluateMastyffAiCertification } = await import('./mastyff-ai-certified-mcp.js');
-        const data = evaluateMastyffAiCertification(REPO_ROOT);
+        const { evaluateMastyfAiCertification } = await import('./mastyf-ai-certified-mcp.js');
+        const data = evaluateMastyfAiCertification(REPO_ROOT);
         writeJson(res, 200, available(data as unknown as Record<string, unknown>));
         return;
       }
@@ -4175,7 +4175,7 @@ export async function startDashboardServer(
       }
       if (url === '/api/partners/signals' && method === 'GET') {
         setCors();
-        const { buildPartnerSignalFeed } = await import('./mastyff-ai-certified-mcp.js');
+        const { buildPartnerSignalFeed } = await import('./mastyf-ai-certified-mcp.js');
         const data = buildPartnerSignalFeed(REPO_ROOT);
         writeJson(res, 200, available(data));
         return;
@@ -4276,7 +4276,7 @@ export async function startDashboardServer(
         const body = await readBody(req);
         c.trustProtocol.registerAgent({
           agentId: String(body.agentId || 'unknown'),
-          mastyffAiInstance: String(body.mastyffAiInstance || 'dashboard'),
+          mastyfAiInstance: String(body.mastyfAiInstance || 'dashboard'),
           capabilities: Array.isArray(body.capabilities) ? body.capabilities : ['read'],
         });
         writeJson(res, 200, { ok: true, agentId: body.agentId });
@@ -4536,7 +4536,7 @@ export async function startDashboardServer(
           const posture = c.controlMapper.evaluate(framework as any, [], []);
           writeJson(res, 200, posture);
         } else {
-          writeJson(res, 200, { framework, postureScore: 0, satisfiedControls: 0, totalControls: 5, criticalGaps: [], summary: 'Connect to active Mastyff AI server.' });
+          writeJson(res, 200, { framework, postureScore: 0, satisfiedControls: 0, totalControls: 5, criticalGaps: [], summary: 'Connect to active Mastyf AI server.' });
         }
         return;
       }
@@ -4606,7 +4606,7 @@ export async function startDashboardServer(
         const b = await readBody(req).catch(() => ({})) as Record<string, unknown>;
         const sn = String(b.serverName || 'unknown');
         if (!c) { writeJson(res, 200, { grade: 'B', overallScore: 60, categories: [], improvementActions: [] }); return; }
-        const score = c.mastyffAiScore.compute({ serverName: sn, cveCount: 0, maxCvss: 0, newestCveAgeDays: 0, authMethod: 'none', transport: 'stdio', highRiskToolCount: 0, mediumRiskToolCount: 0, totalToolCount: 0, trustedPublisher: false, typoSquatDetected: false, depConfusionDetected: false, blockedCalls: 0, bypassedAttacks: 0, responseDlpActive: false, mastyffAiProtected: true });
+        const score = c.mastyfAiScore.compute({ serverName: sn, cveCount: 0, maxCvss: 0, newestCveAgeDays: 0, authMethod: 'none', transport: 'stdio', highRiskToolCount: 0, mediumRiskToolCount: 0, totalToolCount: 0, trustedPublisher: false, typoSquatDetected: false, depConfusionDetected: false, blockedCalls: 0, bypassedAttacks: 0, responseDlpActive: false, mastyfAiProtected: true });
         writeJson(res, 200, score);
         return;
       }
@@ -4793,11 +4793,11 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
             summary: `Your MCP server has a ${trustGrade} trust score (${trustScore}/100). ${blocked > 0 ? `${blocked} attack(s) were blocked.` : 'No attacks detected.'} ${compliance > 0 ? `Compliance is at ${compliance}%.` : 'Compliance framework checks are pending.'}`,
             metricExplanations: {
               trustScore: `This measures how secure your MCP server is across 8 categories. Your grade is ${trustGrade} (${trustScore}/100). ${trustGrade === 'B' ? 'This is production-ready but could be improved with authentication.' : 'Review the improvement actions below.'}`,
-              blockedAttacks: `${blocked} malicious requests were blocked by Mastyff AI's policy engine. Each blocked request represents a potential security threat that was stopped before reaching your server.`,
+              blockedAttacks: `${blocked} malicious requests were blocked by Mastyf AI's policy engine. Each blocked request represents a potential security threat that was stopped before reaching your server.`,
               compliance: `Compliance posture across 5 industry frameworks (SOC2, HIPAA, PCI-DSS, FedRAMP, ISO27001). Current score: ${compliance}%. These frameworks map to legal and regulatory requirements.`,
-              sessions: `${sessions} active MCP sessions. Each session represents an AI client connected to your MCP server through Mastyff AI.`,
+              sessions: `${sessions} active MCP sessions. Each session represents an AI client connected to your MCP server through Mastyf AI.`,
               honeypots: `${honeypotActive} fake decoy servers are deployed to detect and study attacker probing patterns.`,
-              threatMesh: `${mesSignatures} anonymized threat signatures have been shared across the Mastyff AI network to protect all deployments.`,
+              threatMesh: `${mesSignatures} anonymized threat signatures have been shared across the Mastyf AI network to protect all deployments.`,
               policyGen: policyCalls > 0 ? `Observing ${policyCalls} tool calls to automatically generate a minimal-privilege policy.` : 'Policy generation is idle. Start observation to automatically create security rules.',
             },
           },
@@ -4825,7 +4825,7 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
       if (err.code === 'EADDRINUSE') {
         Logger.warn(
           `[dashboard] Port ${port} already in use — proxy will run without local dashboard/WS. ` +
-            `Stop the other process or set DASHBOARD_PORT / MASTYFF_AI_WS_ENABLED=false.`,
+            `Stop the other process or set DASHBOARD_PORT / MASTYF_AI_WS_ENABLED=false.`,
         );
         resolve(null);
         return;
@@ -4860,7 +4860,7 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
     wireDashboardWsProviders(ws, runtimeHistoryDb);
   }
   if (dashboardEnabled) {
-    const pushMs = parseInt(process.env['MASTYFF_AI_WS_PUSH_INTERVAL_MS'] || '5000', 10);
+    const pushMs = parseInt(process.env['MASTYF_AI_WS_PUSH_INTERVAL_MS'] || '5000', 10);
     ws.startDataPushLoop(pushMs);
   }
   const mode = dashboardEnabled ? 'dashboard + WS' : 'WS only';
@@ -4874,7 +4874,7 @@ Please write a 2-3 sentence summary of what these metrics mean. Also write a sho
     const { startAutopilotServices } = await import('./autopilot-services.js');
     const { DEFAULT_TENANT_ID } = await import('../tenant/resolve-tenant.js');
     applyAutopilotEnv();
-    startAutopilotServices(runtimeHistoryDb, process.env.MASTYFF_AI_TENANT_ID || DEFAULT_TENANT_ID);
+    startAutopilotServices(runtimeHistoryDb, process.env.MASTYF_AI_TENANT_ID || DEFAULT_TENANT_ID);
   } catch (err: unknown) {
     Logger.warn(
       `[autopilot] Service start skipped: ${err instanceof Error ? err.message : String(err)}`,

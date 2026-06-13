@@ -10,7 +10,7 @@ export type CloudSessionPayload = {
 
 export function verifyCloudSessionToken(token: string): CloudSessionPayload | null {
   const secret =
-    process.env['MASTYFF_AI_CLOUD_JWT_SECRET'] ??
+    process.env['MASTYF_AI_CLOUD_JWT_SECRET'] ??
     process.env['LICENSE_JWT_SECRET'] ??
     process.env['DASHBOARD_JWT_SECRET'];
   if (!secret) return null;

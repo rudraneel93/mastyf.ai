@@ -9,7 +9,7 @@ import { getLlmConfig } from '../config/llm-config.js';
 import { Logger } from '../utils/logger.js';
 import { StructuredLogger } from '../utils/structured-logger.js';
 import { registry } from '../utils/metrics.js';
-import { getMastyffAiRegionLabels } from '../utils/region.js';
+import { getMastyfAiRegionLabels } from '../utils/region.js';
 import {
   isSemanticLlmConfigured,
   reportSemanticDegradation,
@@ -65,26 +65,26 @@ export interface SemanticAuditStats {
   enabled: boolean;
 }
 
-const DEBOUNCE_MS = parseInt(process.env.MASTYFF_AI_SEMANTIC_DEBOUNCE_MS || '500', 10);
-const MAX_QUEUE = parseInt(process.env.MASTYFF_AI_SEMANTIC_ASYNC_MAX_QUEUE || '200', 10);
-const MIN_CONFIDENCE = parseFloat(process.env.MASTYFF_AI_SEMANTIC_MIN_CONFIDENCE || '0.6');
+const DEBOUNCE_MS = parseInt(process.env.MASTYF_AI_SEMANTIC_DEBOUNCE_MS || '500', 10);
+const MAX_QUEUE = parseInt(process.env.MASTYF_AI_SEMANTIC_ASYNC_MAX_QUEUE || '200', 10);
+const MIN_CONFIDENCE = parseFloat(process.env.MASTYF_AI_SEMANTIC_MIN_CONFIDENCE || '0.6');
 
 const semanticAuditQueued = new Counter({
-  name: 'mastyff_ai_semantic_audit_queued_total',
+  name: 'mastyf_ai_semantic_audit_queued_total',
   help: 'Async semantic audit jobs enqueued',
   labelNames: ['region'],
   registers: [registry],
 });
 
 const semanticAuditProcessed = new Counter({
-  name: 'mastyff_ai_semantic_audit_processed_total',
+  name: 'mastyf_ai_semantic_audit_processed_total',
   help: 'Async semantic audit jobs completed',
   labelNames: ['region', 'outcome'],
   registers: [registry],
 });
 
 const semanticAuditQueueDepth = new Gauge({
-  name: 'mastyff_ai_semantic_audit_queue_depth',
+  name: 'mastyf_ai_semantic_audit_queue_depth',
   help: 'Current async semantic audit queue depth',
   registers: [registry],
 });
@@ -122,7 +122,7 @@ export function getSemanticAuditStats(): SemanticAuditStats {
 }
 
 function shouldStoreCalibrationRecord(): boolean {
-  return process.env.MASTYFF_AI_SEMANTIC_STORE_CALIBRATION === 'true';
+  return process.env.MASTYF_AI_SEMANTIC_STORE_CALIBRATION === 'true';
 }
 
 async function persistSemanticAudit(
@@ -218,12 +218,12 @@ export function enqueueSemanticAudit(job: SemanticAuditJob): void {
   if (queue.length >= MAX_QUEUE) {
     queue.shift();
     stats.dropped++;
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'dropped' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'dropped' });
     Logger.warn('[async-semantic] Queue at capacity — dropped oldest audit job');
   }
 
   queue.push(job);
-  semanticAuditQueued.inc(getMastyffAiRegionLabels());
+  semanticAuditQueued.inc(getMastyfAiRegionLabels());
   semanticAuditQueueDepth.set(queue.length);
 
   broadcastDashboardEvent({
@@ -283,16 +283,16 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
   });
   stats.processed++;
   if (!score.suspicious) {
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'local_clean' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'local_clean' });
     return;
   }
-  const minRisk = parseFloat(process.env['MASTYFF_AI_LOCAL_SEMANTIC_MIN_RISK'] || '0.55');
+  const minRisk = parseFloat(process.env['MASTYF_AI_LOCAL_SEMANTIC_MIN_RISK'] || '0.55');
   if (score.risk < minRisk) {
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'local_below_threshold' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'local_below_threshold' });
     return;
   }
   stats.flagged++;
-  semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'local_flagged' });
+  semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'local_flagged' });
   StructuredLogger.info({
     event: 'local_semantic_flag',
     requestId: job.requestId,
@@ -303,7 +303,7 @@ async function runLocalSemanticAudit(job: SemanticAuditJob): Promise<void> {
     categories: score.categories,
     reasoning: score.reasoning,
     timestamp: job.timestamp,
-    region: getMastyffAiRegionLabels().region,
+    region: getMastyfAiRegionLabels().region,
   });
   const result = {
     suspicious: true,
@@ -387,7 +387,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   }
   stats.processed++;
   if (!response) {
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'no_llm' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'no_llm' });
     reportSemanticAuditSkipped('llm_failed', job.tenantId);
     if (isLocalSemanticEnabled(job.tenantId)) {
       await runLocalSemanticAudit(job);
@@ -405,14 +405,14 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
       reasoning: String(parsed.reasoning || ''),
     };
   } catch {
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'parse_error' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'parse_error' });
     Logger.debug('[async-semantic] Failed to parse LLM JSON');
     return;
   }
 
   const flagged = result.suspicious && result.confidence >= MIN_CONFIDENCE;
   if (!flagged) {
-    semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'clean' });
+    semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'clean' });
     if (shouldStoreCalibrationRecord()) {
       await persistSemanticAudit(job, result, {
         model: response.model,
@@ -423,7 +423,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
   }
 
   stats.flagged++;
-  semanticAuditProcessed.inc({ ...getMastyffAiRegionLabels(), outcome: 'flagged' });
+  semanticAuditProcessed.inc({ ...getMastyfAiRegionLabels(), outcome: 'flagged' });
 
   StructuredLogger.info({
     event: 'async_semantic_flag' as const,
@@ -435,7 +435,7 @@ Categories: prompt-injection, exfiltration, privilege-escalation, encoded-payloa
     model: response.model,
     durationMs: response.durationMs,
     timestamp: job.timestamp,
-    region: getMastyffAiRegionLabels().region,
+    region: getMastyfAiRegionLabels().region,
   });
 
   await persistSemanticAudit(job, result, {

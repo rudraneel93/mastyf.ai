@@ -17,7 +17,7 @@ import {
   type CostTimeseriesResponse,
   type ExecutiveSummaryResponse,
   type VisualsData,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { useDashboardWindow } from './DashboardWindowContext';
 import { useDashboardRegion } from './DashboardRegionContext';
 

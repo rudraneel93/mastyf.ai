@@ -62,12 +62,12 @@ function generateSbom() {
     version: 1,
     metadata: {
       timestamp: new Date().toISOString(),
-      tools: [{ vendor: 'mastyff-ai', name: 'generate-sbom', version: PKG_JSON.version }],
+      tools: [{ vendor: 'mastyf-ai', name: 'generate-sbom', version: PKG_JSON.version }],
       component: {
         type: 'application',
-        name: '@mastyff-ai/server',
+        name: '@mastyf-ai/server',
         version: PKG_JSON.version,
-        'bom-ref': `@mastyff-ai/server@${PKG_JSON.version}`,
+        'bom-ref': `@mastyf-ai/server@${PKG_JSON.version}`,
       },
     },
     components,

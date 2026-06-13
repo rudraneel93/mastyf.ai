@@ -22,7 +22,7 @@ import {
   type AiSuggestion,
   type SemanticOutcome,
   type ThreatIntelStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { IncidentInvestigatorDrawer, type ThreatLabContext } from './IncidentInvestigatorDrawer';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { hasPermission } from '@/lib/dashboard-roles';
@@ -478,7 +478,7 @@ export function AiLearningPanel({ roles, refreshTick = 0, onAction, onOpenThreat
       {semantic.length === 0 ? (
         <p className="muted">
           {semanticHint ||
-            'No semantic audit records yet. Set MASTYFF_AI_LLM_ENABLED=true and MASTYFF_AI_SEMANTIC_ASYNC=true on the proxy, route MCP traffic through Mastyff AI, then refresh.'}
+            'No semantic audit records yet. Set MASTYF_AI_LLM_ENABLED=true and MASTYF_AI_SEMANTIC_ASYNC=true on the proxy, route MCP traffic through Mastyf AI, then refresh.'}
         </p>
       ) : (
         <table className="data-table">

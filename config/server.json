@@ -1,16 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.mastyff-ai/mastyff-ai",
+  "name": "io.github.mastyf-ai/mastyf-ai",
   "description": "Security, cost, and health governance proxy for MCP infrastructure",
   "repository": {
-    "url": "https://github.com/mastyff-ai/mastyff-ai",
+    "url": "https://github.com/mastyf-ai/mastyf-ai",
     "source": "github"
   },
   "version": "2.3.21",
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@mastyff-ai/server",
+      "identifier": "@mastyf-ai/server",
       "version": "2.3.21",
       "transport": {
         "type": "stdio"
@@ -21,8 +21,8 @@
           "isRequired": false,
           "format": "string",
           "isSecret": false,
-          "name": "MASTYFF_AI_DB_PATH",
-          "default": "~/.mastyff-ai/history.db"
+          "name": "MASTYF_AI_DB_PATH",
+          "default": "~/.mastyf-ai/history.db"
         },
         {
           "description": "Slack or Discord webhook for critical alerts",

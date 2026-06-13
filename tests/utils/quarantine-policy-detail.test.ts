@@ -42,11 +42,11 @@ describe('quarantine policy detail', () => {
         '',
       ].join('\n'),
     );
-    process.env.MASTYFF_AI_POLICY_PATH = policyPath;
+    process.env.MASTYF_AI_POLICY_PATH = policyPath;
   });
 
   afterEach(() => {
-    delete process.env.MASTYFF_AI_POLICY_PATH;
+    delete process.env.MASTYF_AI_POLICY_PATH;
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
     vi.clearAllMocks();
   });

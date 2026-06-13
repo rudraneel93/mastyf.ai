@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Continuous live attack stream — corpus + adversarial fixtures through live Mastyff AI proxy
+ * Continuous live attack stream — corpus + adversarial fixtures through live Mastyf AI proxy
  * and official @modelcontextprotocol/server-filesystem upstream MCP.
  *
- * Dashboard analytics: set MASTYFF_AI_DB_PATH to the same file as dashboard:proxy
- * (e.g. ~/.mastyff-ai/history.db) and REAL_LIFE_METRICS_ENABLED=false to avoid port 9090 clash.
+ * Dashboard analytics: set MASTYF_AI_DB_PATH to the same file as dashboard:proxy
+ * (e.g. ~/.mastyf-ai/history.db) and REAL_LIFE_METRICS_ENABLED=false to avoid port 9090 clash.
  */
 import {
   readdirSync,

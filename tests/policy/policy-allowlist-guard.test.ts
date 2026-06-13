@@ -16,7 +16,7 @@ describe('validateAllowlistRbac', () => {
   });
 
   it('throws in strict mode when allow rule lacks rbac', () => {
-    vi.stubEnv('MASTYFF_AI_STRICT_ALLOWLIST_RBAC', 'true');
+    vi.stubEnv('MASTYF_AI_STRICT_ALLOWLIST_RBAC', 'true');
     const config: PolicyConfig = {
       ...base,
       policy: {
@@ -34,7 +34,7 @@ describe('validateAllowlistRbac', () => {
   });
 
   it('passes when allow rule has rbac.scopes', () => {
-    vi.stubEnv('MASTYFF_AI_STRICT_ALLOWLIST_RBAC', 'true');
+    vi.stubEnv('MASTYF_AI_STRICT_ALLOWLIST_RBAC', 'true');
     const config: PolicyConfig = {
       ...base,
       policy: {

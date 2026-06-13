@@ -6,7 +6,7 @@ import {
   connectSetupCloud,
   fetchSetupCloudStatus,
   type SetupCloudStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { Button } from '../ui/Button';
 
 type Props = {
@@ -18,7 +18,7 @@ type Props = {
 
 export function CloudControlPlaneModal({ open, onClose, onConnected, onAction }: Props) {
   const [status, setStatus] = useState<SetupCloudStatus | null>(null);
-  const [url, setUrl] = useState('https://mastyff-ai-cloud.vercel.app');
+  const [url, setUrl] = useState('https://mastyf-ai-cloud.vercel.app');
   const [ssoEnabled, setSsoEnabled] = useState(true);
   const [strictness, setStrictness] = useState(85);
   const [keyRotation, setKeyRotation] = useState(false);

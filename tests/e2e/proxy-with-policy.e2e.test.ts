@@ -1,5 +1,5 @@
 /**
- * End-to-End test: mastyff-ai proxy with a real policy file.
+ * End-to-End test: mastyf-ai proxy with a real policy file.
  *
  * Spawns the CLI as a child process, sends JSON-RPC messages over stdin,
  * captures stdout, and verifies that the default-policy.yaml rules
@@ -21,8 +21,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_POLICY = path.resolve(PROJECT_ROOT, 'default-policy.yaml');
 const ECHO_SERVER = path.resolve(PROJECT_ROOT, 'benchmarks', 'fixtures', 'echo-server.cjs');
 const TEST_CONFIG_PATH = path.resolve(__dirname, 'test-config.json');
-const E2E_DB_PATH = process.env.MASTYFF_AI_DB_PATH
-  || join(mkdtempSync(join(tmpdir(), 'mastyff-ai-e2e-')), 'history.db');
+const E2E_DB_PATH = process.env.MASTYF_AI_DB_PATH
+  || join(mkdtempSync(join(tmpdir(), 'mastyf-ai-e2e-')), 'history.db');
 
 function createTestConfig(): void {
   const config = {
@@ -96,13 +96,13 @@ describe('E2E: Proxy with default-policy.yaml', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          MASTYFF_AI_DB_PATH: E2E_DB_PATH,
+          MASTYF_AI_DB_PATH: E2E_DB_PATH,
           DASHBOARD_ENABLED: 'false',
-          MASTYFF_AI_WS_ENABLED: 'false',
-          MASTYFF_AI_AGENTIC_ENABLED: 'false',
-          MASTYFF_AI_SKIP_PREFLIGHT_SCAN: 'true',
+          MASTYF_AI_WS_ENABLED: 'false',
+          MASTYF_AI_AGENTIC_ENABLED: 'false',
+          MASTYF_AI_SKIP_PREFLIGHT_SCAN: 'true',
           METRICS_ENABLED: 'false',
-          MASTYFF_AI_ALLOW_MODE_OVERRIDE: 'true',
+          MASTYF_AI_ALLOW_MODE_OVERRIDE: 'true',
         },
       });
 
@@ -118,7 +118,7 @@ describe('E2E: Proxy with default-policy.yaml', () => {
 
       // Wait for proxy to be ready
       const checkReady = setInterval(() => {
-        if (stderr.includes('Proxy started for') || stderr.includes('MCP Mastyff AI proxy running')) {
+        if (stderr.includes('Proxy started for') || stderr.includes('MCP Mastyf AI proxy running')) {
           clearInterval(checkReady);
           _resolve();
         }

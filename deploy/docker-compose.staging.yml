@@ -1,27 +1,27 @@
 # Local staging stack for enterprise pilot (Postgres + Redis) and optional cloud control plane.
 # Usage:
 #   docker compose -f deploy/docker-compose.staging.yml up -d
-#   export DATABASE_URL=postgresql://mastyff-ai:mastyff-ai@127.0.0.1:5432/mastyff-ai
+#   export DATABASE_URL=postgresql://mastyf-ai:mastyf-ai@127.0.0.1:5432/mastyf-ai
 #   export REDIS_URL=redis://127.0.0.1:6379
 #   ./scripts/staging-apply-migrations.sh
 #   env -u DASHBOARD_AUTH_DISABLED pnpm enterprise:preflight
 #
 # Cloud control plane (optional profile):
 #   docker compose -f deploy/docker-compose.staging.yml --profile cloud up -d
-#   createdb via: psql -c "CREATE DATABASE mastyff_ai_cloud;"
+#   createdb via: psql -c "CREATE DATABASE mastyf_ai_cloud;"
 #   see docs/SAAS_CONTROL_PLANE.md
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: mastyff-ai
-      POSTGRES_PASSWORD: mastyff-ai
-      POSTGRES_DB: mastyff-ai
+      POSTGRES_USER: mastyf-ai
+      POSTGRES_PASSWORD: mastyf-ai
+      POSTGRES_DB: mastyf-ai
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mastyff-ai -d mastyff-ai"]
+      test: ["CMD-SHELL", "pg_isready -U mastyf-ai -d mastyf-ai"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -44,7 +44,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://mastyff-ai-cloud
+      DATABASE_URL: postgresql://mastyf-ai-cloud
       AUTH_URL: http://localhost:3001
       NEXT_PUBLIC_APP_URL: http://localhost:3001
     env_file:

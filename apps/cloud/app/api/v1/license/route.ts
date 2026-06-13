@@ -67,7 +67,7 @@ export async function GET(request: Request) {
     licensePayload({
       licensed: true,
       tenantSlug: `pro-${proRow.id.slice(0, 8)}`,
-      orgName: 'MCP Mastyff AI Pro',
+      orgName: 'MCP Mastyf AI Pro',
       status: 'active',
     }),
   );

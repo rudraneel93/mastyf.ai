@@ -6,24 +6,24 @@ import {
 } from '../../src/ai/async-semantic-audit.js';
 
 describe('async-semantic-audit', () => {
-  const prevAsync = process.env.MASTYFF_AI_SEMANTIC_ASYNC;
-  const prevLlm = process.env.MASTYFF_AI_LLM_ENABLED;
+  const prevAsync = process.env.MASTYF_AI_SEMANTIC_ASYNC;
+  const prevLlm = process.env.MASTYF_AI_LLM_ENABLED;
 
   afterEach(() => {
-    if (prevAsync === undefined) delete process.env.MASTYFF_AI_SEMANTIC_ASYNC;
-    else process.env.MASTYFF_AI_SEMANTIC_ASYNC = prevAsync;
-    if (prevLlm === undefined) delete process.env.MASTYFF_AI_LLM_ENABLED;
-    else process.env.MASTYFF_AI_LLM_ENABLED = prevLlm;
+    if (prevAsync === undefined) delete process.env.MASTYF_AI_SEMANTIC_ASYNC;
+    else process.env.MASTYF_AI_SEMANTIC_ASYNC = prevAsync;
+    if (prevLlm === undefined) delete process.env.MASTYF_AI_LLM_ENABLED;
+    else process.env.MASTYF_AI_LLM_ENABLED = prevLlm;
   });
 
   it('defaults async on when LLM enabled', () => {
-    delete process.env.MASTYFF_AI_SEMANTIC_ASYNC;
-    process.env.MASTYFF_AI_LLM_ENABLED = 'true';
+    delete process.env.MASTYF_AI_SEMANTIC_ASYNC;
+    process.env.MASTYF_AI_LLM_ENABLED = 'true';
     expect(isSemanticAsyncEnabled()).toBe(true);
   });
 
-  it('respects MASTYFF_AI_SEMANTIC_ASYNC=false', () => {
-    process.env.MASTYFF_AI_SEMANTIC_ASYNC = 'false';
+  it('respects MASTYF_AI_SEMANTIC_ASYNC=false', () => {
+    process.env.MASTYF_AI_SEMANTIC_ASYNC = 'false';
     expect(isSemanticAsyncEnabled()).toBe(false);
   });
 

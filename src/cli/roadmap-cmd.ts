@@ -1,5 +1,5 @@
 /**
- * CLI: mastyff-ai roadmap — industry-standard A1–C5 utilities.
+ * CLI: mastyf-ai roadmap — industry-standard A1–C5 utilities.
  */
 import { writeFileSync, readFileSync } from 'fs';
 import { HistoryDatabase } from '../database/history-db.js';
@@ -11,17 +11,17 @@ import { EcosystemObservatory } from '../agentic/observatory/ecosystem-observato
 import { ReputationNetwork } from '../agentic/reputation/reputation-network.js';
 import {
   ingestCloudObservatoryRelay,
-  ingestMastyffAiBenchIntoObservatory,
+  ingestMastyfAiBenchIntoObservatory,
 } from '../agentic/observatory/observatory-ingest.js';
 import {
   publishObservatorySnapshotToMesh,
   pullObservatorySnapshotsFromMesh,
 } from '../agentic/observatory/observatory-mesh-relay.js';
 import { pullReputationEntriesFromMesh } from '../agentic/reputation/reputation-mesh-pull.js';
-import { runMastyffAiBenchScorecard } from '../utils/mastyff-ai-bench.js';
+import { runMastyfAiBenchScorecard } from '../utils/mastyf-ai-bench.js';
 
 function openStore(dbPath?: string): IndustryStandardStore {
-  const db = new HistoryDatabase(dbPath ?? process.env.MASTYFF_AI_HISTORY_DB ?? ':memory:');
+  const db = new HistoryDatabase(dbPath ?? process.env.MASTYF_AI_HISTORY_DB ?? ':memory:');
   return new IndustryStandardStore(db);
 }
 
@@ -64,7 +64,7 @@ export function runRoadmapFleetGraphTrain(opts: { output: string; db?: string })
 }
 
 export async function runRoadmapFederatedExport(opts: { output?: string; db?: string }): Promise<unknown> {
-  process.env.MASTYFF_AI_FEDERATED_LEARNING = 'true';
+  process.env.MASTYF_AI_FEDERATED_LEARNING = 'true';
   const store = openStore(opts.db);
   const fl = new FederatedLearningCoordinator(undefined, undefined, store);
   const bundle = fl.exportModelBundle();
@@ -73,7 +73,7 @@ export async function runRoadmapFederatedExport(opts: { output?: string; db?: st
 }
 
 export function runRoadmapFederatedImport(opts: { input: string; db?: string }): void {
-  process.env.MASTYFF_AI_FEDERATED_LEARNING = 'true';
+  process.env.MASTYF_AI_FEDERATED_LEARNING = 'true';
   const store = openStore(opts.db);
   const fl = new FederatedLearningCoordinator(undefined, undefined, store);
   const bundle = JSON.parse(readFileSync(opts.input, 'utf-8')) as { modelVersion: string; weights: number[] };
@@ -87,11 +87,11 @@ export async function runRoadmapObservatorySync(opts: { db?: string }): Promise<
 }> {
   const store = openStore(opts.db);
   const obs = new EcosystemObservatory(store);
-  const bench = runMastyffAiBenchScorecard();
-  ingestMastyffAiBenchIntoObservatory(obs, {
+  const bench = runMastyfAiBenchScorecard();
+  ingestMastyfAiBenchIntoObservatory(obs, {
     blockRate: bench.blockRate,
     falsePositiveRate: bench.falsePositiveRate,
-    serverCount: Number(process.env.MASTYFF_AI_FLEET_SERVER_COUNT ?? 1),
+    serverCount: Number(process.env.MASTYF_AI_FLEET_SERVER_COUNT ?? 1),
   });
   const cloud = await ingestCloudObservatoryRelay(obs);
   const mesh = await pullObservatorySnapshotsFromMesh(obs);

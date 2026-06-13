@@ -1,5 +1,5 @@
 {
-  description = "MCP Mastyff AI development environment";
+  description = "MCP Mastyf AI development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -15,7 +15,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          name = "mastyff-ai";
+          name = "mastyf-ai";
 
           buildInputs = with pkgs; [
             # Node.js 20 (matches .nvmrc and Dockerfile)
@@ -46,7 +46,7 @@
           ];
 
           shellHook = ''
-            echo "MCP Mastyff AI Dev Environment"
+            echo "MCP Mastyf AI Dev Environment"
             echo "─────────────────────────────────────"
             echo "  Node.js: $(node --version)"
             echo "  pnpm:    $(pnpm --version)"

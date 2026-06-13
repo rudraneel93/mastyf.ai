@@ -45,13 +45,13 @@ export interface ModelListRates {
 
 /** Opt-in simulated per-tool costs (tools/list footprint). Off by default since v2.7.11. */
 export function allowsCostEstimates(): boolean {
-  return process.env.MASTYFF_AI_COST_ALLOW_ESTIMATES === 'true';
+  return process.env.MASTYF_AI_COST_ALLOW_ESTIMATES === 'true';
 }
 
 export type CostSource = 'actual' | 'model-only' | 'estimated' | 'none';
 
 export function getCostSource(): CostSource {
-  const raw = process.env.MASTYFF_AI_COST_SOURCE ?? 'model-only';
+  const raw = process.env.MASTYF_AI_COST_SOURCE ?? 'model-only';
   if (raw === 'actual' || raw === 'model-only' || raw === 'estimated' || raw === 'none') {
     return raw;
   }
@@ -60,28 +60,28 @@ export function getCostSource(): CostSource {
 
 /** Reject misleading cost sources in production unless explicitly opted in. */
 export function validateCostSourceAtStartup(): void {
-  const source = process.env.MASTYFF_AI_COST_SOURCE;
+  const source = process.env.MASTYF_AI_COST_SOURCE;
   if (!source) return;
 
   if (source === 'simulated') {
     throw new Error(
       `Cost source 'simulated' is not allowed. Use 'actual' (proxy traffic) or 'model-only' (list rates). ` +
-        `For legacy tools/list simulation set MASTYFF_AI_COST_ALLOW_ESTIMATES=true and MASTYFF_AI_COST_SOURCE=estimated`,
+        `For legacy tools/list simulation set MASTYF_AI_COST_ALLOW_ESTIMATES=true and MASTYF_AI_COST_SOURCE=estimated`,
     );
   }
 
   if (source === 'estimated' && !allowsCostEstimates()) {
     const isProd = process.env.NODE_ENV === 'production';
-    if (isProd || process.env.MASTYFF_AI_STRICT_MODE === 'true') {
+    if (isProd || process.env.MASTYF_AI_STRICT_MODE === 'true') {
       throw new Error(
-        `MASTYFF_AI_COST_SOURCE=estimated requires MASTYFF_AI_COST_ALLOW_ESTIMATES=true (not for production audit)`,
+        `MASTYF_AI_COST_SOURCE=estimated requires MASTYF_AI_COST_ALLOW_ESTIMATES=true (not for production audit)`,
       );
     }
   }
 
   const allowed: CostSource[] = ['actual', 'model-only', 'estimated', 'none'];
   if (!allowed.includes(source as CostSource)) {
-    throw new Error(`Unknown MASTYFF_AI_COST_SOURCE: ${source}`);
+    throw new Error(`Unknown MASTYF_AI_COST_SOURCE: ${source}`);
   }
 }
 
@@ -160,7 +160,7 @@ function simulatedCallTexts(
 
 /**
  * Estimate per-tool MCP cost from tool definitions.
- * Requires MASTYFF_AI_COST_ALLOW_ESTIMATES=true — not used by default audit path.
+ * Requires MASTYF_AI_COST_ALLOW_ESTIMATES=true — not used by default audit path.
  */
 export async function estimateServerCostFromTools(
   tools: McpToolDefinition[],

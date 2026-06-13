@@ -20,7 +20,7 @@ import {
   type ThreatLabCandidate,
   type AutoCorpusEntry,
   type TrafficSummary,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { InfrastructureVisualsPanel } from './InfrastructureVisualsPanel';
 import { PlainEnglishReportView } from './PlainEnglishReportView';
 type Props = {

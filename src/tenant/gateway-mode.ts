@@ -6,7 +6,7 @@ import { isMultiTenantModeEnabled } from './resolve-tenant.js';
 
 export function isGatewayModeEnabled(): boolean {
   return (
-    process.env['MASTYFF_AI_GATEWAY_MODE'] === 'true'
+    process.env['MASTYF_AI_GATEWAY_MODE'] === 'true'
     || process.argv.includes('--gateway')
   );
 }
@@ -15,7 +15,7 @@ export function isGatewayModeEnabled(): boolean {
 export function assertGatewayStartup(): void {
   if (!isMultiTenantModeEnabled()) {
     Logger.error(
-      '[gateway] MASTYFF_AI_GATEWAY_MODE requires MASTYFF_AI_MULTI_TENANT_ENABLED=true',
+      '[gateway] MASTYF_AI_GATEWAY_MODE requires MASTYF_AI_MULTI_TENANT_ENABLED=true',
     );
     throw new Error('Gateway mode requires multi-tenant enabled');
   }

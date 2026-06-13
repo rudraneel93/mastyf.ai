@@ -2,13 +2,13 @@ import { execSync } from 'node:child_process';
 import { existsSync, accessSync, constants, readdirSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import chalk from 'chalk';
-import { resolveMastyffAiDbPath } from './mastyff-ai-db-path.js';
+import { resolveMastyfAiDbPath } from './mastyf-ai-db-path.js';
 import { isAiLearningEnabled, isAiAutoApplyEnabled } from './ai-enabled.js';
 import { isFieldEncryptionEnabled } from './field-encryption.js';
-import { resolveMastyffAiInstallRoot } from './mastyff-ai-package-root.js';
+import { resolveMastyfAiInstallRoot } from './mastyf-ai-package-root.js';
 import { isDashboardSpaBuilt } from './start-env.js';
 import { readOnboardArtifact } from '../cli/onboard.js';
-import { pickMastyffAiConfig } from './pick-mastyff-ai-config.js';
+import { pickMastyfAiConfig } from './pick-mastyf-ai-config.js';
 
 export interface DoctorOptions {
   policyPath?: string;
@@ -27,22 +27,22 @@ function checkPortInUse(port: number): boolean {
 
 export function runDoctor(opts: DoctorOptions = {}): number {
   let issues = 0;
-  const installRoot = resolveMastyffAiInstallRoot();
+  const installRoot = resolveMastyfAiInstallRoot();
   const distCli = join(installRoot, 'dist', 'cli.js');
-  const dbPath = resolveMastyffAiDbPath();
+  const dbPath = resolveMastyfAiDbPath();
   const policyPath = opts.policyPath
-    || process.env.MASTYFF_AI_POLICY_PATH
-    || process.env.MASTYFF_AI_POLICY_PATH
+    || process.env.MASTYF_AI_POLICY_PATH
+    || process.env.MASTYF_AI_POLICY_PATH
     || 'default-policy.yaml';
 
-  console.log(chalk.bold('\nMCP Mastyff AI Doctor\n'));
+  console.log(chalk.bold('\nMCP Mastyf AI Doctor\n'));
 
   if (existsSync(distCli)) {
     console.log(chalk.green(`  Install root: ${installRoot}`));
     console.log(chalk.green('  dist/cli.js: OK'));
   } else {
     console.log(chalk.red(`  dist/cli.js missing under ${installRoot}`));
-    console.log(chalk.dim('    Fix: mastyff-ai setup   (git clone) or npm install -g @mastyff-ai/server'));
+    console.log(chalk.dim('    Fix: mastyf-ai setup   (git clone) or npm install -g @mastyf-ai/server'));
     issues++;
   }
 
@@ -50,7 +50,7 @@ export function runDoctor(opts: DoctorOptions = {}): number {
     console.log(chalk.green('  Dashboard SPA: built (deploy/dashboard-spa/out/)'));
   } else {
     console.log(chalk.yellow('  Dashboard SPA: not built (legacy HTML fallback only)'));
-    console.log(chalk.dim('    Fix: mastyff-ai setup   or   mastyff-ai start --build-dashboard'));
+    console.log(chalk.dim('    Fix: mastyf-ai setup   or   mastyf-ai start --build-dashboard'));
     issues++;
   }
 
@@ -86,14 +86,14 @@ export function runDoctor(opts: DoctorOptions = {}): number {
     console.log(chalk.green(`  Onboard: ${onboard.client} (${onboard.onboardedAt})`));
     if (onboard.configsDir && existsSync(onboard.configsDir)) {
       const n = readdirSync(onboard.configsDir).filter((f) => f.endsWith('.json')).length;
-      console.log(chalk.dim(`    mastyff-ai-configs: ${n} file(s) in ${onboard.configsDir}`));
+      console.log(chalk.dim(`    mastyf-ai-configs: ${n} file(s) in ${onboard.configsDir}`));
     }
   } else {
     console.log(chalk.yellow('  Onboard: not run yet'));
-    console.log(chalk.dim('    Fix: mastyff-ai onboard --apply'));
+    console.log(chalk.dim('    Fix: mastyf-ai onboard --apply'));
   }
 
-  const picked = pickMastyffAiConfig({
+  const picked = pickMastyfAiConfig({
     configPath: opts.configPath,
     searchRoots: [process.cwd(), installRoot],
   });
@@ -109,7 +109,7 @@ export function runDoctor(opts: DoctorOptions = {}): number {
     console.log(chalk.green(`  MCP config (auto): ${picked}`));
   } else {
     console.log(chalk.yellow('  MCP config: none (single stdio server)'));
-    console.log(chalk.dim('    Fix: mastyff-ai onboard --apply'));
+    console.log(chalk.dim('    Fix: mastyf-ai onboard --apply'));
     issues++;
   }
 
@@ -121,14 +121,14 @@ export function runDoctor(opts: DoctorOptions = {}): number {
   }
 
   const dashboard = process.env.DASHBOARD_ENABLED === 'true';
-  const ws = process.env.MASTYFF_AI_WS_ENABLED !== 'false';
-  console.log(chalk.dim(`  Dashboard API: ${dashboard ? 'enabled' : 'disabled'} (set by mastyff-ai start)`));
+  const ws = process.env.MASTYF_AI_WS_ENABLED !== 'false';
+  console.log(chalk.dim(`  Dashboard API: ${dashboard ? 'enabled' : 'disabled'} (set by mastyf-ai start)`));
   console.log(chalk.dim(`  Live WebSocket: ${ws ? 'enabled' : 'disabled'}`));
 
-  if (process.env.MASTYFF_AI_ENTERPRISE_MODE === 'true' && !isFieldEncryptionEnabled()) {
+  if (process.env.MASTYF_AI_ENTERPRISE_MODE === 'true' && !isFieldEncryptionEnabled()) {
     console.log(
       chalk.yellow(
-        '  Enterprise mode: MASTYFF_AI_DB_ENCRYPTION_KEY unset — audit block_reason/args stored in plaintext',
+        '  Enterprise mode: MASTYF_AI_DB_ENCRYPTION_KEY unset — audit block_reason/args stored in plaintext',
       ),
     );
     issues++;
@@ -138,16 +138,16 @@ export function runDoctor(opts: DoctorOptions = {}): number {
     console.log(chalk.green('  AI learning: enabled (default)'));
     console.log(chalk.dim(`    Auto-apply rules: ${isAiAutoApplyEnabled() ? 'ON' : 'off'}`));
   } else {
-    console.log(chalk.yellow('  AI learning: disabled (MASTYFF_AI_AI_ENABLED=false)'));
+    console.log(chalk.yellow('  AI learning: disabled (MASTYF_AI_AI_ENABLED=false)'));
   }
 
   console.log(chalk.cyan('\n  Quick start:'));
-  console.log(chalk.dim('    npm install -g @mastyff-ai/server@latest'));
-  console.log(chalk.dim('    mastyff-ai onboard --apply'));
-  console.log(chalk.dim('    mastyff-ai start\n'));
+  console.log(chalk.dim('    npm install -g @mastyf-ai/server@latest'));
+  console.log(chalk.dim('    mastyf-ai onboard --apply'));
+  console.log(chalk.dim('    mastyf-ai start\n'));
 
   if (issues > 0) {
-    console.log(chalk.yellow(`  ${issues} issue(s) — fix items above, then: mastyff-ai start\n`));
+    console.log(chalk.yellow(`  ${issues} issue(s) — fix items above, then: mastyf-ai start\n`));
   }
 
   return issues > 0 ? 1 : 0;

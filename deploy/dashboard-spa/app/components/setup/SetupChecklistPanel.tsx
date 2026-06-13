@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Cloud, Database, Shield, Activity } from 'lucide-react';
 import {
   fetchSetupStatus,
-  saveSetupMastyffAiConfig,
+  saveSetupMastyfAiConfig,
   type SetupStatusResponse,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { CloudControlPlaneModal } from './CloudControlPlaneModal';
 import { Button } from '../ui/Button';
 
@@ -29,9 +29,9 @@ export function SetupChecklistPanel({ onGoToAgentFlow, onAction }: Props) {
     setLoading(true);
     const st = await fetchSetupStatus();
     setStatus(st);
-    if (st?.mastyffAiConfig) {
-      setUpstreamUrl(st.mastyffAiConfig.upstreamUrl || '');
-      setListenPort(String(st.mastyffAiConfig.listenPort ?? 8443));
+    if (st?.mastyfAiConfig) {
+      setUpstreamUrl(st.mastyfAiConfig.upstreamUrl || '');
+      setListenPort(String(st.mastyfAiConfig.listenPort ?? 8443));
     }
     setLoading(false);
   }, []);
@@ -42,14 +42,14 @@ export function SetupChecklistPanel({ onGoToAgentFlow, onAction }: Props) {
 
   const onSaveConfig = async () => {
     setSaving(true);
-    const res = await saveSetupMastyffAiConfig({
+    const res = await saveSetupMastyfAiConfig({
       upstreamUrl,
       listenPort: parseInt(listenPort, 10) || 8443,
       authToken: authToken || undefined,
     });
     setSaving(false);
     if (res.ok) {
-      onAction?.('Mastyff AI config saved');
+      onAction?.('Mastyf AI config saved');
       setConfigOpen(false);
       await load();
     } else {
@@ -92,9 +92,9 @@ export function SetupChecklistPanel({ onGoToAgentFlow, onAction }: Props) {
         />
 
         <ol className="setup-checklist-items">
-          <li className={status?.mastyffAiConfig?.done ? 'done' : ''}>
+          <li className={status?.mastyfAiConfig?.done ? 'done' : ''}>
             <span className="setup-check-icon" aria-hidden>
-              {status?.mastyffAiConfig?.done ? '✓' : ''}
+              {status?.mastyfAiConfig?.done ? '✓' : ''}
             </span>
             <div className="setup-check-body">
               <button
@@ -102,9 +102,9 @@ export function SetupChecklistPanel({ onGoToAgentFlow, onAction }: Props) {
                 className="setup-check-title linkish"
                 onClick={() => setConfigOpen((o) => !o)}
               >
-                Mastyff AI Config
+                Mastyf AI Config
               </button>
-              <p className="hint">Configure mastyff-ai proxy settings</p>
+              <p className="hint">Configure mastyf-ai proxy settings</p>
               {configOpen ? (
                 <div className="setup-config-form">
                   <label>
@@ -130,7 +130,7 @@ export function SetupChecklistPanel({ onGoToAgentFlow, onAction }: Props) {
                       value={authToken}
                       onChange={(e) => setAuthToken(e.target.value)}
                       placeholder={
-                        status?.mastyffAiConfig?.authTokenPreview || 'grd_sk_live_…'
+                        status?.mastyfAiConfig?.authTokenPreview || 'grd_sk_live_…'
                       }
                     />
                   </label>

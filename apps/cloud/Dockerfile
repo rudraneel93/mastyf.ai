@@ -5,7 +5,7 @@ WORKDIR /app
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/cloud/package.json ./apps/cloud/
-RUN pnpm install --filter @mastyff-ai/cloud... --frozen-lockfile || pnpm install --filter @mastyff-ai/cloud...
+RUN pnpm install --filter @mastyf-ai/cloud... --frozen-lockfile || pnpm install --filter @mastyf-ai/cloud...
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules

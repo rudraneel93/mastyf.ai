@@ -8,17 +8,17 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 describe('dashboard access log', () => {
-  const prevHome = process.env.MASTYFF_AI_HOME;
+  const prevHome = process.env.MASTYF_AI_HOME;
   let tempHome: string;
 
   beforeEach(() => {
-    tempHome = mkdtempSync(join(tmpdir(), 'mastyff-ai-audit-'));
-    process.env.MASTYFF_AI_HOME = tempHome;
+    tempHome = mkdtempSync(join(tmpdir(), 'mastyf-ai-audit-'));
+    process.env.MASTYF_AI_HOME = tempHome;
   });
 
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.MASTYFF_AI_HOME;
-    else process.env.MASTYFF_AI_HOME = prevHome;
+    if (prevHome === undefined) delete process.env.MASTYF_AI_HOME;
+    else process.env.MASTYF_AI_HOME = prevHome;
     try {
       rmSync(tempHome, { recursive: true, force: true });
     } catch {

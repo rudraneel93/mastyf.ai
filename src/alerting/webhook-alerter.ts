@@ -80,7 +80,7 @@ export class WebhookAlerter {
 
     if (cfg.type === 'slack') {
       body = JSON.stringify({
-        text: `*[Mastyff AI]* ${payload.severity.toUpperCase()}: ${payload.title}`,
+        text: `*[Mastyf AI]* ${payload.severity.toUpperCase()}: ${payload.title}`,
         attachments: [{
           color: payload.severity === 'critical' ? 'danger' : 'warning',
           fields: [
@@ -88,17 +88,17 @@ export class WebhookAlerter {
             { title: 'Tool', value: payload.tool ?? 'N/A', short: true },
             { title: 'Message', value: payload.message },
           ],
-          footer: `MCP Mastyff AI | ${payload.timestamp}`,
+          footer: `MCP Mastyf AI | ${payload.timestamp}`,
         }],
       });
     } else if (cfg.type === 'discord') {
       const colorMap: Record<string, number> = { critical: 0xff4455, high: 0xffd700, medium: 0x00d4ff };
       body = JSON.stringify({
         embeds: [{
-          title: `Mastyff AI: ${payload.title}`,
+          title: `Mastyf AI: ${payload.title}`,
           description: payload.message,
           color: colorMap[payload.severity] ?? 0x00d4ff,
-          footer: { text: payload.server ? `Server: ${payload.server}` : 'Mastyff AI' },
+          footer: { text: payload.server ? `Server: ${payload.server}` : 'Mastyf AI' },
           timestamp: payload.timestamp,
         }],
       });
@@ -107,7 +107,7 @@ export class WebhookAlerter {
         routing_key: cfg.token,
         event_action: 'trigger',
         payload: {
-          summary: `Mastyff AI: ${payload.title}`,
+          summary: `Mastyf AI: ${payload.title}`,
           severity: payload.severity === 'critical' ? 'critical' : 'warning',
           timestamp: payload.timestamp,
           custom_details: payload,

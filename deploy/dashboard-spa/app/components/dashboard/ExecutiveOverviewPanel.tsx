@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { AggregateMetrics } from '@/lib/mastyff-ai-api';
+import type { AggregateMetrics } from '@/lib/mastyf-ai-api';
 import {
   CHART_AXIS,
   CHART_COLORS,

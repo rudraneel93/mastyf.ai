@@ -5,7 +5,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@mastyff-ai/plugin-sdk': path.resolve(__dirname, 'packages/plugin-sdk/dist/index.js'),
+      '@mastyf-ai/plugin-sdk': path.resolve(__dirname, 'packages/plugin-sdk/dist/index.js'),
     },
   },
   test: {

@@ -1,15 +1,15 @@
 /**
  * Multi-region labeling — active-passive failover; not active-active replication.
  */
-export function getMastyffAiRegion(): string {
+export function getMastyfAiRegion(): string {
   return (
-    process.env['MASTYFF_AI_REGION'] ||
+    process.env['MASTYF_AI_REGION'] ||
     process.env['AWS_REGION'] ||
     process.env['GCP_REGION'] ||
     'default'
   );
 }
 
-export function getMastyffAiRegionLabels(): Record<string, string> {
-  return { region: getMastyffAiRegion() };
+export function getMastyfAiRegionLabels(): Record<string, string> {
+  return { region: getMastyfAiRegion() };
 }

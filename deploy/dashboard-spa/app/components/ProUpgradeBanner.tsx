@@ -1,6 +1,6 @@
 'use client';
 
-import type { AuthStatus } from '@/lib/mastyff-ai-api';
+import type { AuthStatus } from '@/lib/mastyf-ai-api';
 
 type Props = {
   authStatus: AuthStatus | null;
@@ -20,7 +20,7 @@ export function ProUpgradeBanner({ authStatus }: Props) {
         {' '}
         — Install and proxy are free on npm. Unlock dashboard, security swarm, multi-tenant, and
         semantic audit with{' '}
-        <strong>MCP Mastyff AI Pro</strong> ($4.99 lifetime).
+        <strong>MCP Mastyf AI Pro</strong> ($4.99 lifetime).
       </span>
       {upgradeUrl ? (
         <a className="pro-upgrade-link" href={upgradeUrl} target="_blank" rel="noopener noreferrer">

@@ -1,6 +1,6 @@
 /**
  * Log Shipper — Pino transport that ships structured JSON logs to
- * PostgreSQL mastyff_ai_logs table for centralized log aggregation.
+ * PostgreSQL mastyf_ai_logs table for centralized log aggregation.
  *
  * Integrates with existing pino logger in src/utils/structured-logger.ts
  * to provide real-time log shipping alongside stdout/file outputs.
@@ -44,12 +44,12 @@ const LEVEL_NAMES: Record<number, string> = {
 };
 
 const DEFAULT_CONFIG: LogShipperConfig = {
-  instanceId: process.env['MASTYFF_AI_INSTANCE_ID'] || `mastyff-ai-${process.pid}`,
-  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyff_ai',
-  minLevel: parseInt(process.env['MASTYFF_AI_LOG_SHIP_LEVEL'] || '30', 10),
-  batchSize: parseInt(process.env['MASTYFF_AI_LOG_BATCH_SIZE'] || '50', 10),
-  flushIntervalMs: parseInt(process.env['MASTYFF_AI_LOG_FLUSH_MS'] || '5000', 10),
-  enabled: process.env['MASTYFF_AI_LOG_SHIP_ENABLED'] !== 'false',
+  instanceId: process.env['MASTYF_AI_INSTANCE_ID'] || `mastyf-ai-${process.pid}`,
+  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyf_ai',
+  minLevel: parseInt(process.env['MASTYF_AI_LOG_SHIP_LEVEL'] || '30', 10),
+  batchSize: parseInt(process.env['MASTYF_AI_LOG_BATCH_SIZE'] || '50', 10),
+  flushIntervalMs: parseInt(process.env['MASTYF_AI_LOG_FLUSH_MS'] || '5000', 10),
+  enabled: process.env['MASTYF_AI_LOG_SHIP_ENABLED'] !== 'false',
 };
 
 export class LogShipper {
@@ -82,7 +82,7 @@ export class LogShipper {
   /** Start the log shipper */
   async start(): Promise<void> {
     if (!this.config.enabled) {
-      Logger.info('[LogShipper] Disabled — set MASTYFF_AI_LOG_SHIP_ENABLED=true to enable');
+      Logger.info('[LogShipper] Disabled — set MASTYF_AI_LOG_SHIP_ENABLED=true to enable');
       return;
     }
 
@@ -212,7 +212,7 @@ export class LogShipper {
       }
 
       await client.query(
-        `INSERT INTO mastyff_ai_logs
+        `INSERT INTO mastyf_ai_logs
          (instance_id, timestamp, level, level_name, message, module,
           server_name, tool_name, request_id, error, stack, metadata)
          VALUES ${placeholders.join(', ')}`,
@@ -254,7 +254,7 @@ export class LogShipper {
       const pool = await this.ensurePool();
       const client = await pool.connect();
       try {
-        let query = 'SELECT * FROM mastyff_ai_logs WHERE 1=1';
+        let query = 'SELECT * FROM mastyf_ai_logs WHERE 1=1';
         const params: any[] = [];
         let paramIdx = 1;
 
@@ -297,20 +297,20 @@ export class LogShipper {
       try {
         const [levelResult, serverResult, totalResult] = await Promise.all([
           client.query(
-            `SELECT level_name, COUNT(*) as count FROM mastyff_ai_logs
+            `SELECT level_name, COUNT(*) as count FROM mastyf_ai_logs
              WHERE timestamp > NOW() - INTERVAL '1 hour' * $1
              GROUP BY level_name ORDER BY count DESC`,
             [hoursBack]
           ),
           client.query(
-            `SELECT server_name, COUNT(*) as count FROM mastyff_ai_logs
+            `SELECT server_name, COUNT(*) as count FROM mastyf_ai_logs
              WHERE timestamp > NOW() - INTERVAL '1 hour' * $1
              AND server_name IS NOT NULL
              GROUP BY server_name ORDER BY count DESC LIMIT 20`,
             [hoursBack]
           ),
           client.query(
-            `SELECT COUNT(*) as total FROM mastyff_ai_logs
+            `SELECT COUNT(*) as total FROM mastyf_ai_logs
              WHERE timestamp > NOW() - INTERVAL '1 hour' * $1`,
             [hoursBack]
           ),

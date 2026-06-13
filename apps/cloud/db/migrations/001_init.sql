@@ -1,4 +1,4 @@
--- MCP Mastyff AI Cloud control plane (separate from Mastyff AI audit DB)
+-- MCP Mastyf AI Cloud control plane (separate from Mastyf AI audit DB)
 
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,

@@ -69,8 +69,8 @@ interface LoginRateEntry {
  * 1. API Key: Set DASHBOARD_API_KEY, pass as Authorization: Bearer <key> or X-API-Key header
  * 2. JWT Sessions: Set DASHBOARD_JWT_SECRET, POST /api/login with credentials
  */
-export const CSRF_COOKIE_NAME = 'mastyff_ai_csrf';
-export const SESSION_COOKIE_NAME = 'mastyff_ai_session';
+export const CSRF_COOKIE_NAME = 'mastyf_ai_csrf';
+export const SESSION_COOKIE_NAME = 'mastyf_ai_session';
 export const CSRF_HEADER_NAME = 'x-csrf-token';
 
 export class DashboardAuth {
@@ -93,13 +93,13 @@ export class DashboardAuth {
       jwtSecret:
         config?.jwtSecret
         ?? process.env['DASHBOARD_JWT_SECRET']
-        ?? process.env['MASTYFF_AI_CLOUD_JWT_SECRET']
+        ?? process.env['MASTYF_AI_CLOUD_JWT_SECRET']
         ?? process.env['LICENSE_JWT_SECRET']
         ?? undefined,
       sessionTtlSeconds: config?.sessionTtlSeconds ?? 3600,
       allowedOrigins: config?.allowedOrigins ?? (process.env['DASHBOARD_ALLOWED_ORIGINS']
         ? process.env['DASHBOARD_ALLOWED_ORIGINS'].split(',').map(s => s.trim())
-        : (process.env['MASTYFF_AI_ENTERPRISE_MODE'] === 'true'
+        : (process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true'
           ? ['https://localhost:4000']
           : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000'])),
       maxLoginAttemptsPerMinute: config?.maxLoginAttemptsPerMinute ?? 5,
@@ -358,13 +358,13 @@ export class DashboardAuth {
 
   /** Set-Cookie header value for the CSRF double-submit cookie. */
   csrfSetCookieHeader(token: string): string {
-    const secure = process.env['MASTYFF_AI_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
+    const secure = process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
     return `${CSRF_COOKIE_NAME}=${token}; Path=/; SameSite=Strict; Max-Age=3600${secure}`;
   }
 
   /** Set-Cookie header value for the HttpOnly session cookie. */
   sessionSetCookieHeader(token: string): string {
-    const secure = process.env['MASTYFF_AI_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
+    const secure = process.env['MASTYF_AI_ENTERPRISE_MODE'] === 'true' ? '; Secure' : '';
     return `${SESSION_COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${this.config.sessionTtlSeconds}${secure}`;
   }
 
@@ -438,7 +438,7 @@ export class DashboardAuth {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MCP Mastyff AI — Login</title>
+<title>MCP Mastyf AI — Login</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -455,7 +455,7 @@ button:hover { background: #2ea043; }
 </head>
 <body>
 <div class="container">
-<h1>🛡️ Mastyff AI</h1>
+<h1>🛡️ Mastyf AI</h1>
 <h2>Dashboard Authentication</h2>
 ${errorHtml}
 <form method="POST" action="/api/login">
@@ -506,7 +506,7 @@ ${csrfField}
   ): string {
     if (!this.config.jwtSecret) {
       throw new Error(
-        'Set DASHBOARD_JWT_SECRET or MASTYFF_AI_CLOUD_JWT_SECRET (same value as cloud AUTH_SECRET)',
+        'Set DASHBOARD_JWT_SECRET or MASTYF_AI_CLOUD_JWT_SECRET (same value as cloud AUTH_SECRET)',
       );
     }
     Logger.info(`[dashboard-auth] Cloud session for ${identity} tenant=${tenantSlug}`);
@@ -564,7 +564,7 @@ ${csrfField}
       }
     }
     if (body.role) return resolveRolesFromSessionPayload({ role: body.role });
-    const envRole = process.env['MASTYFF_AI_DASHBOARD_LOGIN_ROLE'];
+    const envRole = process.env['MASTYF_AI_DASHBOARD_LOGIN_ROLE'];
     if (envRole) return resolveRolesFromSessionPayload({ role: envRole });
     return ['viewer'];
   }

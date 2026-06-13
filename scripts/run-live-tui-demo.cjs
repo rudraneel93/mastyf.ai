@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Live multi-server traffic into ~/.mastyff-ai/history.db for TUI verification.
+ * Live multi-server traffic into ~/.mastyf-ai/history.db for TUI verification.
  * No mock AI state — real proxy calls only.
  *
  * Usage:
@@ -51,7 +51,7 @@ async function printDbSummary(db) {
 }
 
 (async function main() {
-  const canonicalDb = join(homedir(), '.mastyff-ai', 'history.db');
+  const canonicalDb = join(homedir(), '.mastyf-ai', 'history.db');
   const db = new HistoryDatabase(canonicalDb);
   const effectiveDb = db.getDbPath();
   if (effectiveDb !== canonicalDb) {

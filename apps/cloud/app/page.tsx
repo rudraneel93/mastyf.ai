@@ -36,7 +36,7 @@ export default async function HomePage() {
     <div className="landing">
       <nav className="landing-nav">
         <Link href="/" className="brand">
-          MCP <span>MastyffAi</span>
+          MCP <span>MastyfAi</span>
         </Link>
         <div className="landing-nav-links">
           <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
@@ -45,7 +45,7 @@ export default async function HomePage() {
           <a href="#problem">Why MCP security</a>
           <a href="#swarm">Security Swarm</a>
           <a href="#threat-research">Threat research</a>
-          <a href="#usp">Why MastyffAi</a>
+          <a href="#usp">Why MastyfAi</a>
           <a href="#evidence">Evidence</a>
           <a href="#pricing">Pricing</a>
           <Link href="/dashboard">Cloud console</Link>
@@ -69,7 +69,7 @@ export default async function HomePage() {
           </div>
           <h1>Stop AI agents from becoming your next breach vector</h1>
           <p className="lead">
-            MCP Mastyff AI is the security proxy between AI agents and MCP servers — inspecting every{' '}
+            MCP Mastyf AI is the security proxy between AI agents and MCP servers — inspecting every{' '}
             <code>tools/call</code> and tool response in real time, enforcing YAML policy, and running a
             closed-loop <strong style={{ color: 'var(--text)' }}>Security Swarm</strong> that red-teams
             itself faster than attackers evolve.
@@ -113,7 +113,7 @@ export default async function HomePage() {
           </div>
           <p className="muted" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
             <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
-              @mastyff-ai/server
+              @mastyf-ai/server
             </a>
             {' · '}
             11k+ downloads/month · Works with Cursor, Cline, Claude Code
@@ -175,7 +175,7 @@ export default async function HomePage() {
             <h2>Trusted on npm</h2>
             <p>
               Install globally with{' '}
-              <code>npm install -g @mastyff-ai/server</code> — MIT licensed, TypeScript 5.4, MCP SDK
+              <code>npm install -g @mastyf-ai/server</code> — MIT licensed, TypeScript 5.4, MCP SDK
               1.25. Over <strong>10,000 monthly downloads</strong> on{' '}
               <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
                 npmjs.com
@@ -187,7 +187,7 @@ export default async function HomePage() {
             <figure className="landing-npm-shot">
               <Image
                 src="/assets/npm-package-screenshot.png"
-                alt="npm registry page for @mastyff-ai/server showing 11k/month downloads badge, v2.9.6, MIT license, and MCP Mastyff AI readme"
+                alt="npm registry page for @mastyf-ai/server showing 11k/month downloads badge, v2.9.6, MIT license, and MCP Mastyf AI readme"
                 width={1200}
                 height={520}
                 style={{ width: '100%', height: 'auto' }}
@@ -195,7 +195,7 @@ export default async function HomePage() {
               <figcaption className="landing-arch-caption">
                 Live npm registry —{' '}
                 <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
-                  @mastyff-ai/server
+                  @mastyf-ai/server
                 </a>
               </figcaption>
             </figure>
@@ -214,7 +214,7 @@ export default async function HomePage() {
                 className="landing-npm-badge"
               >
                 <span className="landing-npm-badge-label">Package</span>
-                <span className="landing-npm-badge-value">@mastyff-ai/server</span>
+                <span className="landing-npm-badge-value">@mastyf-ai/server</span>
               </a>
               <div className="landing-npm-badge landing-npm-badge-static">
                 <span className="landing-npm-badge-label">License</span>
@@ -228,7 +228,7 @@ export default async function HomePage() {
                 View on npm
               </a>
               <p className="muted" style={{ fontSize: '0.8rem', margin: 0 }}>
-                <code>npm install -g @mastyff-ai/server</code>
+                <code>npm install -g @mastyf-ai/server</code>
               </p>
             </div>
           </div>
@@ -254,7 +254,7 @@ export default async function HomePage() {
             <figcaption className="landing-arch-caption">
               Closed-loop workflow from the{' '}
               <a href={GITHUB_README_URL} rel="noopener noreferrer">
-                MCP Mastyff AI README
+                MCP Mastyf AI README
               </a>
               : corpus regression, evasion probes, parity checks, and instant attack learning on the
               hot path.
@@ -323,7 +323,7 @@ export default async function HomePage() {
 
         <section className="landing-section" id="usp">
           <div className="landing-section-header">
-            <h2>Why teams choose MCP MastyffAi</h2>
+            <h2>Why teams choose MCP MastyfAi</h2>
             <p>
               No purpose-built MCP security competitor exists. Generic API gateways don&apos;t understand
               agent behavior — and brittle custom middleware breaks on every SDK update.
@@ -345,7 +345,7 @@ export default async function HomePage() {
               <thead>
                 <tr>
                   <th>Capability</th>
-                  <th>MCP MastyffAi</th>
+                  <th>MCP MastyfAi</th>
                   <th>Generic gateway / DIY</th>
                 </tr>
               </thead>
@@ -354,7 +354,7 @@ export default async function HomePage() {
                   <tr key={row.capability}>
                     <td>{row.capability}</td>
                     <td>
-                      <span className="landing-compare-yes">{row['mastyff-ai']}</span>
+                      <span className="landing-compare-yes">{row['mastyf-ai']}</span>
                     </td>
                     <td>
                       <span className="landing-compare-no">{row.generic}</span>
@@ -448,7 +448,7 @@ export default async function HomePage() {
               <p>
                 330 enterprise attack simulations · 93.3% block rate · 38ms average detection · zero false
                 positives. Open-source core on npm; Pro unlocks Security Swarm, threat research pipelines,
-                and fleet dashboard. AI agent security is the next major enterprise category — MCP MastyffAi
+                and fleet dashboard. AI agent security is the next major enterprise category — MCP MastyfAi
                 is built to define it.
               </p>
             </div>
@@ -533,7 +533,7 @@ export default async function HomePage() {
                 Buy Pro — $4.99
               </a>
               <Link
-                href="https://github.com/mastyff-ai/mastyff-ai/blob/master/docs/PRO_SETUP.md"
+                href="https://github.com/mastyf-ai/mastyf-ai/blob/master/docs/PRO_SETUP.md"
                 className="btn"
               >
                 Pro setup guide
@@ -545,15 +545,15 @@ export default async function HomePage() {
         <section className="card">
           <h2>Cloud control plane (optional)</h2>
           <p className="muted">
-            This site validates <code>MASTYFF_AI_LICENSE_KEY</code> at{' '}
+            This site validates <code>MASTYF_AI_LICENSE_KEY</code> at{' '}
             <code>GET /api/v1/license</code>. Free sign-in with Google or GitHub sends you to the
-            repo to install MastyffAi; use the{' '}
+            repo to install MastyfAi; use the{' '}
             <Link href="/dashboard">cloud console</Link> for policy YAML, tenant env snippets, API key
             rotation, and SSO launch into a running self-hosted dashboard.
           </p>
           <p className="muted" style={{ marginTop: '0.75rem' }}>
             <strong>Control plane URL (all buyers):</strong>{' '}
-            <code>https://mastyff-ai-cloud.vercel.app</code>
+            <code>https://mastyf-ai-cloud.vercel.app</code>
           </p>
         </section>
 
@@ -565,7 +565,7 @@ export default async function HomePage() {
               GitHub
             </a>
             <a href={NPM_PACKAGE_URL} rel="noopener noreferrer">
-              npm @mastyff-ai/server
+              npm @mastyf-ai/server
             </a>
           </div>
         </footer>

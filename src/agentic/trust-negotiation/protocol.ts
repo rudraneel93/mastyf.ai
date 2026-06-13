@@ -1,6 +1,6 @@
 /**
  * Agent-to-Agent Trust Negotiation Protocol — enables automated trust
- * handshakes between AI agents behind separate Mastyff AI instances.
+ * handshakes between AI agents behind separate Mastyf AI instances.
  *
  * Protocol flow:
  *   1. Capability Exchange — agents share attested capabilities and constraints
@@ -14,8 +14,8 @@ import { Logger } from '../../utils/logger.js';
 export interface AgentIdentity {
   /** Agent's unique identifier */
   agentId: string;
-  /** The Mastyff AI instance protecting this agent */
-  mastyffAiInstance: string;
+  /** The Mastyf AI instance protecting this agent */
+  mastyfAiInstance: string;
   /** Agent's declared capabilities */
   capabilities: string[];
   /** Attestation proof (JWT/signed) */

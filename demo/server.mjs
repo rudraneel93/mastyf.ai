@@ -1,7 +1,7 @@
 /**
- * MCP Mastyff AI — Live Attack Demo Server
+ * MCP Mastyf AI — Live Attack Demo Server
  * 
- * Simulates AI agent tool calls being intercepted by MastyffAi.
+ * Simulates AI agent tool calls being intercepted by MastyfAi.
  * Runs a WebSocket server that broadcasts events to the demo UI.
  * 
  * Usage:
@@ -337,7 +337,7 @@ function broadcast(event) {
 
 async function runDemo() {
   console.log('\n\x1b[1m╔══════════════════════════════════════════════════════════════╗\x1b[0m');
-  console.log('\x1b[1m║         MCP Mastyff AI — Live Attack Demo                      ║\x1b[0m');
+  console.log('\x1b[1m║         MCP Mastyf AI — Live Attack Demo                      ║\x1b[0m');
   console.log('\x1b[1m╚══════════════════════════════════════════════════════════════╝\x1b[0m\n');
   console.log(`  Dashboard UI:  \x1b[4mhttp://localhost:${PORT}\x1b[0m`);
   console.log(`  WebSocket:     ws://localhost:${PORT}`);

@@ -4,7 +4,7 @@
  *
  * Usage:
  *   pnpm build
- *   MCP_FS_ROOT=/tmp/mastyff-ai-rl node scenarios/real-life/run-real-mcp-swarm.mjs [--skip-swarm] [--skip-visuals]
+ *   MCP_FS_ROOT=/tmp/mastyf-ai-rl node scenarios/real-life/run-real-mcp-swarm.mjs [--skip-swarm] [--skip-visuals]
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -83,7 +83,7 @@ ${liveReport.proxyResults.map((r) => `| ${r.scenario} | ${r.tool} | ${r.expected
 
 async function main() {
   console.log('═'.repeat(60));
-  console.log('  Real-life MCP Mastyff AI + Security Swarm');
+  console.log('  Real-life MCP Mastyf AI + Security Swarm');
   console.log('═'.repeat(60));
 
   if (!existsSync(join(ROOT, 'dist', 'cli.js'))) {
@@ -104,8 +104,8 @@ async function main() {
   if (!SKIP_SWARM) {
     run('pnpm', ['security-swarm:fast'], {
       env: {
-        MASTYFF_AI_POLICY_TIMING_ENVELOPE: 'false',
-        MASTYFF_AI_DISABLE_SEMANTIC: 'true',
+        MASTYF_AI_POLICY_TIMING_ENVELOPE: 'false',
+        MASTYF_AI_DISABLE_SEMANTIC: 'true',
       },
     });
   }

@@ -11,7 +11,7 @@ import { runMigrations } from '../database/migration-runner.js';
 import { Logger } from '../utils/logger.js';
 import { ProxyCallRecord } from '../types.js';
 import type { AttackLearningState } from '../ai/instant-attack-learning.js';
-import { getMastyffAiRegion } from '../utils/region.js';
+import { getMastyfAiRegion } from '../utils/region.js';
 
 export interface SyncConfig {
   instanceId: string;
@@ -22,11 +22,11 @@ export interface SyncConfig {
 }
 
 const DEFAULT_CONFIG: SyncConfig = {
-  instanceId: process.env['MASTYFF_AI_INSTANCE_ID'] || `mastyff-ai-${process.pid}-${Date.now()}`,
-  instanceName: process.env['MASTYFF_AI_INSTANCE_NAME'] || process.env['HOSTNAME'] || 'unknown',
-  syncIntervalMs: parseInt(process.env['MASTYFF_AI_SYNC_INTERVAL_MS'] || '30000', 10),
-  batchSize: parseInt(process.env['MASTYFF_AI_SYNC_BATCH_SIZE'] || '100', 10),
-  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyff_ai',
+  instanceId: process.env['MASTYF_AI_INSTANCE_ID'] || `mastyf-ai-${process.pid}-${Date.now()}`,
+  instanceName: process.env['MASTYF_AI_INSTANCE_NAME'] || process.env['HOSTNAME'] || 'unknown',
+  syncIntervalMs: parseInt(process.env['MASTYF_AI_SYNC_INTERVAL_MS'] || '30000', 10),
+  batchSize: parseInt(process.env['MASTYF_AI_SYNC_BATCH_SIZE'] || '100', 10),
+  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyf_ai',
 };
 
 export class AuditTrailSync {
@@ -40,9 +40,9 @@ export class AuditTrailSync {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  /** Region label stored in mastyff_ai_instances.metadata for dashboard region filter. */
+  /** Region label stored in mastyf_ai_instances.metadata for dashboard region filter. */
   private instanceMetadata(): Record<string, string> {
-    return { region: getMastyffAiRegion() };
+    return { region: getMastyfAiRegion() };
   }
 
   async initialize(): Promise<void> {
@@ -59,11 +59,11 @@ export class AuditTrailSync {
     try {
       // Register this instance
       await client.query(
-        `INSERT INTO mastyff_ai_instances (instance_id, instance_name, hostname, version, started_at, last_heartbeat, status, metadata)
+        `INSERT INTO mastyf_ai_instances (instance_id, instance_name, hostname, version, started_at, last_heartbeat, status, metadata)
          VALUES ($1, $2, $3, $4, NOW(), NOW(), 'active', $5::jsonb)
          ON CONFLICT (instance_id) DO UPDATE
          SET last_heartbeat = NOW(), status = 'active', hostname = $3, version = $4,
-             metadata = COALESCE(mastyff_ai_instances.metadata, '{}'::jsonb) || EXCLUDED.metadata`,
+             metadata = COALESCE(mastyf_ai_instances.metadata, '{}'::jsonb) || EXCLUDED.metadata`,
         [
           this.config.instanceId,
           this.config.instanceName,
@@ -334,7 +334,7 @@ export class AuditTrailSync {
       const client = await this.pgPool.connect();
       try {
         await client.query(
-          `UPDATE mastyff_ai_instances
+          `UPDATE mastyf_ai_instances
            SET last_heartbeat = NOW(), status = $2,
                metadata = COALESCE(metadata, '{}'::jsonb) || $3::jsonb
            WHERE instance_id = $1`,
@@ -394,7 +394,7 @@ export class AuditTrailSync {
             decision.authSuccess ?? null,
             decision.severity || 'info',
             JSON.stringify(decision.metadata || {}),
-            decision.tenantId || process.env['MASTYFF_AI_TENANT_ID'] || 'default',
+            decision.tenantId || process.env['MASTYF_AI_TENANT_ID'] || 'default',
           ]
         );
       } finally {
@@ -529,7 +529,7 @@ export class AuditTrailSync {
       const client = await this.pgPool.connect();
       try {
         const instances = await client.query(
-          'SELECT * FROM mastyff_ai_instances WHERE last_heartbeat > NOW() - INTERVAL \'5 minutes\'',
+          'SELECT * FROM mastyf_ai_instances WHERE last_heartbeat > NOW() - INTERVAL \'5 minutes\'',
         );
 
         if (tenantId) {

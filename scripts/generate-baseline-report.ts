@@ -46,7 +46,7 @@ function tryReadJson(path: string): any {
 
 async function main() {
   console.log('\n╔══════════════════════════════════════════════════════════════╗');
-  console.log('║        MCP Mastyff AI — Full Report Generation                ║');
+  console.log('║        MCP Mastyf AI — Full Report Generation                ║');
   console.log('╚══════════════════════════════════════════════════════════════╝\n');
   console.log(`  Output directory: ${RUN_DIR}\n`);
 
@@ -182,7 +182,7 @@ function generateMarkdown(summary: Record<string, any>): string {
   const s = summary.sections;
   let md = '';
 
-  md += `# MCP Mastyff AI — Baseline Report\n\n`;
+  md += `# MCP Mastyf AI — Baseline Report\n\n`;
   md += `**Generated:** ${summary.timestamp}  \n`;
   md += `**Node:** ${summary.machine.node} | **Platform:** ${summary.machine.platform}/${summary.machine.arch}\n\n`;
   md += `---\n\n`;

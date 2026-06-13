@@ -1,9 +1,9 @@
-export const NPM_PACKAGE_URL = 'https://www.npmjs.com/package/@mastyff-ai/server';
+export const NPM_PACKAGE_URL = 'https://www.npmjs.com/package/@mastyf-ai/server';
 
 /** Headline metrics from README adversarial harness + enterprise sim (May 2026). */
 export const HERO_STATS = [
   { value: '557+', label: 'Adversarial fixtures', detail: 'Prompt injection, exfil, SSRF, shell obfuscation, chaining' },
-  { value: '11k+', label: 'npm downloads / month', detail: '@mastyff-ai/server on npmjs.com' },
+  { value: '11k+', label: 'npm downloads / month', detail: '@mastyf-ai/server on npmjs.com' },
   { value: '154/154', label: 'Corpus attacks blocked', detail: '0 false positives on 74 benign fixtures' },
   { value: '93.3%', label: 'Enterprise sim block rate', detail: '308/330 modeled attacks · 38.8ms avg latency' },
   { value: '~41s', label: 'Instant learning discovery', detail: 'vs ~4.9h batch-only (repo eval)' },
@@ -57,32 +57,32 @@ export const USP_ITEMS = [
 export const COMPARISON_ROWS = [
   {
     capability: 'MCP protocol native',
-    'mastyff-ai': 'Full stdio, HTTP, SSE, WebSocket',
+    'mastyf-ai': 'Full stdio, HTTP, SSE, WebSocket',
     generic: 'HTTP-only; breaks on SDK updates',
   },
   {
     capability: 'Prompt injection / tool-chain detection',
-    'mastyff-ai': '557+ fixtures + normalization pipeline',
+    'mastyf-ai': '557+ fixtures + normalization pipeline',
     generic: 'Custom middleware; YAML-only misses ~75%',
   },
   {
     capability: 'Response DLP + secret scanning',
-    'mastyff-ai': '267 rules, context-aware redaction',
+    'mastyf-ai': '267 rules, context-aware redaction',
     generic: 'Not applicable',
   },
   {
     capability: 'Continuous red-team loop',
-    'mastyff-ai': 'Security Swarm + Auto Threat Research',
+    'mastyf-ai': 'Security Swarm + Auto Threat Research',
     generic: 'Manual pen tests',
   },
   {
     capability: 'Compliance overlays',
-    'mastyff-ai': 'HIPAA, PCI-DSS, GxP templates + audit chain',
+    'mastyf-ai': 'HIPAA, PCI-DSS, GxP templates + audit chain',
     generic: 'Build your own',
   },
   {
     capability: 'Deployment',
-    'mastyff-ai': 'Helm chart, <1h on existing K8s',
+    'mastyf-ai': 'Helm chart, <1h on existing K8s',
     generic: 'Weeks of custom integration',
   },
 ] as const;

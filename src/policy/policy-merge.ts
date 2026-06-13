@@ -15,7 +15,7 @@ const HTTP_TOOLS_TEMPLATE_CANDIDATES = [
 ];
 
 export function resolveHttpToolsPolicyPath(): string | null {
-  const explicit = process.env['MASTYFF_AI_HTTP_TOOLS_POLICY_PATH'];
+  const explicit = process.env['MASTYF_AI_HTTP_TOOLS_POLICY_PATH'];
   if (explicit && existsSync(explicit)) return explicit;
   for (const p of HTTP_TOOLS_TEMPLATE_CANDIDATES) {
     if (existsSync(p)) return p;
@@ -24,7 +24,7 @@ export function resolveHttpToolsPolicyPath(): string | null {
 }
 
 export function isHttpToolsPolicyMergeEnabled(): boolean {
-  return process.env['MASTYFF_AI_HTTP_TOOLS_POLICY'] === 'true';
+  return process.env['MASTYF_AI_HTTP_TOOLS_POLICY'] === 'true';
 }
 
 function dedupeRules(rules: PolicyRule[]): PolicyRule[] {
@@ -38,13 +38,13 @@ function dedupeRules(rules: PolicyRule[]): PolicyRule[] {
   return out;
 }
 
-/** Append HTTP tools SSRF rules from template when MASTYFF_AI_HTTP_TOOLS_POLICY=true. */
+/** Append HTTP tools SSRF rules from template when MASTYF_AI_HTTP_TOOLS_POLICY=true. */
 export function mergeHttpToolsPolicy(base: PolicyConfig): PolicyConfig {
   if (!isHttpToolsPolicyMergeEnabled()) return base;
 
   const templatePath = resolveHttpToolsPolicyPath();
   if (!templatePath) {
-    Logger.warn('[policy-merge] MASTYFF_AI_HTTP_TOOLS_POLICY=true but http-tools-policy.yaml not found');
+    Logger.warn('[policy-merge] MASTYF_AI_HTTP_TOOLS_POLICY=true but http-tools-policy.yaml not found');
     return base;
   }
 

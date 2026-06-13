@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchServerRegistry, type ServerRegistryEntry } from '@/lib/mastyff-ai-api';
+import { fetchServerRegistry, type ServerRegistryEntry } from '@/lib/mastyf-ai-api';
 
 export function LiveMcpServersPanel() {
   const [servers, setServers] = useState<ServerRegistryEntry[]>([]);
@@ -31,7 +31,7 @@ export function LiveMcpServersPanel() {
   if (servers.length === 0) {
     return (
       <p className="muted">
-        No MCP servers registered yet. Add configs via Setup or point clients at the Mastyff AI proxy.
+        No MCP servers registered yet. Add configs via Setup or point clients at the Mastyf AI proxy.
       </p>
     );
   }

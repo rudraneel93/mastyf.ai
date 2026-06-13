@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment } from 'react';
-import type { AuditActivityMatrix } from '@/lib/mastyff-ai-api';
+import type { AuditActivityMatrix } from '@/lib/mastyf-ai-api';
 
 type Props = {
   activity?: AuditActivityMatrix | null;

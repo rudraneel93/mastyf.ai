@@ -1,6 +1,6 @@
 'use client';
 
-import type { QuarantinePolicyDetail } from '@/lib/mastyff-ai-api';
+import type { QuarantinePolicyDetail } from '@/lib/mastyf-ai-api';
 
 type Props = {
   open: boolean;

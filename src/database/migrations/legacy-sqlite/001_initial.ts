@@ -1,5 +1,5 @@
 /**
- * Migration 001: Initial schema for Mastyff AI.
+ * Migration 001: Initial schema for Mastyf AI.
  * Creates all four core tables and sets WAL journaling.
  */
 export function migrate(db: any) {

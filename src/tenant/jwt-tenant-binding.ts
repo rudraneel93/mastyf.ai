@@ -12,7 +12,7 @@ import { getLicenseClient } from '../license/license-client.js';
 import { isOpenCoreEnabled } from '../license/feature-tiers.js';
 
 export function jwtTenantClaimName(): string {
-  return process.env['MASTYFF_AI_JWT_TENANT_CLAIM'] || 'tenant_id';
+  return process.env['MASTYF_AI_JWT_TENANT_CLAIM'] || 'tenant_id';
 }
 
 /** Extract tenant id from a verified JWT payload object. */
@@ -130,7 +130,7 @@ export function resolveProxyTenantId(opts: {
   if (isMultiTenantModeEnabled() && isOpenCoreEnabled()) {
     if (!getLicenseClient().hasFeature('multi_tenant')) {
       throw new JwtTenantRequiredError(
-        'Multi-tenant mode requires MCP Mastyff AI Pro (set MASTYFF_AI_LICENSE_KEY)',
+        'Multi-tenant mode requires MCP Mastyf AI Pro (set MASTYF_AI_LICENSE_KEY)',
       );
     }
   }

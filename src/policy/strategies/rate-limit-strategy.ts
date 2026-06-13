@@ -23,7 +23,7 @@ export async function evaluateRedisRateLimit(
     for (const rule of deps.rules) {
       if (rule.enabled === false) continue;
       if (!rule.maxCallsPerMinute) continue;
-      const tenant = context.tenantId || process.env['MASTYFF_AI_TENANT_ID'] || 'default';
+      const tenant = context.tenantId || process.env['MASTYF_AI_TENANT_ID'] || 'default';
       const clientId = context.agentIdentity?.clientId || context.agentIdentity?.sub;
       const key = clientId
         ? `${tenant}:${context.serverName}:${context.toolName}:${clientId}:${rule.name}`

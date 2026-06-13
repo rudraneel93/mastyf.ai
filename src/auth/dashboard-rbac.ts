@@ -2,7 +2,7 @@
  * Dashboard RBAC — role claims from JWT session payload or API key metadata.
  *
  * Roles: viewer, analyst, operator, admin, tenant-admin
- * Env: MASTYFF_AI_DASHBOARD_ROLES — `api_key_prefix:role,...` or JSON `{"<apiKey>":"admin"}`
+ * Env: MASTYF_AI_DASHBOARD_ROLES — `api_key_prefix:role,...` or JSON `{"<apiKey>":"admin"}`
  * JWT session payload may include `roles: string[]` or `role: string`.
  */
 import { DEFAULT_TENANT_ID } from '../tenant/resolve-tenant.js';
@@ -25,10 +25,10 @@ export function normalizeDashboardRole(raw: string): DashboardRole | null {
   return ALL_ROLES.has(r as DashboardRole) ? (r as DashboardRole) : null;
 }
 
-/** Parse MASTYFF_AI_DASHBOARD_ROLES env (comma map or JSON object). */
+/** Parse MASTYF_AI_DASHBOARD_ROLES env (comma map or JSON object). */
 export function parseDashboardRolesEnv(raw?: string): Map<string, DashboardRole> {
   const map = new Map<string, DashboardRole>();
-  const env = raw ?? process.env['MASTYFF_AI_DASHBOARD_ROLES'];
+  const env = raw ?? process.env['MASTYF_AI_DASHBOARD_ROLES'];
   if (!env?.trim()) return map;
 
   const trimmed = env.trim();
@@ -200,7 +200,7 @@ export function resolveRolesForApiKey(apiKey: string, mapping?: Map<string, Dash
   for (const [prefix, role] of map) {
     if (apiKey.startsWith(prefix)) return [role];
   }
-  const defaultRole = normalizeDashboardRole(process.env['MASTYFF_AI_DASHBOARD_DEFAULT_ROLE'] || 'viewer');
+  const defaultRole = normalizeDashboardRole(process.env['MASTYF_AI_DASHBOARD_DEFAULT_ROLE'] || 'viewer');
   return defaultRole ? [defaultRole] : ['viewer'];
 }
 

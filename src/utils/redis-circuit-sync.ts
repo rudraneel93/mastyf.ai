@@ -11,8 +11,8 @@ function redis() {
   return redisSingleton;
 }
 
-const PREFIX = 'mastyff-ai:cb:';
-const PUBSUB_CHANNEL = 'mastyff-ai:cb:events';
+const PREFIX = 'mastyf-ai:cb:';
+const PUBSUB_CHANNEL = 'mastyf-ai:cb:events';
 const TTL_SEC = 120;
 
 let subscriberStarted = false;

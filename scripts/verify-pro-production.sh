@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Smoke-test MCP Mastyff AI Cloud production (no purchase required).
+# Smoke-test MCP Mastyf AI Cloud production (no purchase required).
 # Full Pro E2E still needs a Lemon Squeezy test checkout + webhook secret.
 set -euo pipefail
 
-APP_URL="${APP_URL:-https://mastyff-ai-cloud.vercel.app}"
+APP_URL="${APP_URL:-https://mastyf-ai-cloud.vercel.app}"
 FAIL=0
 
 check() {
@@ -26,7 +26,7 @@ check() {
   fi
 }
 
-echo "MCP Mastyff AI Cloud production smoke — $APP_URL"
+echo "MCP Mastyf AI Cloud production smoke — $APP_URL"
 echo ""
 
 check "Landing" "$APP_URL/" "200"

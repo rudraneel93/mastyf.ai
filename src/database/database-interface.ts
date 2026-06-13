@@ -1,5 +1,5 @@
 /**
- * Abstracted database interface for Mastyff AI.
+ * Abstracted database interface for Mastyf AI.
  * Supports SQLite (local/file) and PostgreSQL (cloud/horizontal scaling).
  */
 import { ProxyCallRecord } from '../types.js';

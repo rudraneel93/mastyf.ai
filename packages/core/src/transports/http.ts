@@ -25,7 +25,7 @@ export async function fetchToolsFromHttp(
         params: {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "mastyff-ai", version: "2.3.4" },
+          clientInfo: { name: "mastyf-ai", version: "2.3.4" },
         },
       }),
       signal: controller.signal,

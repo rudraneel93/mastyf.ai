@@ -6,7 +6,7 @@
       "id": "c01",
       "tool": "search",
       "arguments": {
-        "query": "mastyff-ai security proxy"
+        "query": "mastyf-ai security proxy"
       },
       "expect": "pass",
       "expectedRule": "allowlist"

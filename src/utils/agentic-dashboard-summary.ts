@@ -4,7 +4,7 @@
 import type { IDatabase } from '../database/database-interface.js';
 import type { Container } from '../container.js';
 import type { ProxyCallRecord } from '../types.js';
-import type { TrustScore } from '../agentic/trust-score/mastyff-ai-score.js';
+import type { TrustScore } from '../agentic/trust-score/mastyf-ai-score.js';
 import type { AgenticDecisionRecord } from '../agentic/telemetry.js';
 import { loadAllRecordsInWindow } from './cost-timeseries.js';
 import { summarizeRecords } from './db-aggregate.js';
@@ -152,7 +152,7 @@ function computeServerTrust(
 ): TrustScore {
   const blocked = server.metrics?.blocked ?? 0;
   const transport = mapTransport(server.transport);
-  return container.mastyffAiScore.compute({
+  return container.mastyfAiScore.compute({
     serverName: server.name,
     cveCount: 0,
     maxCvss: 0,
@@ -168,7 +168,7 @@ function computeServerTrust(
     blockedCalls: blocked,
     bypassedAttacks: 0,
     responseDlpActive: true,
-    mastyffAiProtected: true,
+    mastyfAiProtected: true,
   });
 }
 
@@ -274,7 +274,7 @@ export async function buildAgenticDashboardSummary(
 
   if (!agenticEnabled) {
     emptyReason =
-      'Agentic services not initialized — restart Mastyff AI proxy or enable MASTYFF_AI_AGENTIC_ENABLED';
+      'Agentic services not initialized — restart Mastyf AI proxy or enable MASTYF_AI_AGENTIC_ENABLED';
   } else if (!hasProxyHistory && db) {
     const widerRecords = await loadAllRecordsInWindow(db, tenantId, 30);
     if (widerRecords.length > 0) {
@@ -282,14 +282,14 @@ export async function buildAgenticDashboardSummary(
       suggestedWindow = windowDays < 7 ? '7d' : '30d';
       emptyReason =
         `No proxy traffic in the last ${windowLabel} — ${widerRecords.length.toLocaleString()} calls in the last 30 days. ` +
-        'Widen the time window (toolbar above) or run new MCP tools through Mastyff AI.';
+        'Widen the time window (toolbar above) or run new MCP tools through Mastyf AI.';
     } else {
       emptyReason =
-        'No proxy traffic recorded yet — run MCP tools through Mastyff AI proxy (e.g. pnpm real-life:filesystem)';
+        'No proxy traffic recorded yet — run MCP tools through Mastyf AI proxy (e.g. pnpm real-life:filesystem)';
     }
   } else if (!hasProxyHistory) {
     emptyReason =
-      'No proxy traffic in selected window — run MCP tools through Mastyff AI proxy';
+      'No proxy traffic in selected window — run MCP tools through Mastyf AI proxy';
   }
 
   return {

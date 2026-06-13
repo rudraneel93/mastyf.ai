@@ -7,7 +7,7 @@ import {
   fetchTenantContext,
   setTenantId,
   getTenantId,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { hasPermission } from '@/lib/dashboard-roles';
 
 type Props = {

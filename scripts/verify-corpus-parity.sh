@@ -4,9 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export MASTYFF_AI_DISABLE_SEMANTIC="${MASTYFF_AI_DISABLE_SEMANTIC:-true}"
+export MASTYF_AI_DISABLE_SEMANTIC="${MASTYF_AI_DISABLE_SEMANTIC:-true}"
 
-echo "==> Corpus parity (MASTYFF_AI_DISABLE_SEMANTIC=${MASTYFF_AI_DISABLE_SEMANTIC})"
+echo "==> Corpus parity (MASTYF_AI_DISABLE_SEMANTIC=${MASTYF_AI_DISABLE_SEMANTIC})"
 pnpm eval
 
 if [[ ! -f corpus-eval-report.json ]]; then

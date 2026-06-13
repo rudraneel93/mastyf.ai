@@ -121,8 +121,8 @@ export function InfrastructureVisualsPanel({ refreshKey = 0 }: Props) {
   const trafficEmptyReason =
     data?.meta?.emptyReasons?.traffic
     ?? (data?.meta?.dbPath
-      ? `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Mastyff AI. Reading ${data.meta.dbPath}.`
-      : `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Mastyff AI.`);
+      ? `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Mastyf AI. Reading ${data.meta.dbPath}.`
+      : `No proxy traffic in the selected ${window} window — widen the time window or route MCP through Mastyf AI.`);
 
   return (
     <section className="infra-visuals-panel" aria-label="Infrastructure visuals">

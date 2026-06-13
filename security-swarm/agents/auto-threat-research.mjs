@@ -27,7 +27,7 @@ const r = spawnSync('node', ['--import', 'tsx', script], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    MASTYFF_AI_THREAT_RESEARCH_AUTO: process.env.MASTYFF_AI_THREAT_RESEARCH_AUTO ?? 'true',
+    MASTYF_AI_THREAT_RESEARCH_AUTO: process.env.MASTYF_AI_THREAT_RESEARCH_AUTO ?? 'true',
   },
 });
 

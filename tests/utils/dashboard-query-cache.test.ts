@@ -8,11 +8,11 @@ import {
 describe('dashboard-query-cache', () => {
   beforeEach(() => {
     resetDashboardQueryCacheForTests();
-    delete process.env.MASTYFF_AI_DASHBOARD_QUERY_CACHE;
+    delete process.env.MASTYF_AI_DASHBOARD_QUERY_CACHE;
   });
 
   it('caches loader results in-process when enabled', async () => {
-    process.env.MASTYFF_AI_DASHBOARD_QUERY_CACHE = 'true';
+    process.env.MASTYF_AI_DASHBOARD_QUERY_CACHE = 'true';
     let runs = 0;
     const key = dashboardQueryCacheKey({ route: 'test', tenant: 't1' });
     const loader = async () => {

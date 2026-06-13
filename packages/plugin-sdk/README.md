@@ -1,13 +1,13 @@
-# @mastyff-ai/plugin-sdk
+# @mastyf-ai/plugin-sdk
 
-Stable v3.0 detector plugin API for Mastyff AI.
+Stable v3.0 detector plugin API for Mastyf AI.
 
 ```bash
-pnpm add @mastyff-ai/plugin-sdk
+pnpm add @mastyf-ai/plugin-sdk
 ```
 
 ```typescript
-import { createDetectorPlugin } from '@mastyff-ai/plugin-sdk';
+import { createDetectorPlugin } from '@mastyf-ai/plugin-sdk';
 
 export default createDetectorPlugin({
   name: 'acme-pii-scanner',
@@ -25,8 +25,8 @@ export default createDetectorPlugin({
 Enable at runtime:
 
 ```bash
-export MASTYFF_AI_PLUGINS_ENABLED=true
-export MASTYFF_AI_PLUGIN_PATH=/path/to/built/plugins
+export MASTYF_AI_PLUGINS_ENABLED=true
+export MASTYF_AI_PLUGIN_PATH=/path/to/built/plugins
 ```
 
 See [docs/PLUGIN_SDK.md](../../docs/PLUGIN_SDK.md) for publishing and lifecycle details.

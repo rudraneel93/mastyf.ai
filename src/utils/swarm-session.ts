@@ -18,13 +18,13 @@ export function resetDashboardSessionForTests(at?: number): void {
   dashboardSessionStartedMs = at ?? Date.now();
 }
 
-/** Default true — set MASTYFF_AI_DASHBOARD_STRICT_LIVE=false to disable session gating. */
+/** Default true — set MASTYF_AI_DASHBOARD_STRICT_LIVE=false to disable session gating. */
 export function isStrictLiveDashboard(): boolean {
-  return process.env.MASTYFF_AI_DASHBOARD_STRICT_LIVE !== 'false';
+  return process.env.MASTYF_AI_DASHBOARD_STRICT_LIVE !== 'false';
 }
 
 export function isLegacyArtifactsAllowed(): boolean {
-  return process.env.MASTYFF_AI_SWARM_USE_LEGACY_ARTIFACTS === 'true';
+  return process.env.MASTYF_AI_SWARM_USE_LEGACY_ARTIFACTS === 'true';
 }
 
 function parseJobFile(path: string): { startedAtMs: number; state: string } | null {

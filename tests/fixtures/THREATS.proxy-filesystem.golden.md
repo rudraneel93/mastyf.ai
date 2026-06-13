@@ -9,7 +9,7 @@ Generated: FIXED
 
 ### Nodes
 - **client** (client): AI Agent / Client
-- **proxy** (proxy): MCP Mastyff AI Proxy
+- **proxy** (proxy): MCP Mastyf AI Proxy
 - **server:official-filesystem** (server): official-filesystem
 
 ### Edges

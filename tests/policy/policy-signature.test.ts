@@ -3,11 +3,11 @@ import { signPolicyYaml, validateSignedPolicyYaml } from '../../src/policy/polic
 
 describe('policy-signature', () => {
   it('accepts valid signed policy', () => {
-    process.env.MASTYFF_AI_POLICY_SIGNING_KEY = 'test-secret';
-    process.env.MASTYFF_AI_POLICY_TRUSTED_ISSUERS = 'mastyff-ai-admin';
+    process.env.MASTYF_AI_POLICY_SIGNING_KEY = 'test-secret';
+    process.env.MASTYF_AI_POLICY_TRUSTED_ISSUERS = 'mastyf-ai-admin';
     const yaml = "version: '1.0'\npolicy:\n  mode: block\n  rules: []\n";
     const env = signPolicyYaml(yaml, {
-      issuer: 'mastyff-ai-admin',
+      issuer: 'mastyf-ai-admin',
       keyId: 'default',
       issuedAt: '2026-05-28T00:00:00.000Z',
     });
@@ -16,9 +16,9 @@ describe('policy-signature', () => {
   });
 
   it('rejects missing signature when required', () => {
-    process.env.MASTYFF_AI_REQUIRE_SIGNED_POLICY = 'true';
+    process.env.MASTYF_AI_REQUIRE_SIGNED_POLICY = 'true';
     const check = validateSignedPolicyYaml("version: '1.0'\n", undefined);
     expect(check.ok).toBe(false);
-    process.env.MASTYFF_AI_REQUIRE_SIGNED_POLICY = 'false';
+    process.env.MASTYF_AI_REQUIRE_SIGNED_POLICY = 'false';
   });
 });

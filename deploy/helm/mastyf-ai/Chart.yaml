@@ -1,0 +1,24 @@
+apiVersion: v2
+name: mastyf-ai
+description: Security, cost, and health audit proxy for MCP infrastructure
+type: application
+version: 2.5.0
+appVersion: "2.5.0"
+keywords:
+  - mcp
+  - model-context-protocol
+  - security
+  - audit
+  - proxy
+  - mastyf-ai
+home: https://github.com/mastyf-ai/mastyf-ai
+sources:
+  - https://github.com/mastyf-ai/mastyf-ai
+maintainers:
+  - name: mastyf-ai
+    email: mastyf-ai@gmail.com
+dependencies:
+  - name: redis
+    version: "20.6.2"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

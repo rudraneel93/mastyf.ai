@@ -67,7 +67,7 @@ function signManifest(
   promotions: Array<{ id: string; path?: string; branch?: string; fingerprint: string }>,
 ): Record<string, unknown> {
   const key =
-    process.env.MASTYFF_AI_SWARM_EVASION_SIGNING_KEY?.trim() ||
+    process.env.MASTYF_AI_SWARM_EVASION_SIGNING_KEY?.trim() ||
     process.env.SWARM_SIGNER_KEY?.trim() ||
     '';
   const signedBody = {
@@ -84,7 +84,7 @@ function signManifest(
     promotions,
     signature,
     signed: true,
-    signer: 'mastyff-ai-threat-lab',
+    signer: 'mastyf-ai-threat-lab',
     signedAt: new Date().toISOString(),
   };
 }

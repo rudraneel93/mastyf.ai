@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchSwarmLatest, fetchThreatLabCandidates } from '@/lib/mastyff-ai-api';
+import { fetchSwarmLatest, fetchThreatLabCandidates } from '@/lib/mastyf-ai-api';
 
 type IntelRow = { id: string; source: string; summary: string; severity?: string };
 

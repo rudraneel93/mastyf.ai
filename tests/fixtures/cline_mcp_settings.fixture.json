@@ -7,7 +7,7 @@
       ],
       "transport": "stdio"
     },
-    "mastyff-ai": {
+    "mastyf-ai": {
       "command": "node",
       "args": [
         "dist/index.js"

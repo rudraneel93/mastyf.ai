@@ -4,15 +4,15 @@ import { PolicyEngine } from '../../src/policy/policy-engine.js';
 import { injectRotatedSessionIntoResult } from '../../src/utils/mcp-session-meta.js';
 
 describe('HttpProxyServer response gate', () => {
-  const prevMode = process.env.MASTYFF_AI_RESPONSE_DLP_MODE;
+  const prevMode = process.env.MASTYF_AI_RESPONSE_DLP_MODE;
 
   afterEach(() => {
-    if (prevMode) process.env.MASTYFF_AI_RESPONSE_DLP_MODE = prevMode;
-    else delete process.env.MASTYFF_AI_RESPONSE_DLP_MODE;
+    if (prevMode) process.env.MASTYF_AI_RESPONSE_DLP_MODE = prevMode;
+    else delete process.env.MASTYF_AI_RESPONSE_DLP_MODE;
   });
 
   beforeEach(() => {
-    process.env.MASTYFF_AI_RESPONSE_DLP_MODE = 'block';
+    process.env.MASTYF_AI_RESPONSE_DLP_MODE = 'block';
   });
 
   it('blocks tool result via inspectToolResponse in block mode', async () => {
@@ -33,7 +33,7 @@ describe('HttpProxyServer response gate', () => {
   });
 
   it('redacts tool result in redact mode', async () => {
-    process.env.MASTYFF_AI_RESPONSE_DLP_MODE = 'redact';
+    process.env.MASTYF_AI_RESPONSE_DLP_MODE = 'redact';
     const policy = new PolicyEngine({
       version: '1.0',
       policy: { mode: 'block', default_action: 'block', rules: [] },

@@ -63,7 +63,7 @@ export function evaluatePgBouncerStartup(ctx: PgBouncerStartupContext): PgBounce
     return {
       action: 'error',
       message:
-        `[PgBouncer] MASTYFF_AI_REQUIRE_PGBOUNCER=true but DATABASE_URL does not target a pooler ` +
+        `[PgBouncer] MASTYF_AI_REQUIRE_PGBOUNCER=true but DATABASE_URL does not target a pooler ` +
           `(expected hostname containing "pgbouncer" or port 6432). See docs/SCALE_AND_RESILIENCE.md.`,
     };
   }
@@ -101,8 +101,8 @@ export function checkPgBouncerAtStartup(): void {
         return false;
       }
     })(),
-    strictMode: process.env['MASTYFF_AI_STRICT_MODE'] === 'true',
-    requirePgBouncer: process.env['MASTYFF_AI_REQUIRE_PGBOUNCER'] === 'true',
+    strictMode: process.env['MASTYF_AI_STRICT_MODE'] === 'true',
+    requirePgBouncer: process.env['MASTYF_AI_REQUIRE_PGBOUNCER'] === 'true',
   };
   const result = evaluatePgBouncerStartup(ctx);
   if (result.action === 'warn') {

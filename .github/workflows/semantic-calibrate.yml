@@ -27,7 +27,7 @@ jobs:
       - name: Run semantic calibrator
         run: pnpm security-swarm:calibrate
         env:
-          MASTYFF_AI_CI_BYPASS_LICENSE: 'true'
+          MASTYF_AI_CI_BYPASS_LICENSE: 'true'
           SWARM_CALIBRATE_DAYS: '7'
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 

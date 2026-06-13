@@ -74,11 +74,11 @@ export function getSharedThreatIntel(statePath?: string): ThreatIntel {
 /** Start live NVD/OSV/GitHub polling unless explicitly disabled. */
 export function startThreatIntelPollingIfEnabled(): ThreatIntel {
   const ti = getSharedThreatIntel();
-  if (process.env.MASTYFF_AI_AI_DISABLE_THREAT_POLL === 'true') {
+  if (process.env.MASTYF_AI_AI_DISABLE_THREAT_POLL === 'true') {
     return ti;
   }
   const intervalMs = parseInt(
-    process.env.MASTYFF_AI_AI_THREAT_POLL_MS || String(30 * 60 * 1000),
+    process.env.MASTYF_AI_AI_THREAT_POLL_MS || String(30 * 60 * 1000),
     10,
   );
   ti.startLivePolling(intervalMs);
@@ -148,7 +148,7 @@ export class ThreatIntel {
       const newEntries = this.diffFeed(allEntries);
       Logger.info(`[ThreatIntel] Live poll: ${allEntries.length} total, ${newEntries.length} new threats`);
       const activeEntries = newEntries.filter((e) => !this.suppressed.has(e.id));
-      if (activeEntries.length > 0 && process.env.MASTYFF_AI_THREAT_RESEARCH_THREAT_INTEL !== 'false') {
+      if (activeEntries.length > 0 && process.env.MASTYF_AI_THREAT_RESEARCH_THREAT_INTEL !== 'false') {
         setImmediate(() => {
           void import('./threat-research-pipeline.js').then(({ buildThreatIntelEvent, enqueueThreatResearch }) => {
             for (const entry of activeEntries) {
@@ -182,7 +182,7 @@ export class ThreatIntel {
       updated: this.lastUpdated,
       lastPollAt: this.lastPollAt,
       pollingActive: this.isPollingActive(),
-      pollingDisabled: process.env.MASTYFF_AI_AI_DISABLE_THREAT_POLL === 'true',
+      pollingDisabled: process.env.MASTYF_AI_AI_DISABLE_THREAT_POLL === 'true',
       suppressed: this.suppressed.size,
     };
   }
@@ -331,7 +331,7 @@ export class ThreatIntel {
   private async pollOsvFeed(): Promise<ThreatIntelEntry[]> {
     try {
       // Query OSV.dev for common MCP-related packages
-      const packages = ['@modelcontextprotocol/sdk', 'mcp-server', 'mastyff-ai'];
+      const packages = ['@modelcontextprotocol/sdk', 'mcp-server', 'mastyf-ai'];
       const entries: ThreatIntelEntry[] = [];
 
       for (const pkg of packages) {

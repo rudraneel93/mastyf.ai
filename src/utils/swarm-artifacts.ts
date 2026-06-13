@@ -266,8 +266,8 @@ export function ensurePlainEnglishReport(tenantId?: string): Record<string, unkn
     stdio: 'pipe',
     env: {
       ...process.env,
-      MASTYFF_AI_SWARM_DIR: writeDir(tid),
-      MASTYFF_AI_TENANT_ID: tid,
+      MASTYF_AI_SWARM_DIR: writeDir(tid),
+      MASTYF_AI_TENANT_ID: tid,
     },
   });
   return readPlainEnglishReport(tenantId);

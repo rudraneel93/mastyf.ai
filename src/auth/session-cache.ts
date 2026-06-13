@@ -23,12 +23,12 @@ export interface SessionEntry {
 
 export interface SessionValidationResult {
   identity: AgentIdentity;
-  /** Present when MASTYFF_AI_SESSION_ROTATE_ON_USE=true and session was validated. */
+  /** Present when MASTYF_AI_SESSION_ROTATE_ON_USE=true and session was validated. */
   rotatedToken?: string;
 }
 
 function sessionRotationEnabled(): boolean {
-  return process.env['MASTYFF_AI_SESSION_ROTATE_ON_USE'] === 'true';
+  return process.env['MASTYF_AI_SESSION_ROTATE_ON_USE'] === 'true';
 }
 
 const SESSION_CACHE_MAX = 10_000;
@@ -93,7 +93,7 @@ export class SessionCache {
     }
     this.usedNonces.set(nonceKey, Date.now());
 
-    const token = `mastyff_ai_session_${randomUUID()}`;
+    const token = `mastyf_ai_session_${randomUUID()}`;
     const now = Date.now();
     const entry: SessionEntry = {
       token,
@@ -137,7 +137,7 @@ export class SessionCache {
     }
 
     this.sessions.delete(key);
-    const newToken = `mastyff_ai_session_${randomUUID()}`;
+    const newToken = `mastyf_ai_session_${randomUUID()}`;
     const now = Date.now();
     const rotated: SessionEntry = {
       ...entry,

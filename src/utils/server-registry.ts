@@ -1,10 +1,10 @@
 /**
- * Mastyff AI server registry: mastyff-ai-configs + history.db metrics.
+ * Mastyf AI server registry: mastyf-ai-configs + history.db metrics.
  */
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { createDatabase } from '../database/create-database.js';
-import { resolveMastyffAiDbPath } from './mastyff-ai-db-path.js';
+import { resolveMastyfAiDbPath } from './mastyf-ai-db-path.js';
 import {
   getAllActiveServerNames,
   loadAllCallRecords,
@@ -50,7 +50,7 @@ export interface OnboardingStatus {
   };
 }
 
-function listMastyffAiConfigPaths(configsDir: string): string[] {
+function listMastyfAiConfigPaths(configsDir: string): string[] {
   if (!existsSync(configsDir)) return [];
   return readdirSync(configsDir)
     .filter((f) => f.endsWith('.json'))
@@ -70,9 +70,9 @@ function topTools(records: import('../types.js').ProxyCallRecord[], limit = 5): 
 }
 
 export async function getServerRegistry(projectRoot = REPO_ROOT): Promise<ServerRegistryEntry[]> {
-  const configsDir = join(projectRoot, 'mastyff-ai-configs');
-  const paths = listMastyffAiConfigPaths(configsDir);
-  const dbPath = resolveMastyffAiDbPath();
+  const configsDir = join(projectRoot, 'mastyf-ai-configs');
+  const paths = listMastyfAiConfigPaths(configsDir);
+  const dbPath = resolveMastyfAiDbPath();
   const db = await createDatabase(dbPath);
   await db.initialize();
 
@@ -118,9 +118,9 @@ export async function getServerRegistry(projectRoot = REPO_ROOT): Promise<Server
 
 export async function getOnboardingStatus(projectRoot = REPO_ROOT): Promise<OnboardingStatus> {
   const onboard = readOnboardArtifact();
-  const configsDir = join(projectRoot, 'mastyff-ai-configs');
-  const configCount = listMastyffAiConfigPaths(configsDir).length;
-  const dbPath = resolveMastyffAiDbPath();
+  const configsDir = join(projectRoot, 'mastyf-ai-configs');
+  const configCount = listMastyfAiConfigPaths(configsDir).length;
+  const dbPath = resolveMastyfAiDbPath();
 
   let totalCalls = 0;
   let hasTraffic = false;
@@ -163,7 +163,7 @@ export async function getOnboardingStatus(projectRoot = REPO_ROOT): Promise<Onbo
     dbPath,
     commands: {
       onboard: 'pnpm onboard -- --client cursor --apply',
-      dashboardProxy: 'mastyff-ai start',
+      dashboardProxy: 'mastyf-ai start',
       runAnalysis: 'pnpm security-swarm:analyze',
     },
   };

@@ -1,8 +1,8 @@
 /**
  * Semantic LLM layer availability, degradation reporting, and strict mode.
  *
- * MASTYFF_AI_SEMANTIC_STRICT=true — block tools/call when async semantic audit cannot run
- * (no API key / LLM disabled). Mirrors MASTYFF_AI_STRICT_MODE patterns in enterprise-bootstrap.
+ * MASTYF_AI_SEMANTIC_STRICT=true — block tools/call when async semantic audit cannot run
+ * (no API key / LLM disabled). Mirrors MASTYF_AI_STRICT_MODE patterns in enterprise-bootstrap.
  */
 import { getLlmConfig } from '../config/llm-config.js';
 import { isSemanticStrictForTenant } from '../tenant/tenant-semantic-config.js';

@@ -1,5 +1,5 @@
 /**
- * CLI: mastyff-ai threat-model
+ * CLI: mastyf-ai threat-model
  */
 import { writeFileSync } from 'fs';
 import {

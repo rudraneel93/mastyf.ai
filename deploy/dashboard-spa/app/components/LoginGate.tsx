@@ -9,7 +9,7 @@ import {
   logoutDashboard,
   setTenantId,
   type AuthStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 
 type Props = {
   children: ReactNode;

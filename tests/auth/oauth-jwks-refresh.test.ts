@@ -5,8 +5,8 @@ describe('OAuthValidator JWKS refresh', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    vi.stubEnv('MASTYFF_AI_JWKS_REFRESH_MS', '1');
-    vi.stubEnv('MASTYFF_AI_OIDC_DISCOVERY_TTL_MS', '60000');
+    vi.stubEnv('MASTYF_AI_JWKS_REFRESH_MS', '1');
+    vi.stubEnv('MASTYF_AI_OIDC_DISCOVERY_TTL_MS', '60000');
   });
 
   afterEach(() => {
@@ -36,7 +36,7 @@ describe('OAuthValidator JWKS refresh', () => {
 
     const v = new OAuthValidator({
       issuer: 'https://issuer.example',
-      audience: 'mastyff-ai',
+      audience: 'mastyf-ai',
       required: false,
     });
 
@@ -68,7 +68,7 @@ describe('OAuthValidator JWKS refresh', () => {
 
     const v = new OAuthValidator({
       issuer: 'https://issuer.example',
-      audience: 'mastyff-ai',
+      audience: 'mastyf-ai',
       required: false,
     });
     await v.ensureJwksFresh(true);

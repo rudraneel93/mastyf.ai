@@ -1,5 +1,5 @@
 /**
- * Fleet-wide status — Postgres mastyff_ai_instances or multiple SQLite DB paths.
+ * Fleet-wide status — Postgres mastyf_ai_instances or multiple SQLite DB paths.
  */
 import { existsSync } from 'fs';
 import { HistoryDatabase } from '../database/history-db.js';
@@ -10,7 +10,7 @@ import {
   summarizeRecords,
 } from '../utils/db-aggregate.js';
 import { Logger } from '../utils/logger.js';
-import { getMastyffAiRegion } from '../utils/region.js';
+import { getMastyfAiRegion } from '../utils/region.js';
 
 export interface FleetInstanceRow {
   instanceId: string;
@@ -49,7 +49,7 @@ async function loadFromPostgres(): Promise<FleetStatusReport | null> {
       const inst = await client.query(
         `SELECT instance_id, instance_name, hostname, status, last_heartbeat,
                 COALESCE(metadata->>'region', '') AS region
-         FROM mastyff_ai_instances
+         FROM mastyf_ai_instances
          ORDER BY last_heartbeat DESC NULLS LAST
          LIMIT 500`,
       );
@@ -95,7 +95,7 @@ async function loadFromPostgres(): Promise<FleetStatusReport | null> {
 
       const active = instances.filter((i) => i.status === 'active').length;
       return {
-        region: getMastyffAiRegion(),
+        region: getMastyfAiRegion(),
         source: 'postgres',
         totalInstances: instances.length,
         activeInstances: active,
@@ -143,14 +143,14 @@ export async function getFleetStatus(): Promise<FleetStatusReport> {
   const pg = await loadFromPostgres();
   if (pg) return pg;
 
-  const paths = (process.env['MASTYFF_AI_FLEET_DB_PATHS'] || process.env['MASTYFF_AI_DB_PATH'] || '')
+  const paths = (process.env['MASTYF_AI_FLEET_DB_PATHS'] || process.env['MASTYF_AI_DB_PATH'] || '')
     .split(',')
     .map((p) => p.trim())
     .filter(Boolean);
 
   if (paths.length === 0) {
-    const { resolveMastyffAiDbPath } = await import('../utils/mastyff-ai-db-path.js');
-    paths.push(resolveMastyffAiDbPath());
+    const { resolveMastyfAiDbPath } = await import('../utils/mastyf-ai-db-path.js');
+    paths.push(resolveMastyfAiDbPath());
   }
 
   const instances: FleetInstanceRow[] = [];
@@ -160,7 +160,7 @@ export async function getFleetStatus(): Promise<FleetStatusReport> {
   }
 
   return {
-    region: getMastyffAiRegion(),
+    region: getMastyfAiRegion(),
     source: paths.length > 1 ? 'multi-sqlite' : 'sqlite',
     totalInstances: instances.length,
     activeInstances: instances.filter((i) => i.status === 'active').length,

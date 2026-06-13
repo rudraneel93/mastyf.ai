@@ -5,10 +5,10 @@
 import { createHmac } from 'crypto';
 
 function getMpcSecret(): string {
-  const secret = process.env['MASTYFF_AI_FEDERATED_MPC_SECRET'];
+  const secret = process.env['MASTYF_AI_FEDERATED_MPC_SECRET'];
   if (!secret) {
     throw new Error(
-      'MASTYFF_AI_FEDERATED_MPC_SECRET environment variable is required for federated MPC masking. ' +
+      'MASTYF_AI_FEDERATED_MPC_SECRET environment variable is required for federated MPC masking. ' +
       'Set a cryptographically random secret (e.g., openssl rand -hex 32).',
     );
   }

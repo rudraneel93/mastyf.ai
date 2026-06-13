@@ -33,16 +33,16 @@ jobs:
 
       - name: Verify global install artifacts
         run: |
-          mastyff-ai --version
-          ROOT="$(npm root -g)/@mastyff-ai/server"
+          mastyf-ai --version
+          ROOT="$(npm root -g)/@mastyf-ai/server"
           test -f "$ROOT/dist/cli.js"
           test -f "$ROOT/deploy/dashboard-spa/out/index.html"
 
       - name: Start smoke (headless)
         run: |
-          # Minimal mastyff-ai config for proxy (filesystem stub)
-          mkdir -p /tmp/mastyff-ai-smoke/mastyff-ai-configs
-          cat > /tmp/mastyff-ai-smoke/mastyff-ai-configs/test.json <<'EOF'
+          # Minimal mastyf-ai config for proxy (filesystem stub)
+          mkdir -p /tmp/mastyf-ai-smoke/mastyf-ai-configs
+          cat > /tmp/mastyf-ai-smoke/mastyf-ai-configs/test.json <<'EOF'
           {
             "mcpServers": {
               "echo": {
@@ -52,7 +52,7 @@ jobs:
             }
           }
           EOF
-          cd /tmp/mastyff-ai-smoke
-          timeout 25s mastyff-ai start --config mastyff-ai-configs/test.json || test $? -eq 124
+          cd /tmp/mastyf-ai-smoke
+          timeout 25s mastyf-ai start --config mastyf-ai-configs/test.json || test $? -eq 124
         env:
           DASHBOARD_PORT: '4000'

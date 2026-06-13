@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import type { ChartMeta } from '@/lib/mastyff-ai-api';
+import type { ChartMeta } from '@/lib/mastyf-ai-api';
 import { ChartSkeleton, ChartEmptyState, DataFreshnessBadge } from './chart-kit';
 
 type Props = {

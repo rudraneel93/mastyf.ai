@@ -328,13 +328,13 @@ export function startSwarmAnalysis(opts: {
     stdio: ['ignore', 'ignore', 'ignore'],
     env: {
       ...process.env,
-      MASTYFF_AI_SWARM_DIR: swarmOut,
-      MASTYFF_AI_TENANT_ID: tenantId,
+      MASTYF_AI_SWARM_DIR: swarmOut,
+      MASTYF_AI_TENANT_ID: tenantId,
       // Required: gate-pro.mjs checks this; set in dashboard via CI token or legacy env var
-      MASTYFF_AI_CI_BYPASS_LICENSE: process.env['MASTYFF_AI_CI_BYPASS_LICENSE'] || undefined,
-      MASTYFF_AI_CI_TOKEN: process.env['MASTYFF_AI_CI_TOKEN'] || undefined,
+      MASTYF_AI_CI_BYPASS_LICENSE: process.env['MASTYF_AI_CI_BYPASS_LICENSE'] || undefined,
+      MASTYF_AI_CI_TOKEN: process.env['MASTYF_AI_CI_TOKEN'] || undefined,
       // Skip --skip-continuous always when launched from dashboard
-      MASTYFF_AI_SWARM_SKIP_CONTINUOUS: 'true',
+      MASTYF_AI_SWARM_SKIP_CONTINUOUS: 'true',
     },
   });
   child.unref();

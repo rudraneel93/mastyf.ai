@@ -31,7 +31,7 @@ const SKIP_LIVE = process.argv.includes('--skip-live');
 const SKIP_SWARM = process.argv.includes('--skip-swarm');
 const QUIET = process.argv.includes('--quiet');
 const RUN_CONTINUOUS = process.argv.includes('--continuous');
-const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous') || process.env.MASTYFF_AI_SWARM_SKIP_CONTINUOUS === 'true';
+const SKIP_CONTINUOUS = process.argv.includes('--skip-continuous') || process.env.MASTYF_AI_SWARM_SKIP_CONTINUOUS === 'true';
 
 const LIVE_JSON = join(REPO_ROOT, 'scenarios', 'real-life', 'output', 'live-filesystem-session.json');
 const VISUALS_SCRIPT = join(SWARM_DIR, 'scripts', 'generate-swarm-visuals.py');
@@ -43,14 +43,14 @@ let liveOk = true;
 let swarmOk = true;
 
 function hasSwarmLicenseContext() {
-  if (process.env.MASTYFF_AI_CI_BYPASS_LICENSE === 'true') return true;
-  if ((process.env.MASTYFF_AI_CI_TOKEN || '').trim()) return true;
+  if (process.env.MASTYF_AI_CI_BYPASS_LICENSE === 'true') return true;
+  if ((process.env.MASTYF_AI_CI_TOKEN || '').trim()) return true;
   if (
     process.env.NODE_ENV === 'development'
-    && process.env.MASTYFF_AI_DEV_UNLOCK_ALL === 'true'
+    && process.env.MASTYF_AI_DEV_UNLOCK_ALL === 'true'
   ) return true;
-  const hasKey = (process.env.MASTYFF_AI_LICENSE_KEY || '').trim().length > 0;
-  const hasControlPlane = (process.env.MASTYFF_AI_CONTROL_PLANE_URL || '').trim().length > 0;
+  const hasKey = (process.env.MASTYF_AI_LICENSE_KEY || '').trim().length > 0;
+  const hasControlPlane = (process.env.MASTYF_AI_CONTROL_PLANE_URL || '').trim().length > 0;
   return hasKey && hasControlPlane;
 }
 
@@ -157,7 +157,7 @@ async function main() {
 
   if (!QUIET) {
     console.log('═'.repeat(60));
-    console.log('  MCP Mastyff AI — Security Swarm Analysis');
+    console.log('  MCP Mastyf AI — Security Swarm Analysis');
     console.log('═'.repeat(60));
   }
 
@@ -174,13 +174,13 @@ async function main() {
 
     if (!SKIP_LIVE) {
       setPhase('live-mcp');
-      process.env.MASTYFF_AI_SEMANTIC_STORE_CALIBRATION = 'true';
+      process.env.MASTYF_AI_SEMANTIC_STORE_CALIBRATION = 'true';
       process.env.SWARM_CALIBRATE_CAPTURE = 'true';
       process.env.REAL_LIFE_METRICS_ENABLED = 'false';
       process.env.REAL_LIFE_PROXY_READY_MS = process.env.REAL_LIFE_PROXY_READY_MS || '45000';
       process.env.REAL_LIFE_UPSTREAM_READY_MS = process.env.REAL_LIFE_UPSTREAM_READY_MS || '90000';
-      process.env.MASTYFF_AI_POLICY_SYNC_ENABLED = 'false';
-      process.env.MASTYFF_AI_AUDIT_SYNC_ENABLED = 'false';
+      process.env.MASTYF_AI_POLICY_SYNC_ENABLED = 'false';
+      process.env.MASTYF_AI_AUDIT_SYNC_ENABLED = 'false';
       if (FULL && !process.env.REAL_LIFE_BURST_REPEATS) {
         process.env.REAL_LIFE_BURST_REPEATS = '20';
       }
@@ -238,8 +238,8 @@ async function main() {
       if (!hasSwarmLicenseContext()) {
         throw new Error(
           'Security swarm gates require Pro license context before step 7/10. '
-          + 'Set MASTYFF_AI_LICENSE_KEY and MASTYFF_AI_CONTROL_PLANE_URL, '
-          + 'or provide MASTYFF_AI_CI_TOKEN (or MASTYFF_AI_CI_BYPASS_LICENSE=true in CI).',
+          + 'Set MASTYF_AI_LICENSE_KEY and MASTYF_AI_CONTROL_PLANE_URL, '
+          + 'or provide MASTYF_AI_CI_TOKEN (or MASTYF_AI_CI_BYPASS_LICENSE=true in CI).',
         );
       }
       const swarmScript = NIGHTLY ? 'security-swarm:live' : 'security-swarm:fast';
@@ -250,8 +250,8 @@ async function main() {
       );
       run('pnpm', [swarmScript], {
         env: {
-          MASTYFF_AI_POLICY_TIMING_ENVELOPE: 'false',
-          MASTYFF_AI_DISABLE_SEMANTIC: 'true',
+          MASTYF_AI_POLICY_TIMING_ENVELOPE: 'false',
+          MASTYF_AI_DISABLE_SEMANTIC: 'true',
         },
       });
       const latest = existsSync(join(SWARM_DIR, 'latest.json'))

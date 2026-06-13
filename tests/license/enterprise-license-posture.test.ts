@@ -7,15 +7,15 @@ describe('enterprise license posture', () => {
   });
 
   it('disables CI bypass when enterprise mode is on', () => {
-    vi.stubEnv('MASTYFF_AI_ENTERPRISE_MODE', 'true');
-    vi.stubEnv('MASTYFF_AI_CI_BYPASS_LICENSE', 'true');
+    vi.stubEnv('MASTYF_AI_ENTERPRISE_MODE', 'true');
+    vi.stubEnv('MASTYF_AI_CI_BYPASS_LICENSE', 'true');
     expect(isCiLicenseBypass()).toBe(false);
-    expect(() => assertEnterpriseLicensePosture()).toThrow(/MASTYFF_AI_CI_BYPASS_LICENSE/);
+    expect(() => assertEnterpriseLicensePosture()).toThrow(/MASTYF_AI_CI_BYPASS_LICENSE/);
   });
 
   it('allows CI bypass in community mode', () => {
-    vi.stubEnv('MASTYFF_AI_ENTERPRISE_MODE', 'false');
-    vi.stubEnv('MASTYFF_AI_CI_BYPASS_LICENSE', 'true');
+    vi.stubEnv('MASTYF_AI_ENTERPRISE_MODE', 'false');
+    vi.stubEnv('MASTYF_AI_CI_BYPASS_LICENSE', 'true');
     expect(isCiLicenseBypass()).toBe(true);
     expect(() => assertEnterpriseLicensePosture()).not.toThrow();
   });

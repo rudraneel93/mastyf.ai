@@ -3,8 +3,8 @@ import { homedir } from 'os';
 import { join, resolve } from 'path';
 import chalk from 'chalk';
 import { runWrap, resolveClientConfigPath, type WrapClient } from '../wrap/client-wrap.js';
-import { resolveMastyffAiDbPath } from '../utils/mastyff-ai-db-path.js';
-import { resolveMastyffAiInstallRoot } from '../utils/mastyff-ai-package-root.js';
+import { resolveMastyfAiDbPath } from '../utils/mastyf-ai-db-path.js';
+import { resolveMastyfAiInstallRoot } from '../utils/mastyf-ai-package-root.js';
 
 export interface OnboardArtifact {
   client: string;
@@ -16,7 +16,7 @@ export interface OnboardArtifact {
   applied: boolean;
 }
 
-const ONBOARD_DIR = join(homedir(), '.mastyff-ai');
+const ONBOARD_DIR = join(homedir(), '.mastyf-ai');
 const ONBOARD_PATH = join(ONBOARD_DIR, 'onboard.json');
 
 export function readOnboardArtifact(): OnboardArtifact | null {
@@ -37,25 +37,25 @@ export interface OnboardOptions {
   client: WrapClient;
   configPath?: string;
   policyPath: string;
-  /** Package install root (dist/cli.js); defaults via resolveMastyffAiInstallRoot() */
+  /** Package install root (dist/cli.js); defaults via resolveMastyfAiInstallRoot() */
   projectRoot?: string;
-  /** Directory for mastyff-ai-configs/ (default: process.cwd()) */
+  /** Directory for mastyf-ai-configs/ (default: process.cwd()) */
   workspaceRoot?: string;
   apply: boolean;
   skipNames: string[];
   startProxy: boolean;
-  /** Run `mastyff-ai start` after successful onboard */
+  /** Run `mastyf-ai start` after successful onboard */
   start?: boolean;
 }
 
 export function runOnboard(opts: OnboardOptions): OnboardArtifact {
-  const installRoot = resolve(opts.projectRoot ?? resolveMastyffAiInstallRoot());
+  const installRoot = resolve(opts.projectRoot ?? resolveMastyfAiInstallRoot());
   const workspaceRoot = resolve(opts.workspaceRoot ?? process.cwd());
   const distCli = join(installRoot, 'dist', 'cli.js');
   if (!existsSync(distCli)) {
     throw new Error(
-      `MCP Mastyff AI install incomplete: dist/cli.js missing under ${installRoot}. ` +
-        `Reinstall with: npm install -g @mastyff-ai/server@latest`,
+      `MCP Mastyf AI install incomplete: dist/cli.js missing under ${installRoot}. ` +
+        `Reinstall with: npm install -g @mastyf-ai/server@latest`,
     );
   }
 
@@ -66,7 +66,7 @@ export function runOnboard(opts: OnboardOptions): OnboardArtifact {
     );
   }
 
-  console.log(chalk.bold('\nMCP Mastyff AI — Solo developer onboarding\n'));
+  console.log(chalk.bold('\nMCP Mastyf AI — Solo developer onboarding\n'));
   console.log(chalk.dim('Step 1/4 — Verify build'));
   console.log(chalk.green(`  dist/cli.js OK`));
 
@@ -110,17 +110,17 @@ export function runOnboard(opts: OnboardOptions): OnboardArtifact {
     console.log(chalk.green('  Reload MCP servers in your IDE (restart Cursor or reconnect MCP).'));
   }
   console.log(chalk.cyan('\n  Observe traffic:'));
-  console.log(chalk.dim('    mastyff-ai start'));
+  console.log(chalk.dim('    mastyf-ai start'));
   console.log(chalk.dim('    Open http://localhost:4000 → Setup tab'));
   if (opts.startProxy && wrap.wrapped.length > 0) {
     console.log(chalk.cyan('\n  Start proxy + dashboard:'));
-    console.log(chalk.dim('    mastyff-ai start'));
+    console.log(chalk.dim('    mastyf-ai start'));
   }
   console.log(chalk.cyan('\n  Run security analysis:'));
   console.log(chalk.dim('    Dashboard → Agent flow → Run full security analysis'));
   console.log(chalk.dim('    Or: pnpm security-swarm:analyze'));
   console.log(chalk.dim(`\n  Onboard status saved: ${ONBOARD_PATH}`));
-  console.log(chalk.dim(`  History DB: ${resolveMastyffAiDbPath()}`));
+  console.log(chalk.dim(`  History DB: ${resolveMastyfAiDbPath()}`));
 
   return artifact;
 }
@@ -129,7 +129,7 @@ export async function runOnboardAndMaybeStart(opts: OnboardOptions): Promise<Onb
   const artifact = runOnboard(opts);
   if (opts.start) {
     const { runStart } = await import('./start.js');
-    await runStart({ installRoot: resolve(opts.projectRoot ?? resolveMastyffAiInstallRoot()) });
+    await runStart({ installRoot: resolve(opts.projectRoot ?? resolveMastyfAiInstallRoot()) });
   }
   return artifact;
 }

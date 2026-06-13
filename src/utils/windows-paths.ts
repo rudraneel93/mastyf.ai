@@ -6,12 +6,12 @@ export function quotePathForPowerShell(filePath: string): string {
   return `"${escaped}"`;
 }
 
-/** Mastyff AI proxy wrapper script for the current platform. */
-export function resolveMastyffAiProxyWrapper(projectRoot: string): string {
+/** Mastyf AI proxy wrapper script for the current platform. */
+export function resolveMastyfAiProxyWrapper(projectRoot: string): string {
   if (process.platform === 'win32') {
-    return path.join(projectRoot, 'mastyff-ai-proxy.ps1');
+    return path.join(projectRoot, 'mastyf-ai-proxy.ps1');
   }
-  return path.join(projectRoot, 'scripts', 'mastyff-ai-proxy.sh');
+  return path.join(projectRoot, 'scripts', 'mastyf-ai-proxy.sh');
 }
 
 export interface WrappedMcpServerEntry {
@@ -28,7 +28,7 @@ export function buildWrappedMcpServerEntry(
   policyPath: string,
   extraEnv?: Record<string, string>,
 ): WrappedMcpServerEntry {
-  const wrapperScript = resolveMastyffAiProxyWrapper(projectRoot);
+  const wrapperScript = resolveMastyfAiProxyWrapper(projectRoot);
   const proxyArgs = ['--config', singleConfigPath, '--policy', policyPath];
   const env = extraEnv && Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {};
 
@@ -49,11 +49,11 @@ export function buildWrappedMcpServerEntry(
   };
 }
 
-/** Whether a server config already points at Mastyff AI proxy. */
-export function isMastyffAiProxyCommand(command: string): boolean {
+/** Whether a server config already points at Mastyf AI proxy. */
+export function isMastyfAiProxyCommand(command: string): boolean {
   return (
-    command.includes('mastyff-ai-proxy') ||
-    command.includes('mastyff-ai') ||
-    /mastyff-ai-proxy\.ps1$/i.test(command)
+    command.includes('mastyf-ai-proxy') ||
+    command.includes('mastyf-ai') ||
+    /mastyf-ai-proxy\.ps1$/i.test(command)
   );
 }

@@ -1,6 +1,6 @@
 /**
  * OAuth JWT revocation denylist (jti / token hash).
- * Memory always; Redis when configured (MASTYFF_AI_TOKEN_REVOCATION_REDIS=true).
+ * Memory always; Redis when configured (MASTYF_AI_TOKEN_REVOCATION_REDIS=true).
  */
 import { createHash } from 'crypto';
 import type { Redis, Cluster } from 'ioredis';
@@ -10,7 +10,7 @@ import { createRedisClient, isRedisConfigured } from '../utils/redis-client.js';
 const MAX_MEMORY_DENYLIST_SIZE = 10_000;
 const memoryDenylist = new Map<string, number>();
 const DEFAULT_TTL_MS = 86_400_000;
-const REDIS_KEY_PREFIX = 'mastyff-ai:revoked:';
+const REDIS_KEY_PREFIX = 'mastyf-ai:revoked:';
 
 let revocationRedis: Redis | Cluster | null = null;
 
@@ -20,14 +20,14 @@ function keyForToken(token: string, jti?: string): string {
 }
 
 function ttlMs(): number {
-  const n = parseInt(process.env['MASTYFF_AI_TOKEN_REVOCATION_TTL_MS'] || String(DEFAULT_TTL_MS), 10);
+  const n = parseInt(process.env['MASTYF_AI_TOKEN_REVOCATION_TTL_MS'] || String(DEFAULT_TTL_MS), 10);
   return Number.isFinite(n) && n > 60_000 ? n : DEFAULT_TTL_MS;
 }
 
 function useRedisRevocation(): boolean {
   return (
-    process.env['MASTYFF_AI_TOKEN_REVOCATION'] !== 'false'
-    && process.env['MASTYFF_AI_TOKEN_REVOCATION_REDIS'] !== 'false'
+    process.env['MASTYF_AI_TOKEN_REVOCATION'] !== 'false'
+    && process.env['MASTYF_AI_TOKEN_REVOCATION_REDIS'] !== 'false'
     && isRedisConfigured()
   );
 }
@@ -75,7 +75,7 @@ export async function revokeBearerToken(token: string, jti?: string): Promise<vo
 }
 
 export async function isBearerTokenRevoked(token: string, jti?: string): Promise<boolean> {
-  if (process.env['MASTYFF_AI_TOKEN_REVOCATION'] === 'false') return false;
+  if (process.env['MASTYF_AI_TOKEN_REVOCATION'] === 'false') return false;
   const key = keyForToken(token, jti);
   const exp = memoryDenylist.get(key);
   if (exp) {

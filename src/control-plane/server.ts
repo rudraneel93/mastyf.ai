@@ -17,7 +17,7 @@ export interface ControlPlaneServerOptions {
 function resolvePolicyPath(explicitPath?: string): string {
   if (explicitPath) return explicitPath;
   const fromEnv = process.env['CONTROL_PLANE_POLICY_PATH']
-    || process.env['MASTYFF_AI_POLICY'];
+    || process.env['MASTYF_AI_POLICY'];
   if (fromEnv) return fromEnv;
   return path.resolve(process.cwd(), 'default-policy.yaml');
 }
@@ -44,7 +44,7 @@ export function createControlPlaneApp(options?: ControlPlaneServerOptions): expr
   };
 
   app.get('/healthz', (_req, res) => {
-    res.json({ ok: true, service: 'mastyff-ai-control-plane' });
+    res.json({ ok: true, service: 'mastyf-ai-control-plane' });
   });
 
   app.get('/readyz', (_req, res) => {
@@ -87,7 +87,7 @@ export function startControlPlaneServer(options?: ControlPlaneServerOptions): vo
   app.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(
-      `MCP Mastyff AI Control Plane listening on :${port} (policy=${policyPath})`,
+      `MCP Mastyf AI Control Plane listening on :${port} (policy=${policyPath})`,
     );
   });
 }

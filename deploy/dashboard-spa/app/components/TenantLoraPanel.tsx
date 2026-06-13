@@ -8,7 +8,7 @@ import {
   type TenantModelExportResponse,
   type TenantModelReadinessResponse,
   type TenantModelTrainStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { hasPermission } from '@/lib/dashboard-roles';
 
 type Props = {

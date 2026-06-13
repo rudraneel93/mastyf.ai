@@ -150,7 +150,7 @@ export class PolicyEngine {
   }
 
   private policyEvalLockKey(ctx: CallContext): string {
-    const tenant = ctx.tenantId || process.env['MASTYFF_AI_TENANT_ID'] || 'default';
+    const tenant = ctx.tenantId || process.env['MASTYF_AI_TENANT_ID'] || 'default';
     const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub || 'anon';
     return `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`;
   }
@@ -175,7 +175,7 @@ export class PolicyEngine {
   isOpaEnabled(): boolean {
     if (!process.env['OPA_URL']) return false;
     if (this.config.policy.opa === false) return false;
-    return this.config.policy.opa === true || process.env['MASTYFF_AI_OPA_ENABLED'] === 'true';
+    return this.config.policy.opa === true || process.env['MASTYF_AI_OPA_ENABLED'] === 'true';
   }
 
   async evaluateAsync(context: CallContext): Promise<PolicyDecision> {
@@ -412,7 +412,7 @@ export class PolicyEngine {
         }
       }
       if (rule.rbac.tenants && rule.rbac.tenants.length > 0) {
-        const requestTenant = ctx.tenantId || process.env['MASTYFF_AI_TENANT_ID'] || 'default';
+        const requestTenant = ctx.tenantId || process.env['MASTYF_AI_TENANT_ID'] || 'default';
         if (!rule.rbac.tenants.includes(requestTenant)) {
           return {
             action: this.resolveAction(rule.action),
@@ -424,7 +424,7 @@ export class PolicyEngine {
     }
 
     if (!skipLocalRateLimit) {
-      const tenant = ctx.tenantId || process.env['MASTYFF_AI_TENANT_ID'] || 'default';
+      const tenant = ctx.tenantId || process.env['MASTYF_AI_TENANT_ID'] || 'default';
       const clientId = ctx.agentIdentity?.clientId || ctx.agentIdentity?.sub;
       const key = clientId
         ? `${tenant}:${ctx.serverName}:${ctx.toolName}:${clientId}`

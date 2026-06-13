@@ -16,14 +16,14 @@
   },
   "thresholds": {
     "current": {
-      "MASTYFF_AI_SEMANTIC_MIN_CONFIDENCE": 0.6,
-      "MASTYFF_AI_LOCAL_SEMANTIC_THRESHOLD": 0.55
+      "MASTYF_AI_SEMANTIC_MIN_CONFIDENCE": 0.6,
+      "MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD": 0.55
     },
     "recommended": {
-      "MASTYFF_AI_SEMANTIC_MIN_CONFIDENCE": 0.57,
-      "MASTYFF_AI_LOCAL_SEMANTIC_THRESHOLD": 0.53
+      "MASTYF_AI_SEMANTIC_MIN_CONFIDENCE": 0.57,
+      "MASTYF_AI_LOCAL_SEMANTIC_THRESHOLD": 0.53
     },
-    "note": "Apply manually or via tenant config; auto-apply requires quorum (MASTYFF_AI_AI_AUTO_APPLY stays false in prod)."
+    "note": "Apply manually or via tenant config; auto-apply requires quorum (MASTYF_AI_AI_AUTO_APPLY stays false in prod)."
   },
   "profile": "hybrid",
   "sampleFlagged": [

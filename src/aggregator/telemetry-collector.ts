@@ -1,6 +1,6 @@
 /**
  * Telemetry Collector — scrapes Prometheus /metrics from all registered
- * MCP Mastyff AI instances and aggregates them into the central PostgreSQL
+ * MCP Mastyf AI instances and aggregates them into the central PostgreSQL
  * aggregated_metrics table for real-time dashboards and historical analysis.
  */
 import { loadPg, type PgPoolType } from '../database/pg-loader.js';
@@ -39,9 +39,9 @@ export interface TelemetryConfig {
 }
 
 const DEFAULT_CONFIG: TelemetryConfig = {
-  scrapeIntervalMs: parseInt(process.env['MASTYFF_AI_TELEMETRY_INTERVAL_MS'] || '15000', 10),
-  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyff_ai',
-  endpoints: parseEndpoints(process.env['MASTYFF_AI_TELEMETRY_ENDPOINTS'] || ''),
+  scrapeIntervalMs: parseInt(process.env['MASTYF_AI_TELEMETRY_INTERVAL_MS'] || '15000', 10),
+  databaseUrl: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/mastyf_ai',
+  endpoints: parseEndpoints(process.env['MASTYF_AI_TELEMETRY_ENDPOINTS'] || ''),
 };
 
 function parseEndpoints(env: string): InstanceEndpoint[] {
@@ -86,7 +86,7 @@ export class TelemetryCollector {
 
   /**
    * Register an instance endpoint for scraping.
-   * Also registers the instance in mastyff_ai_instances if not already there.
+   * Also registers the instance in mastyf_ai_instances if not already there.
    */
   async registerInstance(instance: InstanceEndpoint): Promise<void> {
     const exists = this.config.endpoints.find(e => e.instanceId === instance.instanceId);
@@ -98,7 +98,7 @@ export class TelemetryCollector {
     const client = await pool.connect();
     try {
       await client.query(
-        `INSERT INTO mastyff_ai_instances (instance_id, instance_name, status)
+        `INSERT INTO mastyf_ai_instances (instance_id, instance_name, status)
          VALUES ($1, $2, 'active')
          ON CONFLICT (instance_id) DO UPDATE
          SET last_heartbeat = NOW(), status = 'active'`,
@@ -226,44 +226,44 @@ export class TelemetryCollector {
 
       // Map known metric names
       switch (metricName) {
-        case 'mastyff_ai_requests_total':
+        case 'mastyf_ai_requests_total':
           metrics.totalRequests += value;
           break;
-        case 'mastyff_ai_blocked_total':
+        case 'mastyf_ai_blocked_total':
           metrics.blockedRequests += value;
           break;
-        case 'mastyff_ai_injection_detected_total':
+        case 'mastyf_ai_injection_detected_total':
           metrics.injectionDetections += value;
           break;
-        case 'mastyff_ai_auth_failures_total':
+        case 'mastyf_ai_auth_failures_total':
           metrics.authFailures += value;
           break;
-        case 'mastyff_ai_active_proxies':
+        case 'mastyf_ai_active_proxies':
           metrics.activeProxyCount = Math.max(metrics.activeProxyCount, value);
           break;
-        case 'mastyff_ai_active_sessions':
+        case 'mastyf_ai_active_sessions':
           metrics.activeSessionCount = Math.max(metrics.activeSessionCount, value);
           break;
-        case 'mastyff_ai_circuit_breaker_state':
+        case 'mastyf_ai_circuit_breaker_state':
           if (value === 1) metrics.circuitBreakerOpen++;
           break;
-        case 'mastyff_ai_token_cost_usd_sum':
+        case 'mastyf_ai_token_cost_usd_sum':
           metrics.totalCostUsd += value;
           break;
         // Histogram quantiles for latency
-        case 'mastyff_ai_proxy_latency_ms':
+        case 'mastyf_ai_proxy_latency_ms':
           if (metricPart.includes('quantile="0.5"')) metrics.p50LatencyMs = value;
           else if (metricPart.includes('quantile="0.95"')) metrics.p95LatencyMs = value;
           else if (metricPart.includes('quantile="0.99"')) metrics.p99LatencyMs = value;
           break;
         // Request duration
-        case 'mastyff_ai_request_duration_seconds_count':
+        case 'mastyf_ai_request_duration_seconds_count':
           (metrics as any)._requestCount = ((metrics as any)._requestCount || 0) + value;
           break;
-        case 'mastyff_ai_request_duration_seconds_sum':
+        case 'mastyf_ai_request_duration_seconds_sum':
           (metrics as any)._requestDurationSumMs = ((metrics as any)._requestDurationSumMs || 0) + value * 1000;
           break;
-        case 'mastyff_ai_token_usage_total':
+        case 'mastyf_ai_token_usage_total':
           metrics.tokenUsageTotal += value;
           break;
       }
@@ -327,7 +327,7 @@ export class TelemetryCollector {
       const client = await pool.connect();
       try {
         await client.query(
-          `UPDATE mastyff_ai_instances
+          `UPDATE mastyf_ai_instances
            SET status = CASE
              WHEN last_heartbeat < NOW() - INTERVAL '5 minutes' THEN 'offline'
              ELSE 'degraded'
@@ -394,7 +394,7 @@ export class TelemetryCollector {
       try {
         const result = await client.query(
           `SELECT gi.*, am.total_requests, am.blocked_requests, am.total_cost_usd, am.avg_latency_ms
-           FROM mastyff_ai_instances gi
+           FROM mastyf_ai_instances gi
            LEFT JOIN LATERAL (
              SELECT * FROM aggregated_metrics
              WHERE instance_id = gi.instance_id

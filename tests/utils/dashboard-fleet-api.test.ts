@@ -7,22 +7,22 @@ import { HistoryDatabase } from '../../src/database/history-db.js';
 
 describe('buildDashboardFleetResponse', () => {
   let dir: string;
-  const prevPaths = process.env.MASTYFF_AI_FLEET_DB_PATHS;
+  const prevPaths = process.env.MASTYF_AI_FLEET_DB_PATHS;
   const prevType = process.env.DB_TYPE;
 
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
-    if (prevPaths === undefined) delete process.env.MASTYFF_AI_FLEET_DB_PATHS;
-    else process.env.MASTYFF_AI_FLEET_DB_PATHS = prevPaths;
+    if (prevPaths === undefined) delete process.env.MASTYF_AI_FLEET_DB_PATHS;
+    else process.env.MASTYF_AI_FLEET_DB_PATHS = prevPaths;
     if (prevType === undefined) delete process.env.DB_TYPE;
     else process.env.DB_TYPE = prevType;
   });
 
-  it('returns fleet instances from MASTYFF_AI_FLEET_DB_PATHS', async () => {
-    dir = mkdtempSync(join(tmpdir(), 'mastyff-ai-fleet-api-'));
+  it('returns fleet instances from MASTYF_AI_FLEET_DB_PATHS', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'mastyf-ai-fleet-api-'));
     const dbPath = join(dir, 'replica-a.db');
     delete process.env.DB_TYPE;
-    process.env.MASTYFF_AI_FLEET_DB_PATHS = dbPath;
+    process.env.MASTYF_AI_FLEET_DB_PATHS = dbPath;
 
     const db = new HistoryDatabase(dbPath);
     await db.initialize();
@@ -46,10 +46,10 @@ describe('buildDashboardFleetResponse', () => {
   });
 
   it('falls back to local instance when fleet paths empty', async () => {
-    delete process.env.MASTYFF_AI_FLEET_DB_PATHS;
+    delete process.env.MASTYF_AI_FLEET_DB_PATHS;
     delete process.env.DB_TYPE;
 
-    dir = mkdtempSync(join(tmpdir(), 'mastyff-ai-fleet-local-'));
+    dir = mkdtempSync(join(tmpdir(), 'mastyf-ai-fleet-local-'));
     const dbPath = join(dir, 'local.db');
     const db = new HistoryDatabase(dbPath);
     await db.initialize();
@@ -74,12 +74,12 @@ describe('buildDashboardFleetResponse', () => {
 
   it('aligns with sqlite-fleet federated mode when multiple paths set', async () => {
     const { resolveFederatedMode } = await import('../../src/utils/federated-data-source.js');
-    dir = mkdtempSync(join(tmpdir(), 'mastyff-ai-fleet-fed-'));
+    dir = mkdtempSync(join(tmpdir(), 'mastyf-ai-fleet-fed-'));
     const a = join(dir, 'a.db');
     const b = join(dir, 'b.db');
     delete process.env.DB_TYPE;
     delete process.env.DATABASE_URL;
-    process.env.MASTYFF_AI_FLEET_DB_PATHS = `${a},${b}`;
+    process.env.MASTYF_AI_FLEET_DB_PATHS = `${a},${b}`;
     expect(resolveFederatedMode(null)).toBe('sqlite-fleet');
   });
 });

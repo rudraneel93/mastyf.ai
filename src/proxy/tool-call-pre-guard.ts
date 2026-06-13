@@ -32,7 +32,7 @@ export async function runToolCallPreForwardGuard(
       return {
         blocked: true,
         code: -32001,
-        message: `Blocked by Mastyff AI: ${expanded.reason}`,
+        message: `Blocked by Mastyf AI: ${expanded.reason}`,
       };
     }
   }
@@ -49,7 +49,7 @@ export async function runToolCallPreForwardGuard(
       return {
         blocked: true,
         code: -32001,
-        message: `Blocked by Mastyff AI: ${agentic.reason || 'agentic policy'}`,
+        message: `Blocked by Mastyf AI: ${agentic.reason || 'agentic policy'}`,
       };
     }
     return { blocked: false, arguments: agentic.sanitizedArgs ?? args };

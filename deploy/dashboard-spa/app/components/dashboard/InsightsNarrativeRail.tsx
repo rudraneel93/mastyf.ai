@@ -5,7 +5,7 @@ import {
   downloadInsightsBriefing,
   fetchDashboardInsights,
   type DashboardInsightsResponse,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { InsightCallout } from './InsightCallout';
 import { useDashboardWindow } from './DashboardWindowContext';
 

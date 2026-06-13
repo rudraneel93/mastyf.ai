@@ -9,10 +9,10 @@
  *   3. Verifies the fixture is actually blocked by the current policy before promoting
  *
  * Safety gates (all configurable via env vars):
- *   - MASTYFF_AI_AUTO_CORPUS_PROMOTE (default: false) — master switch
- *   - MASTYFF_AI_AUTO_CORPUS_MIN_CONFIDENCE (default: 0.90)
- *   - MASTYFF_AI_AUTO_CORPUS_MAX_PER_DAY (default: 5)
- *   - MASTYFF_AI_AUTO_CORPUS_REQUIRE_PARITY (default: false)
+ *   - MASTYF_AI_AUTO_CORPUS_PROMOTE (default: false) — master switch
+ *   - MASTYF_AI_AUTO_CORPUS_MIN_CONFIDENCE (default: 0.90)
+ *   - MASTYF_AI_AUTO_CORPUS_MAX_PER_DAY (default: 5)
+ *   - MASTYF_AI_AUTO_CORPUS_REQUIRE_PARITY (default: false)
  */
 import { createHash } from 'crypto';
 import {
@@ -67,26 +67,26 @@ export interface CorpusPromotionManifest {
 const CORPUS_ROOT = join(process.cwd(), 'corpus', 'attacks');
 const MANIFEST_PATH = join(process.cwd(), 'corpus', 'manifest.yaml');
 const PROMOTION_STATE_PATH = join(
-  process.env.MASTYFF_AI_THREAT_RESEARCH_STATE_PATH || join(homedir(), '.mastyff-ai'),
+  process.env.MASTYF_AI_THREAT_RESEARCH_STATE_PATH || join(homedir(), '.mastyf-ai'),
   'corpus-promotions.json',
 );
 
 function isPromotionEnabled(): boolean {
-  return process.env.MASTYFF_AI_AUTO_CORPUS_PROMOTE === 'true';
+  return process.env.MASTYF_AI_AUTO_CORPUS_PROMOTE === 'true';
 }
 
 function minConfidence(): number {
-  const n = parseFloat(process.env.MASTYFF_AI_AUTO_CORPUS_MIN_CONFIDENCE || '0.90');
+  const n = parseFloat(process.env.MASTYF_AI_AUTO_CORPUS_MIN_CONFIDENCE || '0.90');
   return Number.isFinite(n) && n > 0 ? n : 0.90;
 }
 
 function maxPerDay(): number {
-  const n = parseInt(process.env.MASTYFF_AI_AUTO_CORPUS_MAX_PER_DAY || '5', 10);
+  const n = parseInt(process.env.MASTYF_AI_AUTO_CORPUS_MAX_PER_DAY || '5', 10);
   return Number.isFinite(n) && n > 0 ? n : 5;
 }
 
 function requireParity(): boolean {
-  return process.env.MASTYFF_AI_AUTO_CORPUS_REQUIRE_PARITY === 'true';
+  return process.env.MASTYF_AI_AUTO_CORPUS_REQUIRE_PARITY === 'true';
 }
 
 function dailyPromotionQuotaOk(): boolean {
@@ -243,7 +243,7 @@ async function verifyFixtureBlocked(
 ): Promise<{ blocked: boolean; rule?: string; reason?: string }> {
   try {
     const { PolicyEngine } = await import('../policy/policy-engine.js');
-    const policyPath = process.env.MASTYFF_AI_POLICY_PATH || join(process.cwd(), 'default-policy.yaml');
+    const policyPath = process.env.MASTYF_AI_POLICY_PATH || join(process.cwd(), 'default-policy.yaml');
     if (!existsSync(policyPath)) {
       return { blocked: false, reason: 'policy file not found' };
     }
@@ -274,7 +274,7 @@ export async function promoteToCorpus(
   provenance: CorpusPromotionProvenance,
 ): Promise<CorpusPromotionResult> {
   if (!isPromotionEnabled()) {
-    return { ok: false, reason: 'auto corpus promotion disabled (set MASTYFF_AI_AUTO_CORPUS_PROMOTE=true)' };
+    return { ok: false, reason: 'auto corpus promotion disabled (set MASTYF_AI_AUTO_CORPUS_PROMOTE=true)' };
   }
 
   if (provenance.confidence < minConfidence()) {

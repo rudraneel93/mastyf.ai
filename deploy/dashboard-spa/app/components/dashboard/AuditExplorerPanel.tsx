@@ -14,7 +14,7 @@ import {
   fetchAuditHeatmap,
   type AuditResponse,
   type AuditHeatmapResponse,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 import { CHART_AXIS, CHART_GRID, CHART_SERIES, classifyRule, RULE_CATEGORY_LABELS } from '@/lib/chartTheme';
 import { DashboardSection } from './DashboardSection';
 import { KpiCard } from './KpiCard';
@@ -180,7 +180,7 @@ export function AuditExplorerPanel({
           rows={events}
           rowKey={(e, i) => `${e.timestamp}-${i}`}
           pageSize={25}
-          exportFilename="mastyff-ai-audit.csv"
+          exportFilename="mastyf-ai-audit.csv"
           expandable={(e) => (
             <div>
               <strong>Reason:</strong> {e.reason || '—'}

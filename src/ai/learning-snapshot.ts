@@ -16,10 +16,10 @@ import { resolveAiBaselinesPath, resolveAiLearningStatePath } from './ai-paths.j
 const MAX_SNAPSHOTS = 5;
 
 export function resolveSnapshotDir(): string {
-  if (process.env.MASTYFF_AI_AI_SNAPSHOT_DIR) {
-    return process.env.MASTYFF_AI_AI_SNAPSHOT_DIR;
+  if (process.env.MASTYF_AI_AI_SNAPSHOT_DIR) {
+    return process.env.MASTYF_AI_AI_SNAPSHOT_DIR;
   }
-  return join(homedir(), '.mastyff-ai', 'learning-snapshots');
+  return join(homedir(), '.mastyf-ai', 'learning-snapshots');
 }
 
 function snapshotId(): string {

@@ -143,7 +143,7 @@ export class SelfImprovement {
     }
   }
 
-  /** Record drift report; freezes threshold tuning until MASTYFF_AI_AI_DRIFT_OVERRIDE=true. */
+  /** Record drift report; freezes threshold tuning until MASTYF_AI_AI_DRIFT_OVERRIDE=true. */
   recordDriftReport(report: DriftReport): void {
     const wasFrozen = this.state.drift?.frozen;
     if (report.driftDetected) {

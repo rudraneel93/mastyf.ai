@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-export MASTYFF_AI_DISABLE_SEMANTIC="${MASTYFF_AI_DISABLE_SEMANTIC:-true}"
+export MASTYF_AI_DISABLE_SEMANTIC="${MASTYF_AI_DISABLE_SEMANTIC:-true}"
 LOG_DIR="${ROOT}/reports/adversarial-harness/logs"
 mkdir -p "$LOG_DIR"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

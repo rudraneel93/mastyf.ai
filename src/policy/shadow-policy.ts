@@ -1,6 +1,6 @@
 /**
  * Shadow / dry-run policy evaluation on live traffic.
- * MASTYFF_AI_POLICY_SHADOW_PATH — YAML policy evaluated in parallel; logs only.
+ * MASTYF_AI_POLICY_SHADOW_PATH — YAML policy evaluated in parallel; logs only.
  */
 import { readFileSync, existsSync } from 'fs';
 import { load } from 'js-yaml';
@@ -18,7 +18,7 @@ export function resetShadowPolicyForTests(): void {
 
 function loadShadowEngine(): PolicyEngine | null {
   if (shadowEngine !== undefined) return shadowEngine;
-  const path = process.env['MASTYFF_AI_POLICY_SHADOW_PATH']?.trim();
+  const path = process.env['MASTYF_AI_POLICY_SHADOW_PATH']?.trim();
   if (!path || !existsSync(path)) {
     shadowEngine = null;
     return null;

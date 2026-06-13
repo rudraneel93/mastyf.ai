@@ -26,7 +26,7 @@ function runTenant(tenantId) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [RUN, ...extraArgs], {
       cwd: REPO,
-      env: { ...process.env, MASTYFF_AI_SWARM_DIR: swarmDir, MASTYFF_AI_TENANT_ID: tenantId },
+      env: { ...process.env, MASTYF_AI_SWARM_DIR: swarmDir, MASTYF_AI_TENANT_ID: tenantId },
       stdio: 'inherit',
     });
     child.on('exit', (code) => resolve({ tenantId, code: code ?? 1 }));

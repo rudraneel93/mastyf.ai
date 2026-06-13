@@ -3,10 +3,10 @@ import { parseArgs } from "node:util";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { scanServer, verifyToolDefinitions } from "@mastyff-ai/core";
-import { fetchToolsFromStdio } from "@mastyff-ai/core";
-import { fetchToolsFromHttp, fetchToolsFromSse } from "@mastyff-ai/core";
-import type { ServerScanResult, ToolScanResult } from "@mastyff-ai/core";
+import { scanServer, verifyToolDefinitions } from "@mastyf-ai/core";
+import { fetchToolsFromStdio } from "@mastyf-ai/core";
+import { fetchToolsFromHttp, fetchToolsFromSse } from "@mastyf-ai/core";
+import type { ServerScanResult, ToolScanResult } from "@mastyf-ai/core";
 
 interface ClaudeDesktopConfig {
   mcpServers?: Record<string, {
@@ -69,7 +69,7 @@ function printReport(results: ServerScanResult[], verbose: boolean): void {
 
 async function main() {
   if (flags.mcp) {
-    const { startMcpServer } = await import("@mastyff-ai/server");
+    const { startMcpServer } = await import("@mastyf-ai/server");
     await startMcpServer();
     return;
   }

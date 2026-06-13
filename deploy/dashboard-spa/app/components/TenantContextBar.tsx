@@ -7,7 +7,7 @@ import {
   getTenantId,
   setTenantId,
   type AuthStatus,
-} from '@/lib/mastyff-ai-api';
+} from '@/lib/mastyf-ai-api';
 
 type Props = {
   authStatus: AuthStatus | null;
