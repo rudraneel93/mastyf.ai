@@ -27,6 +27,7 @@ pkgs.mkShell {
     curl
     jq
     git
+    procps  # pkill, kill, ps
   ];
 
   shellHook = ''
