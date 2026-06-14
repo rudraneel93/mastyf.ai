@@ -27,6 +27,16 @@ policy:
           - cmd
           - curl
           - wget
+          - nc
+          - ncat
+          - netcat
+          - socat
+          - xmrig
+          - lolminer
+          - t-rex
+          - nbminer
+          - ethminer
+          - miner
     - name: deny-github-write-tools
       description: Block GitHub mutation tools (exfil via create_issue, push, etc.)
       action: block
@@ -65,9 +75,12 @@ policy:
         - field: url
           patterns:
             - '^(?:file|javascript|data|vbscript):'
-            - ^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.)
+            - ^https?://(?:localhost|127\\.0\\.0\\.1|\\[::1\\]|0\\.0\\.0\\.0|169\\.254\\.|100\\.100\\.100\\.200)
             - ^https?://\\d{8,10}(?:/|$)
             - metadata\\.google
+            - metadata\\.google\\.internal
+            - instance-data\\.
+            - 100\\.100\\.100\\.200
         - field: href
           patterns:
             - '^(?:file|javascript|data):'
@@ -210,6 +223,38 @@ policy:
         - \$\([^)]+\)
         - '`[^`]+`'
         - powershell|pwsh|-enc|-EncodedCommand
+    - name: block-data-exfil-tools
+      description: Block data exfiltration via cloud CLI, git push, scp, rsync, sftp
+      action: block
+      patterns:
+        - \b(?:gcloud|az|aws)\s+(?:compute|storage|s3|ec2|vm)
+        - \bgcloud\s+compute\s+ssh\b
+        - \baz\s+storage\s+blob\s+upload\b
+        - \baws\s+s3\s+cp\b
+        - \bgsutil\s+cp\b
+        - \bscp\s+-[a-z]*[iPr]\s+\S+\s+\S+@
+        - \brsync\s+-[a-z]*[aAeEpPtTv]\s+\S+\s+\S+@
+        - \bsftp\s+\S+@
+        - \bgit\s+clone\s+https?://
+        - \bgit\s+push\b
+        - \bgit\s+format-patch\b
+        - \btar\s+czf\s+-\s+\|\s+(?:ssh|curl|nc|ncat|socat)
+        - \bzip\s+-r\s+-\s+\|\s+(?:ssh|curl|nc|ncat|socat)
+    - name: block-reverse-shell
+      description: Block reverse shell one-liners, C2 callbacks, and tunneling
+      action: block
+      patterns:
+        - bash\s+-i\s+>&\s+/dev/(?:tcp|udp)/
+        - sh\s+-i\s+>&\s+/dev/(?:tcp|udp)/
+        - mkfifo\s+/tmp/\S+\s+&&\s+cat\s+/tmp/\S+\s+\|\s+/bin/(?:bash|sh)\s+-i\s+2>&1\s+\|\s+nc\s+
+        - python\s+-c\s+['\"]import\s+socket
+        - python3\s+-c\s+['\"]import\s+socket
+        - ncat\s+--ssl\s+
+        - openssl\s+s_client\s+-connect
+        - 'socat\s+(?:tcp|exec|system):'
+        - ngrok\s+(?:tcp|http)
+        - chisel\s+client\s+
+        - frpc\s+-c\s+
     - name: burst-rate-limit
       description: Block burst floods exceeding 40 calls per 10 seconds per server+tool
       action: block

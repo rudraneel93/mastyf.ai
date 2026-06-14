@@ -14,10 +14,10 @@ importers:
 
   .:
     dependencies:
-      '@mastyff-ai/core':
+      '@mastyf-ai/core':
         specifier: workspace:^4.1.7
         version: link:packages/core
-      '@mastyff-ai/plugin-sdk':
+      '@mastyf-ai/plugin-sdk':
         specifier: workspace:^4.1.7
         version: link:packages/plugin-sdk
       '@modelcontextprotocol/sdk':
@@ -246,10 +246,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@mastyff-ai/core':
+      '@mastyf-ai/core':
         specifier: workspace:^4.1.7
         version: link:../core
-      '@mastyff-ai/server':
+      '@mastyf-ai/server':
         specifier: workspace:^4.1.7
         version: link:../server
     devDependencies:
@@ -291,7 +291,7 @@ importers:
 
   packages/server:
     dependencies:
-      '@mastyff-ai/core':
+      '@mastyf-ai/core':
         specifier: workspace:^4.1.7
         version: link:../core
       '@modelcontextprotocol/sdk':

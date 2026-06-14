@@ -134,6 +134,14 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '(?:include|attach|embed|append).{0,40}(?:debug output|trace log|stderr|stdout).{0,50}(?:in (?:the )?report|upstream|remote|external|off-?site)' },
   { id: 'indirect-exfil-syslog', severity: 'high', description: 'Stream tool output to syslog/remote logging',
     regex: '(?:stream|pipe|forward|send|write).{0,40}(?:output|results?|response|data).{0,40}(?:to |into )(?:syslog|remote log|centralized log)' },
+  { id: 'exfil-scp-rsync', severity: 'critical', description: 'Data exfiltration via scp/rsync/sftp to remote host',
+    regex: '(?:scp|rsync|sftp)\\s+[-a-zA-Z0-9@.=\\/]+\\s+\\S+@\\S+(?::|\\/).{0,100}(?:key|credential|secret|token|passwd|shadow|\.env|id_rsa|database|dump|sql|backup|private)' },
+  { id: 'exfil-cloud-cli', severity: 'critical', description: 'Cloud CLI exfiltration command',
+    regex: '(?:aws\\s+s3\\s+(?:cp|sync)|gsutil\\s+cp|az\\s+storage\\s+blob\\s+upload|gcloud\\s+compute\\s+ssh|gcloud\\s+storage\\s+cp).{0,120}(?:credential|secret|token|key|passwd|shadow|\.env|id_rsa|dump|sql|backup)' },
+  { id: 'exfil-git-push', severity: 'critical', description: 'Exfiltration via git push to remote repository',
+    regex: 'git\\s+push\\s+\\S+\\s+\\S+.{0,80}(?:credential|secret|token|key|passwd|shadow|\.env|id_rsa|dump|sql)' },
+  { id: 'exfil-encode-transfer', severity: 'critical', description: 'Base64-encode then transfer data',
+    regex: '(?:base64|b64encode|uuencode).{0,60}(?:\\||>|&&|;).{0,60}(?:curl|wget|nc|ncat|socat|scp|rsync|ftp|sendmail)' },
 
   // ═══════════════════════════════════════════════════════════════
   // CATEGORY 5: Credential Theft — CRITICAL
@@ -186,6 +194,14 @@ export const INJECTION_RULES: InjectionPattern[] = [
     regex: '\\b(?:bash\\s+-c|sh\\s+-c|zsh\\s+-c|powershell\\s+-[Cc]ommand|cmd\\s+/c|python\\s+-c|python3\\s+-c|ruby\\s+-e|perl\\s+-e|php\\s+-r|lua\\s+-e|node\\s+-e|deno\\s+eval\\s+)' },
   { id: 'reverse-shell', severity: 'high', description: 'Reverse shell payload',
     regex: '(?:bash -i >&|nc\\s+-[nlvp]|ncat\\s+-[nlvp]|netcat\\s+-[nlvp]|socat\\s+|mkfifo\\s+|/dev/tcp/|python -c \'import socket)' },
+  { id: 'reverse-shell-v2', severity: 'critical', description: 'Reverse shell via /dev/tcp or /dev/udp',
+    regex: '[/\\s\\(\\|]\\(?(?:bash|sh|zsh|ksh|dash)\\s+-i\\s+[<>]&\\s+/dev/(?:tcp|udp)/[^\\s]+' },
+  { id: 'reverse-shell-ngrok', severity: 'critical', description: 'Tunnel/reverse shell via ngrok or chisel',
+    regex: '\\b(?:ngrok\\s+(?:tcp|http|start)|chisel\\s+client|frpc\\s+-c|npc\\s+-server)\\b' },
+  { id: 'reverse-shell-pty', severity: 'critical', description: 'PTY-based reverse shell',
+    regex: '(?:python[23]?|perl|ruby|php)\\s+-[cere]\\s+[\'\"].{0,60}socket\\.(?:socket|STREAM|SOCK_STREAM).{0,80}connect\\([\'\"].+' },
+  { id: 'reverse-shell-meterpreter', severity: 'critical', description: 'Meterpreter/reverse HTTPS payload',
+    regex: '(?:meterpreter|payload\\s+reverse_https?|windows/meterpreter|linux/meterpreter|multi/meterpreter)' },
   { id: 'downloader-exec', severity: 'high', description: 'Download and execute pattern',
     regex: '(?:curl|wget)\\s+\\S+\\s*(?:\\||-o|>)\\s*\\S+\\s*(?:&&|;|\\|)\\s*(?:bash|sh|python|perl|ruby|chmod|./|source|exec)' },
 
