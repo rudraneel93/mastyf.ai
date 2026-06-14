@@ -2467,11 +2467,40 @@ export async function fetchPendingSuggestions(): Promise<{
   return { count: body.count ?? 0, suggestions: body.suggestions ?? [] };
 }
 
-export async function fetchServerRegistry(): Promise<ServerRegistryEntry[]> {
+export async function fetchServerRegistry(): Promise<{ servers: ServerRegistryEntry[]; uiServers: UiMcpServerConfig[] }> {
   const res = await mastyfAiFetch('/api/servers/registry');
-  if (!res.ok) return [];
-  const body = (await res.json()) as { servers?: ServerRegistryEntry[] };
-  return body.servers || [];
+  if (!res.ok) return { servers: [], uiServers: [] };
+  const body = (await res.json()) as { servers?: ServerRegistryEntry[]; uiServers?: UiMcpServerConfig[] };
+  return { servers: body.servers || [], uiServers: body.uiServers || [] };
+}
+
+export type UiMcpServerConfig = {
+  name: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  transport?: 'stdio' | 'sse';
+  url?: string;
+  disabled?: boolean;
+};
+
+export async function addMcpServer(config: UiMcpServerConfig): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch('/api/servers', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(config),
+  });
+  return (await res.json()) as { ok: boolean; error?: string };
+}
+
+export async function removeMcpServer(name: string): Promise<{ ok: boolean; error?: string }> {
+  const headers = await buildMutatingHeaders();
+  const res = await mastyfAiFetch(`/api/servers/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+    headers,
+  });
+  return (await res.json()) as { ok: boolean; error?: string };
 }
 
 export type AgenticTrafficPoint = { bucket: string; requests: number; blocked: number };

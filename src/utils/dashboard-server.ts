@@ -4184,7 +4184,31 @@ export async function startDashboardServer(
         setCors();
         const { getServerRegistry } = await import('./server-registry.js');
         const servers = await getServerRegistry();
-        writeJson(res, 200, { servers });
+        const { listUiServers } = await import('./mcp-server-config.js');
+        const uiServers = listUiServers();
+        writeJson(res, 200, { servers, uiServers });
+        return;
+      }
+      if (url === '/api/servers' && method === 'POST') {
+        setCors();
+        const body = await readBody(req);
+        const { addUiServer } = await import('./mcp-server-config.js');
+        const result = addUiServer({
+          name: String(body.name || ''),
+          command: String(body.command || ''),
+          args: Array.isArray(body.args) ? body.args.map(String) : [],
+          env: body.env as Record<string, string> | undefined,
+          transport: (body.transport as 'stdio' | 'sse') || 'stdio',
+        });
+        writeJson(res, result.ok ? 200 : 400, result);
+        return;
+      }
+      if (url?.startsWith('/api/servers/') && method === 'DELETE') {
+        setCors();
+        const name = decodeURIComponent(url.slice('/api/servers/'.length));
+        const { removeUiServer } = await import('./mcp-server-config.js');
+        const result = removeUiServer(name);
+        writeJson(res, result.ok ? 200 : 404, result);
         return;
       }
 
