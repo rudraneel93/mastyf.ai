@@ -1,4 +1,4 @@
-# MCP Guardian / Mastyf AI
+# Mastyf.ai
 
 **Security, cost, and health governance platform for MCP (Model Context Protocol) infrastructure.**
 
